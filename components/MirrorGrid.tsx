@@ -12,21 +12,21 @@ interface MirrorGridProps {
     selectedNodeMac: string | null;
 }
 
-const MirrorGrid: React.FC<MirrorGridProps> = ({ 
-    rows, 
-    cols, 
-    mirrorConfig, 
-    onMotorDrop, 
+const MirrorGrid: React.FC<MirrorGridProps> = ({
+    rows,
+    cols,
+    mirrorConfig,
+    onMotorDrop,
     onMoveCommand,
     isTestMode,
-    selectedNodeMac
+    selectedNodeMac,
 }) => {
     return (
-        <div 
+        <div
             className="grid gap-1 bg-gray-900 p-2"
-            style={{ 
+            style={{
                 gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`
+                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
             }}
         >
             {Array.from({ length: rows * cols }).map((_, index) => {

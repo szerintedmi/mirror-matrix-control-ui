@@ -10,7 +10,14 @@ interface MotorSlotProps {
     onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
 }
 
-const MotorSlot: React.FC<MotorSlotProps> = ({ axis, motor, position, isTestMode, onMotorDrop, onMoveCommand }) => {
+const MotorSlot: React.FC<MotorSlotProps> = ({
+    axis,
+    motor,
+    position,
+    isTestMode,
+    onMotorDrop,
+    onMoveCommand,
+}) => {
     const [isHovering, setIsHovering] = useState(false);
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -33,7 +40,7 @@ const MotorSlot: React.FC<MotorSlotProps> = ({ axis, motor, position, isTestMode
             onMotorDrop(position, axis, dragData);
         }
     };
-    
+
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (isTestMode && motor) {
@@ -48,7 +55,7 @@ const MotorSlot: React.FC<MotorSlotProps> = ({ axis, motor, position, isTestMode
             onMoveCommand(position, axis, -1);
         }
     };
-    
+
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
         if (!motor || isTestMode) {
             e.preventDefault();
@@ -79,10 +86,18 @@ const MotorSlot: React.FC<MotorSlotProps> = ({ axis, motor, position, isTestMode
             onClick={handleClick}
             onContextMenu={handleContextMenu}
             className={`flex items-center justify-center p-2 rounded transition-colors duration-200 h-10 ${baseBg} ${testModeClasses} ${draggableClasses}`}
-            title={isTestMode && motor ? `Left-click to move +, Right-click to move -` : (motor ? `Drag to reassign` : `Drop a motor here`)}
+            title={
+                isTestMode && motor
+                    ? `Left-click to move +, Right-click to move -`
+                    : motor
+                      ? `Drag to reassign`
+                      : `Drop a motor here`
+            }
         >
             {motor ? (
-                <span className={`font-mono text-sm ${motorTextColor}`}>{motor.nodeMac.slice(-5)}:{motor.motorIndex}</span>
+                <span className={`font-mono text-sm ${motorTextColor}`}>
+                    {motor.nodeMac.slice(-5)}:{motor.motorIndex}
+                </span>
             ) : (
                 <span className="font-mono text-sm text-gray-500">--</span>
             )}
@@ -99,35 +114,38 @@ interface MirrorCellProps {
     selectedNodeMac: string | null;
 }
 
-const MirrorCell: React.FC<MirrorCellProps> = ({ 
-    position, 
-    assignment, 
-    onMotorDrop, 
+const MirrorCell: React.FC<MirrorCellProps> = ({
+    position,
+    assignment,
+    onMotorDrop,
     onMoveCommand,
     isTestMode,
-    selectedNodeMac
+    selectedNodeMac,
 }) => {
     const [isSelected, setIsSelected] = useState(false);
-    
-    const borderStyle = isSelected ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-cyan-400' : 'ring-1 ring-gray-700';
+
+    const borderStyle = isSelected
+        ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-cyan-400'
+        : 'ring-1 ring-gray-700';
 
     const isNodeXHighlighted = assignment.x?.nodeMac === selectedNodeMac;
     const isNodeYHighlighted = assignment.y?.nodeMac === selectedNodeMac;
-    const nodeHighlightClass = (selectedNodeMac && (isNodeXHighlighted || isNodeYHighlighted)) 
-        ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]' 
-        : '';
+    const nodeHighlightClass =
+        selectedNodeMac && (isNodeXHighlighted || isNodeYHighlighted)
+            ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]'
+            : '';
 
     return (
         <div
             onClick={() => setIsSelected(!isSelected)}
             onBlur={() => setIsSelected(false)}
             tabIndex={0}
-            className={`relative aspect-square flex flex-col rounded-md p-1.5 gap-2 transition-all duration-200 outline-none ${borderStyle} ${ isSelected ? 'bg-gray-700' : 'bg-gray-800 hover:bg-gray-700/70'} ${nodeHighlightClass}`}
+            className={`relative aspect-square flex flex-col rounded-md p-1.5 gap-2 transition-all duration-200 outline-none ${borderStyle} ${isSelected ? 'bg-gray-700' : 'bg-gray-800 hover:bg-gray-700/70'} ${nodeHighlightClass}`}
         >
             <div className="text-center text-xs font-semibold text-gray-400 select-none">
                 [{position.row},{position.col}]
             </div>
-            
+
             <div className="w-full flex flex-col gap-1.5 mt-auto">
                 <MotorSlot
                     axis="x"
@@ -137,7 +155,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                     onMotorDrop={onMotorDrop}
                     onMoveCommand={onMoveCommand}
                 />
-                 <MotorSlot
+                <MotorSlot
                     axis="y"
                     motor={assignment.y}
                     position={position}

@@ -26,11 +26,10 @@ const App: React.FC = () => {
     const [lightAngleHorizontal, setLightAngleHorizontal] = useState(0);
     const [lightAngleVertical, setLightAngleVertical] = useState(0);
 
-
     const navigateTo = (targetPage: Page) => {
         setPage(targetPage);
     };
-    
+
     const editPattern = (patternId: string | null) => {
         setEditingPatternId(patternId);
         setPage('editor');
@@ -39,8 +38,8 @@ const App: React.FC = () => {
     const navigationControls: NavigationControls = { navigateTo, editPattern };
 
     const handleSavePattern = (pattern: Pattern) => {
-        setPatterns(prev => {
-            const existingIndex = prev.findIndex(p => p.id === pattern.id);
+        setPatterns((prev) => {
+            const existingIndex = prev.findIndex((p) => p.id === pattern.id);
             if (existingIndex > -1) {
                 const newPatterns = [...prev];
                 newPatterns[existingIndex] = pattern;
@@ -50,62 +49,66 @@ const App: React.FC = () => {
         });
         setPage('library');
     };
-    
+
     const handleDeletePattern = (patternId: string) => {
-        setPatterns(prev => prev.filter(p => p.id !== patternId));
+        setPatterns((prev) => prev.filter((p) => p.id !== patternId));
     };
 
     const renderPage = () => {
         switch (page) {
             case 'editor':
-                return <PatternEditorPage 
-                    navigation={navigationControls}
-                    onSave={handleSavePattern}
-                    existingPattern={patterns.find(p => p.id === editingPatternId) || null}
-                    mirrorCount={gridSize.rows * gridSize.cols}
-                    defaultCanvasSize={gridSize}
-                />;
+                return (
+                    <PatternEditorPage
+                        navigation={navigationControls}
+                        onSave={handleSavePattern}
+                        existingPattern={patterns.find((p) => p.id === editingPatternId) || null}
+                        mirrorCount={gridSize.rows * gridSize.cols}
+                        defaultCanvasSize={gridSize}
+                    />
+                );
             case 'configurator':
-                return <ConfiguratorPage 
-                    navigation={navigationControls}
-                    gridSize={gridSize}
-                    onGridSizeChange={(rows, cols) => setGridSize({ rows, cols })}
-                />;
+                return (
+                    <ConfiguratorPage
+                        navigation={navigationControls}
+                        gridSize={gridSize}
+                        onGridSizeChange={(rows, cols) => setGridSize({ rows, cols })}
+                    />
+                );
             case 'simulation':
-                return <SimulationPage
-                    navigation={navigationControls}
-                    gridSize={gridSize}
-                    wallDistance={wallDistance}
-                    onWallDistanceChange={setWallDistance}
-                    horizontalAngle={horizontalAngle}
-                    onHorizontalAngleChange={setHorizontalAngle}
-                    verticalAngle={verticalAngle}
-                    onVerticalAngleChange={setVerticalAngle}
-                    lightAngleHorizontal={lightAngleHorizontal}
-                    onLightAngleHorizontalChange={setLightAngleHorizontal}
-                    lightAngleVertical={lightAngleVertical}
-                    onLightAngleVerticalChange={setLightAngleVertical}
-                />;
+                return (
+                    <SimulationPage
+                        navigation={navigationControls}
+                        gridSize={gridSize}
+                        wallDistance={wallDistance}
+                        onWallDistanceChange={setWallDistance}
+                        horizontalAngle={horizontalAngle}
+                        onHorizontalAngleChange={setHorizontalAngle}
+                        verticalAngle={verticalAngle}
+                        onVerticalAngleChange={setVerticalAngle}
+                        lightAngleHorizontal={lightAngleHorizontal}
+                        onLightAngleHorizontalChange={setLightAngleHorizontal}
+                        lightAngleVertical={lightAngleVertical}
+                        onLightAngleVerticalChange={setLightAngleVertical}
+                    />
+                );
             case 'library':
             default:
-                return <PatternLibraryPage 
-                    navigation={navigationControls}
-                    patterns={patterns}
-                    onDeletePattern={handleDeletePattern}
-                    wallDistance={wallDistance}
-                    horizontalAngle={horizontalAngle}
-                    verticalAngle={verticalAngle}
-                    lightAngleHorizontal={lightAngleHorizontal}
-                    lightAngleVertical={lightAngleVertical}
-                />;
+                return (
+                    <PatternLibraryPage
+                        navigation={navigationControls}
+                        patterns={patterns}
+                        onDeletePattern={handleDeletePattern}
+                        wallDistance={wallDistance}
+                        horizontalAngle={horizontalAngle}
+                        verticalAngle={verticalAngle}
+                        lightAngleHorizontal={lightAngleHorizontal}
+                        lightAngleVertical={lightAngleVertical}
+                    />
+                );
         }
     };
 
-    return (
-        <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
-            {renderPage()}
-        </div>
-    );
+    return <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">{renderPage()}</div>;
 };
 
 export default App;

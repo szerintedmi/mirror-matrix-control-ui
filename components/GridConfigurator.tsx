@@ -8,8 +8,13 @@ interface GridConfiguratorProps {
     onTestModeChange: (enabled: boolean) => void;
 }
 
-const GridConfigurator: React.FC<GridConfiguratorProps> = ({ rows, cols, onSizeChange, isTestMode, onTestModeChange }) => {
-    
+const GridConfigurator: React.FC<GridConfiguratorProps> = ({
+    rows,
+    cols,
+    onSizeChange,
+    isTestMode,
+    onTestModeChange,
+}) => {
     const handleRowsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newRows = Math.max(1, parseInt(e.target.value, 10) || 1);
         onSizeChange(newRows, cols);
@@ -23,7 +28,9 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({ rows, cols, onSizeC
     return (
         <div className="flex items-center flex-wrap gap-x-6 gap-y-4 p-2 rounded-md bg-black/20 mb-4">
             <div className="flex items-center gap-2">
-                <label htmlFor="rows" className="font-medium text-gray-400">Rows:</label>
+                <label htmlFor="rows" className="font-medium text-gray-400">
+                    Rows:
+                </label>
                 <input
                     type="number"
                     id="rows"
@@ -35,7 +42,9 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({ rows, cols, onSizeC
                 />
             </div>
             <div className="flex items-center gap-2">
-                <label htmlFor="cols" className="font-medium text-gray-400">Cols:</label>
+                <label htmlFor="cols" className="font-medium text-gray-400">
+                    Cols:
+                </label>
                 <input
                     type="number"
                     id="cols"
@@ -47,8 +56,10 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({ rows, cols, onSizeC
                 />
             </div>
             <div className="flex items-center gap-3 ml-auto">
-                <label htmlFor="testModeToggle" className="font-medium text-gray-400">Click to move</label>
-                 <button
+                <label htmlFor="testModeToggle" className="font-medium text-gray-400">
+                    Click to move
+                </label>
+                <button
                     id="testModeToggle"
                     onClick={() => onTestModeChange(!isTestMode)}
                     className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 ${isTestMode ? 'bg-cyan-500' : 'bg-gray-600'}`}

@@ -10,8 +10,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1H4ecS7Zs73JLZg43NahoMt
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `yarn install`
