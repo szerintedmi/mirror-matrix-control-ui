@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Node, Motor, MirrorConfig, GridPosition, DraggedMotorInfo, Axis } from '../types';
+import type { Node, Motor, MirrorConfig, MirrorAssignment, GridPosition, DraggedMotorInfo, Axis } from '../types';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
 import DiscoveredNodes from '../components/DiscoveredNodes';
@@ -66,8 +66,12 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({ navigation, gridSiz
         setMirrorConfig(prevConfig => {
             const newConfig: MirrorConfig = new Map(prevConfig);
             let updated = false;
-            for (const [key, assignment] of newConfig.entries()) {
-                const newAssignment = { ...assignment };
+            for (const key of newConfig.keys()) {
+                const assignment = newConfig.get(key);
+                if (!assignment) {
+                    continue;
+                }
+                const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
                 let assignmentChanged = false;
 
                 if (newAssignment.x?.nodeMac === motor.nodeMac && newAssignment.x?.motorIndex === motor.motorIndex) {
@@ -101,9 +105,13 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({ navigation, gridSiz
         setMirrorConfig(prevConfig => {
             const newConfig: MirrorConfig = new Map(prevConfig);
 
-            for (const [key, assignment] of newConfig.entries()) {
+            for (const key of newConfig.keys()) {
+                const assignment = newConfig.get(key);
+                if (!assignment) {
+                    continue;
+                }
                 let assignmentChanged = false;
-                const newAssignment = { ...assignment };
+                const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
 
                 if (newAssignment.x?.nodeMac === motorToMove.nodeMac && newAssignment.x?.motorIndex === motorToMove.motorIndex) {
                     newAssignment.x = null;
@@ -181,9 +189,13 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({ navigation, gridSiz
             `Are you sure you want to unassign all motors from this node?`,
             () => {
                 setMirrorConfig(prevConfig => {
-                    const newConfig = new Map(prevConfig);
-                    for (const [key, assignment] of newConfig.entries()) {
-                        const newAssignment = { ...assignment };
+                    const newConfig: MirrorConfig = new Map(prevConfig);
+                    for (const key of newConfig.keys()) {
+                        const assignment = newConfig.get(key);
+                        if (!assignment) {
+                            continue;
+                        }
+                        const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
                         let changed = false;
                         if (newAssignment.x?.nodeMac === nodeMac) {
                             newAssignment.x = null;
