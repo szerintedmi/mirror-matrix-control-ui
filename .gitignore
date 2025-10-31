@@ -6,6 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.history
+
+
+.yarn/install-state.gz
+.yarn/cache
+.yarn/unplugged
 
 node_modules
 dist
