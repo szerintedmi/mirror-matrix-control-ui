@@ -1,0 +1,5 @@
+{
+  "name": "Mirror Array Control and Config",
+  "description": "A tool to configure a mirror array by assigning auto-discovered motors to a visual grid. It allows for setting grid size, drag-and-drop motor assignment, and validating the setup by simulating move commands.",
+  "requestFramePermissions": []
+}
