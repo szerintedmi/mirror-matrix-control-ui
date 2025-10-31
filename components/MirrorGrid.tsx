@@ -1,5 +1,5 @@
 import React from 'react';
-import type { MirrorConfig, GridPosition, Motor, Axis } from '../types';
+import type { MirrorConfig, GridPosition, Axis } from '../types';
 import MirrorCell from './MirrorCell';
 
 interface MirrorGridProps {

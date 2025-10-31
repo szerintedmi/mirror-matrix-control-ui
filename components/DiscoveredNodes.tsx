@@ -69,7 +69,7 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
         }
     };
 
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    const handleDragLeave = () => {
         setIsDropHovering(false);
     };
 
@@ -106,21 +106,21 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
                         key={node.macAddress}
                         className={`bg-gray-900/50 p-4 rounded-lg border border-gray-700 transition-all ${selectedNodeMac === node.macAddress ? 'ring-2 ring-emerald-400 shadow-lg shadow-emerald-500/20' : 'hover:border-gray-500'}`}
                     >
-                        <div className="flex justify-between items-center">
-                            <div
-                                className="flex-grow cursor-pointer"
+                        <div className="flex justify-between items-center gap-3">
+                            <button
+                                type="button"
                                 onClick={() => onNodeSelect(node.macAddress)}
+                                aria-pressed={selectedNodeMac === node.macAddress}
+                                className="flex flex-1 items-center gap-3 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 text-left cursor-pointer"
                             >
-                                <div className="flex items-center gap-3">
-                                    <span
-                                        className={`h-2.5 w-2.5 rounded-full ${node.status === 'ready' ? 'bg-green-400' : 'bg-yellow-500'}`}
-                                        title={`Status: ${node.status}`}
-                                    ></span>
-                                    <h3 className="font-mono text-lg text-emerald-400 break-all">
-                                        {node.macAddress}
-                                    </h3>
-                                </div>
-                            </div>
+                                <span
+                                    className={`h-2.5 w-2.5 rounded-full ${node.status === 'ready' ? 'bg-green-400' : 'bg-yellow-500'}`}
+                                    title={`Status: ${node.status}`}
+                                ></span>
+                                <h3 className="font-mono text-lg text-emerald-400 break-all">
+                                    {node.macAddress}
+                                </h3>
+                            </button>
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();

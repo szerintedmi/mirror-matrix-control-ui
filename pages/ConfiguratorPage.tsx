@@ -46,10 +46,14 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     });
 
     const fetchNodes = useCallback(async () => {
-        setIsLoading(true);
-        const nodes = await discoverNodes();
-        setDiscoveredNodes(nodes);
-        setIsLoading(false);
+        try {
+            const nodes = await discoverNodes();
+            setDiscoveredNodes(nodes);
+        } catch (error) {
+            console.error('Failed to discover nodes', error);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
 
     useEffect(() => {
@@ -380,7 +384,10 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                     </label>
                                 </div>
                                 <button
-                                    onClick={fetchNodes}
+                                    onClick={() => {
+                                        setIsLoading(true);
+                                        fetchNodes();
+                                    }}
                                     className="p-2 rounded-full hover:bg-gray-700 transition-colors"
                                     title="Rediscover Nodes"
                                 >

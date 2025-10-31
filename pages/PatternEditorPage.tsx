@@ -57,15 +57,19 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const [mainContainerRef, mainContainerSize] = useElementSize<HTMLElement>();
 
     useEffect(() => {
-        if (existingPattern) {
-            setName(existingPattern.name);
-            setCanvasSize(existingPattern.canvasSize);
-            setLitPixels(new Set(existingPattern.litPixels));
-        } else {
-            setName('New Pattern');
-            setCanvasSize(defaultCanvasSize);
-            setLitPixels(new Set());
-        }
+        const timeoutId = window.setTimeout(() => {
+            if (existingPattern) {
+                setName(existingPattern.name);
+                setCanvasSize(existingPattern.canvasSize);
+                setLitPixels(new Set(existingPattern.litPixels));
+            } else {
+                setName('New Pattern');
+                setCanvasSize(defaultCanvasSize);
+                setLitPixels(new Set());
+            }
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
     }, [existingPattern, defaultCanvasSize]);
 
     useEffect(() => {

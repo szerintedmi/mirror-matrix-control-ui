@@ -41,15 +41,17 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
         }
     };
 
+    const isInteractive = isTestMode && !!motor;
+
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (isTestMode && motor) {
+        if (isInteractive) {
             onMoveCommand(position, axis, 1);
         }
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
-        if (isTestMode && motor) {
+        if (isInteractive) {
             e.stopPropagation();
             e.preventDefault();
             onMoveCommand(position, axis, -1);
@@ -71,8 +73,22 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
         e.dataTransfer.effectAllowed = 'move';
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!isInteractive) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onMoveCommand(position, axis, 1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            onMoveCommand(position, axis, -1);
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            onMoveCommand(position, axis, 1);
+        }
+    };
+
     const baseBg = isHovering ? 'bg-cyan-500/30' : 'bg-gray-700/50';
-    const testModeClasses = isTestMode && motor ? 'cursor-pointer hover:bg-cyan-600/50' : '';
+    const testModeClasses = isInteractive ? 'cursor-pointer hover:bg-cyan-600/50' : '';
     const draggableClasses = !isTestMode && motor ? 'cursor-grab' : '';
     const motorTextColor = motor ? 'text-cyan-300' : 'text-gray-500';
 
@@ -85,6 +101,10 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
             onDrop={handleDrop}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
+            onKeyDown={handleKeyDown}
+            role={isInteractive ? 'button' : undefined}
+            tabIndex={isInteractive ? 0 : undefined}
+            aria-disabled={!motor}
             className={`flex items-center justify-center p-2 rounded transition-colors duration-200 h-10 ${baseBg} ${testModeClasses} ${draggableClasses}`}
             title={
                 isTestMode && motor
@@ -135,10 +155,22 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
             ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]'
             : '';
 
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setIsSelected((prev) => !prev);
+        } else if (event.key === 'Escape') {
+            setIsSelected(false);
+        }
+    };
+
     return (
         <div
             onClick={() => setIsSelected(!isSelected)}
             onBlur={() => setIsSelected(false)}
+            onKeyDown={handleKeyDown}
+            role="button"
+            aria-pressed={isSelected}
             tabIndex={0}
             className={`relative aspect-square flex flex-col rounded-md p-1.5 gap-2 transition-all duration-200 outline-none ${borderStyle} ${isSelected ? 'bg-gray-700' : 'bg-gray-800 hover:bg-gray-700/70'} ${nodeHighlightClass}`}
         >

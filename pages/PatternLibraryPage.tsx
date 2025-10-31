@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import type { Pattern } from '../types';
 import type { NavigationControls } from '../App';
 
@@ -152,7 +152,9 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                 />
                             </svg>
                             <p>No patterns created yet.</p>
-                            <p className="text-sm">Click "Create New Pattern" to get started.</p>
+                            <p className="text-sm">
+                                Click &ldquo;Create New Pattern&rdquo; to get started.
+                            </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
