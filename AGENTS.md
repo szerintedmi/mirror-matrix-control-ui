@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This React 19 + TypeScript app is bootstrapped with Vite. `App.tsx` orchestrates navigation and shared state. Route-level views live under `pages/` (`ConfiguratorPage.tsx`, `PatternEditorPage.tsx`, `SimulationPage.tsx`, `PatternLibraryPage.tsx`), while reusable UI primitives sit in `components/` (`MirrorGrid.tsx`, `GridConfigurator.tsx`, etc.). Keep API shims in `services/`—`services/mockApi.ts` currently supplies placeholder data and should be replaced or extended when wiring real endpoints. Shared types belong in `types.ts`, and preset metadata updates go in `metadata.json`. Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
+This React 19 + TypeScript app is bootstrapped with Vite. All application code lives under `src/`. `src/App.tsx` orchestrates navigation and shared state. Route-level views live under `src/pages/` (`ConfiguratorPage.tsx`, `PatternEditorPage.tsx`, `SimulationPage.tsx`, `PatternLibraryPage.tsx`), while reusable UI primitives sit in `src/components/` (`MirrorGrid.tsx`, `GridConfigurator.tsx`, etc.). Keep API shims in `src/services/`—`mockApi.ts` currently supplies placeholder data and should be replaced or extended when wiring real endpoints. Shared types belong in `src/types.ts`, and preset metadata updates go in `metadata.json`. Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
 
 ## Build, Test, and Development Commands
 
@@ -19,7 +19,7 @@ Write strict TypeScript with React function components; use PascalCase for compo
 
 ## Testing Guidelines
 
-Automated tests are not configured yet. When adding them, adopt Vitest plus React Testing Library (`yarn add -D vitest @testing-library/react`) and expose `yarn test`. Place specs beside the code (`components/__tests__/MirrorGrid.test.tsx`) and aim for ≥80% statement coverage. For now, validate flows manually via `yarn dev`, using the fixtures in `services/mockApi.ts`, and record the exercised scenarios in the pull request description.
+Automated tests run with Vitest using JSDOM and React’s test utilities. Use `yarn test` for a single run and `yarn test:watch` while developing. Always run the full test suite before committing or requesting review, and document the results in your hand-off notes. Tests are mandatory whenever you ship a new feature or extend existing functionality—add or update specs beside the relevant code (e.g., keep `App.test.tsx` next to `App.tsx`). Store specs in the same directory as their implementation (no shared `__tests__` folders or repo-root dumps) and keep coverage trending toward ≥80%. Continue validating flows manually via `yarn dev`, using the fixtures in `services/mockApi.ts`, and record the exercised scenarios in the pull request description.
 
 ## Commit & Pull Request Guidelines
 

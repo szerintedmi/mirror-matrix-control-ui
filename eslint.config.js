@@ -53,6 +53,21 @@ export default [
         },
     },
     {
+        files: ['**/*.test.{ts,tsx,js,jsx}', '**/__tests__/**/*.{ts,tsx,js,jsx}'],
+        languageOptions: {
+            parser: tsParser,
+            parserOptions: {
+                ecmaVersion: 'latest',
+                sourceType: 'module',
+            },
+            globals: {
+                ...globals.browser,
+                ...globals.node,
+                ...globals.vitest,
+            },
+        },
+    },
+    {
         files: ['**/*.vue'],
         languageOptions: {
             parser: vueParser,
