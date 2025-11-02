@@ -18,13 +18,17 @@
         "test": "vitest",
         "test:watch": "vitest --watch",
         "format": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md,html}\"",
-        "format:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md,html}\""
+        "format:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md,html}\"",
+        "test:e2e": "playwright test",
+        "test:e2e:headed": "playwright test --headed",
+        "test:e2e:ui": "playwright test --ui"
     },
     "dependencies": {
         "react": "19.2.0",
         "react-dom": "19.2.0"
     },
     "devDependencies": {
+        "@playwright/test": "1.56.1",
         "@types/eslint-plugin-jsx-a11y": "6",
         "@types/jsdom": "27",
         "@types/node": "22.18.13",

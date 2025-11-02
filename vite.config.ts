@@ -2,6 +2,7 @@ import path from 'path';
 
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type PluginOption } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 export default defineConfig(async ({ mode }) => {
     const env = loadEnv(mode, '.', '');
@@ -36,6 +37,7 @@ export default defineConfig(async ({ mode }) => {
         test: {
             globals: true,
             environment: 'jsdom',
+            exclude: [...configDefaults.exclude, 'e2e/**'],
         },
     };
 });

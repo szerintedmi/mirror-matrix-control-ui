@@ -17,3 +17,14 @@ View your app in AI Studio: https://ai.studio/apps/drive/1H4ecS7Zs73JLZg43NahoMt
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `yarn dev`
+
+## End-to-End Tests
+
+Playwright drives the UI in a real browser to smoke test the app shell.
+
+1. Install Playwright browsers (one-time):
+   `yarn dlx playwright install --with-deps`
+2. Run the test suite:
+   `yarn test:e2e`
+3. Explore failures with the UI mode:
+   `yarn test:e2e:ui`
