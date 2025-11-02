@@ -1,4 +1,7 @@
 agent_notes
+
+.corepack
+
 # Logs
 logs
 *.log

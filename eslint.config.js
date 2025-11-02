@@ -10,7 +10,7 @@ import globals from 'globals';
 
 export default [
     {
-        ignores: ['dist', 'node_modules', '.yarn'],
+        ignores: ['dist', 'node_modules', '.yarn', '.history', '.corepack'],
     },
     {
         files: ['**/*.{ts,tsx,js,jsx}'],
