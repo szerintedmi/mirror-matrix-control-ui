@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Pattern } from '../types';
+
 import type { NavigationControls } from '../App';
+import type { Pattern } from '../types';
 
 interface PatternEditorPageProps {
     navigation: NavigationControls;
@@ -12,10 +13,10 @@ interface PatternEditorPageProps {
 
 // A simple hook to observe an element's size using ResizeObserver
 const useElementSize = <T extends HTMLElement>(): [
-    React.RefObject<T>,
+    React.MutableRefObject<T | null>,
     { width: number; height: number },
 ] => {
-    const ref = useRef<T>(null);
+    const ref = useRef<T | null>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
 
     useEffect(() => {

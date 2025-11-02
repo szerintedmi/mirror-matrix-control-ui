@@ -1,5 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+
 import App from './App';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

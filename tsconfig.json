@@ -5,12 +5,13 @@
         "useDefineForClassFields": false,
         "module": "ESNext",
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "strict": true,
         "skipLibCheck": true,
         "types": ["node", "vitest/globals"],
         "moduleResolution": "bundler",
         "isolatedModules": true,
         "moduleDetection": "force",
-        "allowJs": true,
+        "allowJs": false,
         "jsx": "react-jsx",
         "paths": {
             "@/*": ["./src/*"]

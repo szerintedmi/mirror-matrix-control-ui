@@ -2,25 +2,89 @@
 
 ## Project Structure & Module Organization
 
-This React 19 + TypeScript app is bootstrapped with Vite. All application code lives under `src/`. `src/App.tsx` orchestrates navigation and shared state. Route-level views live under `src/pages/` (`ConfiguratorPage.tsx`, `PatternEditorPage.tsx`, `SimulationPage.tsx`, `PatternLibraryPage.tsx`), while reusable UI primitives sit in `src/components/` (`MirrorGrid.tsx`, `GridConfigurator.tsx`, etc.). Keep API shims in `src/services/`—`mockApi.ts` currently supplies placeholder data and should be replaced or extended when wiring real endpoints. Shared types belong in `src/types.ts`, and preset metadata updates go in `metadata.json`. Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
+- All application code sits in `src/`.
+  - `src/App.tsx` orchestrates navigation and shared state.
+  - Route-level views live in `src/pages/` (`ConfiguratorPage.tsx`, `PatternEditorPage.tsx`, `SimulationPage.tsx`, `PatternLibraryPage.tsx`).
+  - Reusable UI primitives belong in `src/components/` (`MirrorGrid.tsx`, `GridConfigurator.tsx`, etc.).
+- Keep API shims inside `src/services/`—`mockApi.ts` is the current placeholder.
+- Shared types go in `src/types.ts`.
+- Update presets in `metadata.json` when needed.
+- Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
+- Primary framework: React. Vue can be introduced later, but is not configured yet. If/when introducing Vue makes sense suggest it.
 
 ## Build, Test, and Development Commands
 
-Install dependencies once with `yarn install` using Node `>=22.21.0 <23`. `yarn dev` launches the Vite dev server at `http://localhost:5173`. `yarn build` emits the production bundle into `dist/`; run it before opening a pull request to catch TypeScript or bundling issues. `yarn preview` serves the built assets—append `--host` when validating on another device. Create `.env.local` and set `GEMINI_API_KEY=your-key`; keep the file untracked.
-`yarn lint` runs ESLint across React TypeScript and Vue files, while `yarn lint:fix` applies safe autofixes. `yarn format` checks Prettier formatting and `yarn format:fix` writes the canonical style—run these before committing. Always follow the configured linting and formatting rules; after making changes, run both lint and format checks and resolve any reported issues before handing work off.
+- Run all these after your changes:
+  - `yarn build` → builds with Vite. A `prebuild` hook runs `tsc --noEmit` to fail on type errors.
+  - `yarn test` → Vitest unit tests.
+  - `yarn lint` / `yarn lint:fix` → ESLint checks and safe autofixes.
+  - `yarn format` / `yarn format:fix` → Prettier checks and writes.
+  - `yarn typecheck` → explicit TypeScript check (same as the `prebuild` hook).
+- Dev server error overlay: TypeScript errors are shown in-browser via `vite-plugin-checker`.
+- Always run the above after changes and resolve any findings before hand-off.
 
 ## Working Practices
 
-For larger efforts that require planning, create a markdown note inside `agent_notes/` outlining the tasks you expect to complete. Keep the list concise, mark each item’s status clearly, and record quick updates as you finish steps. Restructuring the plan mid-stream is fine—the goal is to capture real progress and decisions as the work evolves.
+- For multi-step efforts, add a short plan in `agent_notes/`.
+- Keep notes concise: list tasks, mark status, and update as you progress.
+- Adjust the plan as scope changes—the goal is accurate, living context.
+- Less code is better. Clarfiy scope / requirements if it could reduce complexity, offer feature trade-offs for approaval
+- For new features and techical decisions validate with user instead of assuming. Propose the most reasonable approach concisely for confirmation. If there are multiple questions always present it as numbered list.
+- Do not install new dependencies without explicit approval
 
 ## Coding Style & Naming Conventions
 
-Write strict TypeScript with React function components; use PascalCase for component file names (`components/MirrorCell.tsx`). Match the existing four-space indentation and prefer named exports. Group imports by external modules → absolute paths → relative paths, optimizing for clarity. Co-locate page-level state in `App.tsx` until a shared store is introduced, and favor descriptive prop names over abbreviations. Styling relies on Tailwind-style utility classes already present (`bg-gray-900`, `text-gray-200`); keep styles inline unless a pattern justifies extraction.
+- Use strict TypeScript with React function components.
+- File naming: PascalCase for components (e.g., `src/components/MirrorCell.tsx`).
+- Linter and Prettier configuration is source of truth. Follow the surrounding code stlye but check `eslint.config.js` and `prettier.config.cjs` for new files or when you are unsure.
+  - Code: spaces, four-space indentation (Prettier `tabWidth: 4`, `useTabs: false`).
+  - Markdown: lists use 2-space indentation (Prettier override for `*.md`/`*.mdx`, aligns with markdownlint MD007).
+  - Run `yarn lint` and `yarn format` to check. Feel free to use `yarn lint:fix` and `yarn format:fix` as first attempt to fix errors/warnings then re-run the checks.
+- Imports: external → absolute (`@/*`) → relative; enforced via `import/order`.
+- State: keep page-level state in `App.tsx` until a shared store exists.
+- Props: prefer descriptive names over abbreviations.
+- Styling: default to inline Tailwind-style utility classes (`bg-gray-900`, `text-gray-200`); extract styles only when patterns emerge.
+
+## Code commenting best practices
+
+- **Self-Documenting Code**: Write code that explains itself through clear structure and naming
+- **Comment intentionally**: Let names carry intent; add brief comments only when behavior would surprise a reader. When complexity requires add high level concise overview to explain large sections of code logic.
+- **Don't comment changes or fixes**: Do not leave code comments that speak to recent or temporary changes or fixes. Comments should be evergreen informational texts that are relevant far into the future.
+
+## Markdown formatting best practices
+
+- When referencing files in this repo use markdown relative links. E.g: `[docs/requirements.md](docs/requirements.md)` or `[src/App.tsx](src/App.tsx)`
+- Make sure to strictly adhere to markdown formatting rules defined in prettier.config.cjs
+- Especially pay attenttion to the following:
+  - Headings should be surrounded by blank lines
+  - Lists should be surrounded by blank lines
+
+## Mermaid diagrams
+
+- Always validate diagrams you generate using the validate-mermaid command. Syntax: `validate-mermaid <(printf 'graph TD\nA-->B\n')`
+- If you include a mermaid diagram in a file inline (eg. markdown) you still must use the above validator but only with the diagram contents.
 
 ## Testing Guidelines
 
-Automated tests run with Vitest using JSDOM and React’s test utilities. Use `yarn test` for a single run and `yarn test:watch` while developing. Always run the full test suite before committing or requesting review, and document the results in your hand-off notes. Tests are mandatory whenever you ship a new feature or extend existing functionality—add or update specs beside the relevant code (e.g., keep `App.test.tsx` next to `App.tsx`). Store specs in the same directory as their implementation (no shared `__tests__` folders or repo-root dumps) and keep coverage trending toward ≥80%. Continue validating flows manually via `yarn dev`, using the fixtures in `services/mockApi.ts`, and record the exercised scenarios in the pull request description.
+- Tooling: Vitest + JSDOM.
+- Commands:
+  - `yarn test` → single run.
+  - `yarn test:watch` → watch mode during development.
+- Requirements:
+  - Run the full suite before every commit or review request.
+  - Document test results in hand-off notes.
+  - Add/adjust specs for every new feature or change to existing behavior.
+- Structure: place tests alongside their implementation (`App.test.tsx` next to `App.tsx`); avoid shared `__tests__` folders or repo-root specs.
+- Coverage: keep trending toward ≥80%.
 
 ## Commit & Pull Request Guidelines
 
-Keep commit subjects short and imperative (`Add mirror alignment helpers`), mirroring the concise history (`projection size estimate`). Limit each commit to one logical change and add context in the body when behavior shifts. Pull requests must explain motivation, summarize functional changes, reference related issues (`Linked Issue: #123`), and attach screenshots or screen captures for UI updates. Before requesting review, confirm `yarn build` succeeds, note outstanding follow-ups in a checklist, and ensure reviewers can reproduce your verification steps.
+- Commits:
+  - Write short, imperative subjects (e.g., `Add mirror alignment helpers`).
+  - Keep each commit focused on one logical change.
+  - Add a brief body when behavior shifts or context is non-obvious.
+- Pull requests:
+  - Explain the motivation and summarize functional changes.
+  - Reference related issues (`Linked Issue: #123`).
+  - Attach screenshots or recordings for UI updates.
+  - List verification steps and ensure `yarn build` passes before requesting review.

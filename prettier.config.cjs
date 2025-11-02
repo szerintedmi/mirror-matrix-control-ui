@@ -10,9 +10,11 @@ module.exports = {
     endOfLine: 'lf',
     overrides: [
         {
-            files: ['*.vue'],
+            files: ['**/*.md', '**/*.mdx'],
             options: {
-                parser: 'vue',
+                // Match markdownlint MD007 expected 2-space list indentation
+                tabWidth: 2,
+                useTabs: false,
             },
         },
     ],

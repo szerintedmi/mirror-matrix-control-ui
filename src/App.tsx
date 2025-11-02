@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import type { Pattern } from './types';
-import PatternLibraryPage from './pages/PatternLibraryPage';
-import PatternEditorPage from './pages/PatternEditorPage';
+
 import ConfiguratorPage from './pages/ConfiguratorPage';
+import PatternEditorPage from './pages/PatternEditorPage';
+import PatternLibraryPage from './pages/PatternLibraryPage';
 import SimulationPage from './pages/SimulationPage';
+
+import type { Pattern } from './types';
 
 // Simple router state
 export type Page = 'library' | 'editor' | 'configurator' | 'simulation';

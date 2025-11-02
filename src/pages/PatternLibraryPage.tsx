@@ -1,6 +1,7 @@
 import React from 'react';
-import type { Pattern } from '../types';
+
 import type { NavigationControls } from '../App';
+import type { Pattern } from '../types';
 
 interface PatternLibraryPageProps {
     navigation: NavigationControls;

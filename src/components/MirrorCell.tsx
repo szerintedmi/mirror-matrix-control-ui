@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import type { GridPosition, MirrorAssignment, Motor, Axis, DraggedMotorInfo } from '../types';
 
 interface MotorSlotProps {

@@ -1,13 +1,12 @@
 import js from '@eslint/js';
-import globals from 'globals';
-import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
+import eslintConfigPrettier from 'eslint-config-prettier';
+import importPlugin from 'eslint-plugin-import';
+import jsxA11yPlugin from 'eslint-plugin-jsx-a11y';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
-import jsxA11yPlugin from 'eslint-plugin-jsx-a11y';
-import prettierPlugin from 'eslint-plugin-prettier';
-import vuePlugin from 'eslint-plugin-vue';
-import vueParser from 'vue-eslint-parser';
+import globals from 'globals';
 
 export default [
     {
@@ -34,7 +33,7 @@ export default [
             react: reactPlugin,
             'react-hooks': reactHooksPlugin,
             'jsx-a11y': jsxA11yPlugin,
-            prettier: prettierPlugin,
+            import: importPlugin,
         },
         settings: {
             react: {
@@ -47,9 +46,33 @@ export default [
             ...reactPlugin.configs.recommended.rules,
             ...reactHooksPlugin.configs.recommended.rules,
             ...jsxA11yPlugin.configs.recommended.rules,
-            'prettier/prettier': 'warn',
             'react/react-in-jsx-scope': 'off',
             '@typescript-eslint/explicit-module-boundary-types': 'off',
+            'import/order': [
+                'error',
+                {
+                    groups: [
+                        'builtin',
+                        'external',
+                        'internal',
+                        'parent',
+                        'sibling',
+                        'index',
+                        'object',
+                        'type',
+                    ],
+                    'newlines-between': 'always',
+                    alphabetize: { order: 'asc', caseInsensitive: true },
+                    pathGroups: [
+                        {
+                            pattern: '@/**',
+                            group: 'internal',
+                            position: 'after',
+                        },
+                    ],
+                    pathGroupsExcludedImportTypes: ['builtin'],
+                },
+            ],
         },
     },
     {
@@ -67,31 +90,6 @@ export default [
             },
         },
     },
-    {
-        files: ['**/*.vue'],
-        languageOptions: {
-            parser: vueParser,
-            parserOptions: {
-                parser: tsParser,
-                extraFileExtensions: ['.vue'],
-                ecmaVersion: 'latest',
-                sourceType: 'module',
-            },
-            globals: {
-                ...globals.browser,
-                ...globals.node,
-            },
-        },
-        plugins: {
-            vue: vuePlugin,
-            '@typescript-eslint': tsPlugin,
-            prettier: prettierPlugin,
-        },
-        rules: {
-            ...vuePlugin.configs['flat/recommended'].rules,
-            ...tsPlugin.configs.recommended.rules,
-            'vue/multi-word-component-names': 'off',
-            'prettier/prettier': 'warn',
-        },
-    },
+    // Disable any stylistic rules that might conflict with Prettier
+    eslintConfigPrettier,
 ];

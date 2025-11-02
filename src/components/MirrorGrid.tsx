@@ -1,6 +1,8 @@
 import React from 'react';
-import type { MirrorConfig, GridPosition, Axis } from '../types';
+
 import MirrorCell from './MirrorCell';
+
+import type { MirrorConfig, GridPosition, Axis } from '../types';
 
 interface MirrorGridProps {
     rows: number;

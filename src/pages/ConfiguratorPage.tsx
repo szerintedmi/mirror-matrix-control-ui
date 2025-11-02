@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
+
+import DiscoveredNodes from '../components/DiscoveredNodes';
+import GridConfigurator from '../components/GridConfigurator';
+import MirrorGrid from '../components/MirrorGrid';
+import { discoverNodes } from '../services/mockApi';
+
+import type { NavigationControls } from '../App';
 import type {
     Node,
     Motor,
@@ -8,11 +15,6 @@ import type {
     DraggedMotorInfo,
     Axis,
 } from '../types';
-import GridConfigurator from '../components/GridConfigurator';
-import MirrorGrid from '../components/MirrorGrid';
-import DiscoveredNodes from '../components/DiscoveredNodes';
-import { discoverNodes } from '../services/mockApi';
-import type { NavigationControls } from '../App';
 
 interface ModalState {
     isOpen: boolean;
