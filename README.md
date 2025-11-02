@@ -1,30 +1,27 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Mirror Matrix Control UI
 
-# Run and deploy your AI Studio app
+React single-page workspace for arranging the kinetic mirror grid, authoring light patterns, and driving [ESP32 mirror nodes](https://github.com/szerintedmi/kinetic-mirror-matrix-esp32) over MQTT. The app focuses on the configurator, pattern editor, simulation preview, and library workflows needed for the MVP.
 
-This contains everything you need to run your app locally.
+## Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/drive/1H4ecS7Zs73JLZg43NahoMtYamMaaOxx0
+- Node.js `>=22.21.0 <23`
+- Yarn 4 (Corepack users can run `corepack enable`)
 
-## Run Locally
+## Setup
 
-**Prerequisites:** Node.js
+1. Install dependencies: `yarn install`
+2. Start the development server: `yarn dev`
 
-1. Install dependencies:
-   `yarn install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `yarn dev`
+## Verification
+
+- Type check: `yarn typecheck`
+- Lint: `yarn lint` (auto-fix with `yarn lint:fix`)
+- Format: `yarn format` (write fixes with `yarn format:fix`)
+- Unit tests: `yarn test` (watch mode `yarn test:watch`)
+- Production build: `yarn build`
 
 ## End-to-End Tests
 
-Playwright drives the UI in a real browser to smoke test the app shell.
-
-1. Install Playwright browsers (one-time):
-   `yarn dlx playwright install --with-deps`
-2. Run the test suite:
-   `yarn test:e2e`
-3. Explore failures with the UI mode:
-   `yarn test:e2e:ui`
+1. Install Playwright browsers (one-time): `yarn dlx playwright install --with-deps`
+2. Run the suite: `yarn test:e2e`
+3. Explore failures in UI mode: `yarn test:e2e:ui`
