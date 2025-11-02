@@ -15,22 +15,29 @@
 
 ## Build, Test, and Development Commands
 
-- Run all these after your changes:
+- Run `yarn format` / `yarn format:fix` → Prettier checks after changes in markdown files and other non code files.
+- Run all these after changes in code or configuration:
   - `yarn build` → builds with Vite. A `prebuild` hook runs `tsc --noEmit` to fail on type errors.
   - `yarn test` → Vitest unit tests.
   - `yarn lint` / `yarn lint:fix` → ESLint checks and safe autofixes.
-  - `yarn format` / `yarn format:fix` → Prettier checks and writes.
-  - `yarn typecheck` → explicit TypeScript check (same as the `prebuild` hook).
-- Always run the above after changes and resolve any findings before hand-off.
+  - `yarn format` / `yarn format:fix` → Prettier checks and safe autofixes.
+- Your should resolve any errors and warnings from the above pre-checks before hand-off.
 - Dev server error overlay: TypeScript errors are shown in-browser via `vite-plugin-checker`.
 
 ## Working Practices
 
-- For multi-step efforts, add a short plan in `agent_notes/`.
-- Keep notes concise: list tasks, mark status, and update as you progress.
-- Adjust the plan as scope changes—the goal is accurate, living context.
-- Less code is better. Clarfiy scope / requirements if it could reduce complexity, offer feature trade-offs for approaval
-- For new features and techical decisions validate with user instead of assuming. Propose the most reasonable approach concisely for confirmation. If there are multiple questions always present it as numbered list.
+### Planning notes
+
+- For bigger multi-step efforts, add a brief high level plan in `agent_notes/`. Use `yyyy-mm-dd-short-title-of-plan` filename format.
+- Keep notes concise: list tasks, mark status.
+- As you progress update the plan file with a short note about status of task progress.
+- Feel free to adjust the plan as you progreess - the goal is living context not a plan in stone.
+
+### Clarify scope / requirements
+
+- For new features and techical decisions validate with user instead of assuming. Propose a reasonable MVP approach in a concise way for confirmation. If there are multiple questions always present it as numbered list.
+- Less code is better. Suggest feature trade-offs to reduce complexity.
+
 - Do not install new dependencies without explicit approval
 
 ## Coding Style & Naming Conventions
