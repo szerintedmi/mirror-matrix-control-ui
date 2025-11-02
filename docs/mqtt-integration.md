@@ -23,12 +23,12 @@
 
 ## Overview
 
-Our UI orchestrates Mirror Array nodes over MQTT. Each node runs the firmware from the kinetic mirror stack and exposes the same command surface as the USB serial transport, but wrapped in JSON envelopes and published to broker topics. Commands are correlated via `cmd_id`, respond with `ack`/`done`/`error` states, and reuse the shared error code catalog (`E01`–`E12`, `NET_*`, `MQTT_*`). The React app should use this guide to publish control messages, subscribe for responses, and render live status.
+Our UI orchestrates Mirror Array tile drivers over MQTT. Each tile driver runs the firmware from the kinetic mirror stack and exposes the same command surface as the USB serial transport, but wrapped in JSON envelopes and published to broker topics. Commands are correlated via `cmd_id`, respond with `ack`/`done`/`error` states, and reuse the shared error code catalog (`E01`–`E12`, `NET_*`, `MQTT_*`). The React app should use this guide to publish control messages, subscribe for responses, and render live status.
 
 Behavior guarantees from the latest protocol:
 
 - Long-running commands emit a single `ack` followed by a completion (`done` or `error`). Short commands skip the `ack`.
-- Responses on `devices/<node_mac>/cmd/resp` use QoS 1. If the same `cmd_id` is published again, firmware replays cached responses rather than re-running the command.
+- Responses on `devices/<tile_driver_mac>/cmd/resp` use QoS 1. If the same `cmd_id` is published again, firmware replays cached responses rather than re-running the command.
 - Validation failures publish a single completion with `status: "error"` (no `ack`).
 - Short commands that complete immediately (e.g., `HELP`, `WAKE`, `SLEEP`, `GET`, `SET`, `NET:STATUS`, `NET:SET`) send only a `status:"done"` completion with no `ack`.
 
@@ -44,11 +44,11 @@ This guide is a reference to the full firmware MQTT protocol. The UI in this rep
 
 ## MQTT Topics
 
-- `devices/<node_id>/cmd`  
-  QoS 1, retain=false. Publish JSON command envelopes. `<node_id>` is the device MAC address rendered in lowercase without separators.
-- `devices/<node_id>/cmd/resp`  
+- `devices/<tile_driver_id>/cmd`  
+  QoS 1, retain=false. Publish JSON command envelopes. `<tile_driver_id>` is the device MAC address rendered in lowercase without separators.
+- `devices/<tile_driver_id>/cmd/resp`  
   QoS 1, retain=false. Firmware publishes one `ack` (for async actions) and one completion payload per command. Duplicate QoS1 deliveries replay cached responses without re-running the command.
-- `devices/<node_id>/status`  
+- `devices/<tile_driver_id>/status`  
   QoS 0, retain=false. High-frequency telemetry snapshots. Broker Last Will on the same topic emits `{"node_state":"offline","motors":{}}`.
 
 Every command payload follows:
@@ -261,7 +261,7 @@ Example completion (truncated):
 
 ## Status Telemetry
 
-- Subscribe to `devices/<node_id>/status` for live motor data. Payload fields:
+- Subscribe to `devices/<tile_driver_id>/status` for live motor data. Payload fields:
   - `node_state`: `"ready"` for live publishes; `"offline"` is sent by the broker Last Will with an empty `motors` object.
   - `ip`: current IPv4 (defaults to `"0.0.0.0"`).
   - `motors`: map keyed by stringified ids (`"0"`–`"7"`). Each object includes: `id`, `position`, `moving`, `awake`, `homed`, `steps_since_home`, thermal metrics (`budget_s`, `ttfc_s`), motion settings (`speed`, `accel`), and timing values (`est_ms`, `started_ms`, `actual_ms`).

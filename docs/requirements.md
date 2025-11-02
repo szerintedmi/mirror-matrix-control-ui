@@ -2,7 +2,7 @@
 
 ## 0. Background & Goals
 
-The UI provides a visual workspace for arranging mirrors, sketching patterns, and previewing light behavior while firmware on ESP32 nodes handles motion control (see [https://github.com/szerintedmi/kinetic-mirror-matrix-esp32](kinetic-matrix-esp32)). It bridges the React front end to the full MQTT command set so pattern playback can target live nodes without a serial CLI.
+The UI provides a visual workspace for arranging mirrors, sketching patterns, and previewing light behavior while firmware on ESP32 tile drivers handles motion control (see [https://github.com/szerintedmi/kinetic-mirror-matrix-esp32](kinetic-matrix-esp32)). It bridges the React front end to the full MQTT command set so pattern playback can target live tile drivers without a serial CLI.
 
 ---
 
@@ -10,8 +10,8 @@ The UI provides a visual workspace for arranging mirrors, sketching patterns, an
 
 A single-page, browser-based controller for a modular kinetic mirror array. The MVP focuses on:
 
-- Discovering mirror nodes via MQTT.
-- Configuring a grid by assigning motors (two axes per pixel).
+- Discovering tile drivers via MQTT.
+- Configuring a grid by assigning motors (two axes per tile).
 - Designing and selecting simple patterns.
 - Converting patterns into absolute motor positions.
 - Issuing commands over MQTT and tracking status.
@@ -21,7 +21,7 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 
 ### Ownership & Precedence
 
-- Node-side MQTT configuration remains managed by the nodes' own interfaces (firmware/CLI). This UI configures only its connection to the MQTT broker (host/port/path, etc.) and must expose those settings in the UI.
+- Tile-driver-side MQTT configuration remains managed by the tile drivers' own interfaces (firmware/CLI). This UI configures only its connection to the MQTT broker (host/port/path, etc.) and must expose those settings in the UI.
 - Deep diagnostics, serial command console, and networking runbooks are owned by the firmware/CLI project and linked from this UI; this app provides lightweight logging and status only.
 
 ### Users & Personas
@@ -30,20 +30,21 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 
 ### Feature Pillars
 
-- Configurator: node discovery, drag-and-drop motor assignment, selective clearing/reset with confirmations.
+- Configurator: tile driver discovery, drag-and-drop motor assignment, selective clearing/reset with confirmations.
 - Pattern Editor: grid-based paint/erase with canvas resize and guardrails not to exceed available mirrors.
 - Pattern Library: list, preview, select active, delete; show projected footprint estimates based on simulation parameters.
-- Simulation: dual-view SVG preview (top and side) of incident/reflected rays with wall/light angle controls and distance.
+- Simulation: dual-view preview (top and side) of incident/reflected rays with wall/light angle controls and distance.
 - Operational Insights: surface homing state, awake/asleep, thermal budgets, and motion timing from MQTT status.
 
 ---
 
 ## 2. Glossary
 
-- **Node:** ESP32 controller reporting status and accepting commands; one node may host up to eight motors.
-- **Motor:** Single-axis actuator; two motors form one pixel (X and Y).
-- **Pixel:** Logical mirror unit on the grid; requires two motors (X/Y).
-- **Grid:** Logical arrangement of pixels (for example, 8×8); may differ from physical wiring.
+- **Tile Driver:** ESP32 controller reporting status and accepting commands; typically manages up to eight motors (about four tiles) but may handle fewer or more.
+- **Motor:** Single-axis actuator; two motors form one tile (X and Y).
+- **Tile:** Logical mirror unit on the grid; requires two motors (X/Y).
+- **Grid:** Logical arrangement of tiles (for example, 8×8); may differ from physical wiring.
+- **Canvas:** Virtual 2D coordinate space (integer rows/cols, top-left origin, often higher resolution than the tile grid) where patterns are sketched as target points; brighter regions emerge when multiple tiles are steered toward nearby canvas coordinates.
 - **Pattern:** Set of active points on a 2D canvas to be projected.
 - **MVP:** Minimum viable product; see feature list.
 
@@ -54,7 +55,7 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 - Frontend-only single-page application; runs in the browser.
 - Uses MQTT over WebSockets to connect to a LAN broker.
 - Stores configuration in browser `localStorage`.
-- Uses existing node MQTT schemas for commands and status.
+- Uses existing tile-driver MQTT schemas for commands and status.
 - Linear angle-to-steps mapping; absolute positions range from -1200 to +1200 steps with zero centered.
 
 **Physical constants**
@@ -75,25 +76,25 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 
 **Topics (canonical)**
 
-- `devices/<mac>/status` — QoS 0, retain=false; includes node and motor fields. Broker Last Will publishes `{"node_state":"offline","motors":{}}` on the same topic.
-- `devices/<mac>/cmd` — frontend-to-node commands.
+- `devices/<mac>/status` — QoS 0, retain=false; includes tile-driver and motor fields. Broker Last Will publishes `{"node_state":"offline","motors":{}}` on the same topic.
+- `devices/<mac>/cmd` — frontend-to-tile-driver commands.
 - `devices/<mac>/cmd/resp` — acknowledgements, completion, errors; includes `cmd_id`.
 
 **Discovery & offline**
 
-- Nodes publish live snapshots at 1 Hz idle / 5 Hz during motion without retain; the UI typically sees nodes within a second of subscribing.
-- Nodes set LWT; broker publishes offline payload on disconnect. The UI relies on LWT for offline marking (no additional stale-timeout).
+- Tile drivers publish live snapshots at 1 Hz idle / 5 Hz during motion without retain; the UI typically sees tile drivers within a second of subscribing.
+- Tile drivers set LWT; broker publishes offline payload on disconnect. The UI relies on LWT for offline marking (no additional stale-timeout).
 
 **Commands & correlation**
 
 - MQTT 3.x (no MQTT5 features).
-- Each command may include a `cmd_id` (UUID). If omitted, the node generates one and echoes it in `cmd/resp`.
+- Each command may include a `cmd_id` (UUID). If omitted, the tile driver generates one and echoes it in `cmd/resp`.
 - `cmd/resp` includes estimated finish time; UI may display it, but status remains the source of truth for completion.
 
 **Granularity**
 
 - MOVE: one message per motor.
-- HOME: can be batched with `HOME:ALL` per node.
+- HOME: can be batched with `HOME:ALL` per tile driver.
 
 **QoS**
 
@@ -107,7 +108,7 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 - Broker exposes WebSocket endpoint (WS/WSS). MVP assumption: LAN, basic username/pass authentication.
 - UI provides a simple MQTT settings panel (host, port, credentials) with defaults stored in code; persisted in `localStorage`.
 - Separation of concerns:
-  - Node-side MQTT configuration (broker host/creds used by nodes) remains configurable via node interfaces maintained in the firmware project (see https://github.com/szerintedmi/kinetic-mirror-matrix-esp32).
+  - Tile-driver-side MQTT configuration (broker host/creds used by tile drivers) remains configurable via tile-driver interfaces maintained in the firmware project (see https://github.com/szerintedmi/kinetic-mirror-matrix-esp32).
   - UI-side MQTT configuration (how this app connects to the broker) is configurable in this UI and persists locally.
 
 ---
@@ -115,9 +116,10 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 ## 6. Status & Telemetry (read-only)
 
 - UI consumes `devices/<mac>/status` for:
-  - Node discovery via newly spotted mac addresses.
-  - Node info: IP, MAC, status URL, etc.
-  - Per-motor info: id (0–7), homed, moving, `abs_steps`, `target_steps` (if available), fault state, `thermal_budget`, `steps_since_home`.
+  - Tile-driver discovery via newly spotted mac addresses.
+  - Tile-driver info: IP, MAC, status URL, etc.
+  - Per-motor info: id (0–7), `position`, `moving`, `awake`, `homed`, `steps_since_home`, thermal metrics (`budget_s`, `ttfc_s`), motion settings (`speed`, `accel`), and timing values (`est_ms`, `started_ms`, `actual_ms`).
+- Store per-tile-driver first-seen and last-seen timestamps (derived from message arrival times) to power "New" indicators and session discovery counters.
 - Homing indicators:
   - Yellow when `steps_since_home` > 5,000.
   - Red when `steps_since_home` > 10,000.
@@ -138,7 +140,9 @@ Storage: `localStorage` (single active grid configuration in MVP).
     "scheme": "ws",
     "host": "192.168.1.10",
     "port": 9001,
-    "path": "/mqtt"
+    "path": "/mqtt",
+    "username": "",
+    "password": ""
   }
 }
 ```
@@ -151,22 +155,22 @@ Storage: `localStorage` (single active grid configuration in MVP).
     "name": "default",
     "cols": 8,
     "rows": 8,
-    "pixels": [
+    "tiles": [
       {
         "row": 0,
         "col": 0,
         "motor_x": { "mac": "A1B2C3D4E5F6", "id": 0 },
         "motor_y": { "mac": "A1B2C3D4E5F6", "id": 1 }
       }
-      // ... one entry per pixel. Unassigned pixels may omit motor references.
+      // ... one entry per tile. Unassigned tiles may omit motor references.
     ]
   }
 }
 ```
 
-- Cross-pairing across nodes is allowed.
-- A motor represents one pixel axis; prevent sharing the same motor across multiple pixels.
-- Unassigned pixels are permitted; playback skips them.
+- Cross-pairing across tile drivers is allowed.
+- A motor represents one tile axis; prevent sharing the same motor across multiple tiles.
+- Unassigned tiles are permitted; playback skips them.
 
 ### 7.3 Projection Settings (persisted)
 
@@ -188,18 +192,17 @@ Storage: `localStorage` (single active grid configuration in MVP).
 {
   "pattern": {
     "name": "example",
-    "canvas": { "width": 256, "height": 256, "origin": "top-left" },
-    "pixels": [
-      { "x": 120, "y": 64, "intensity": 3 },
-      { "x": 180, "y": 120, "intensity": 1 }
+    "canvas": { "width": 256, "height": 256 },
+    "points": [
+      { "x": 120, "y": 64 },
+      { "x": 180, "y": 120 }
     ]
   }
 }
 ```
 
-- Canvas can exceed grid bounds; only active pixels matter.
-- Intensity is an integer representing overlap/brightness taps (not a normalized float).
-- More active pixels than mirrors is allowed; see mapping policy (Section 10).
+- Canvas resolution can exceed grid bounds; the editor caps active points to the number of available tiles.
+- Brighter regions are achieved by sketching multiple points that the conversion layer aligns on exactly the same wall coordinates; tiles can therefore project to distinct, partially overlapping, or perfectly overlapping targets without storing an explicit intensity per point.
 
 ---
 
@@ -209,35 +212,37 @@ Target users are technical; keep the interface clean and efficient.
 
 ### 8.1 Header Summary
 
-- Node and motor counters (online, offline, moving, homed/not homed) with color coding.
+- Tile-driver and motor counters (online, offline, moving, homed/not homed) with color coding.
 - Global Stop button (convenience; low-risk small steppers).
 - Quick indicators for warnings/errors (badge linking to log panel).
+- Dedicated badge showing count of tile drivers discovered during the current session and a quick link to focus the list on them.
 
 ### 8.2 Connection & Settings Panel
 
-- MQTT settings (host, port, path) with defaults and `localStorage` persistence.
+- MQTT settings (host, port, path, username, password) with defaults and `localStorage` persistence.
 - Connection status indicators (connected to broker and subscribed topics).
 
-### 8.3 Node List & Discovery
+### 8.3 Tile-Driver List & Discovery
 
-- Card per node showing:
-  - MAC (display last four characters if alias absent).
-  - Status URL (clickable).
-  - Online/offline state via retained/LWT.
-  - Up to eight motors with status chips (homed/moving/fault).
+- Surface newly discovered tile drivers immediately and make them easy to identify until acknowledged.
+- Provide clear visibility into online/offline state, last-seen timing, and which motors remain unassigned so users can triage quickly.
+- Support focus or filtering mechanisms that let operators isolate new, offline, or partially assigned tile drivers without hunting.
 - Per-axis nudge controls (see Section 9).
 
 ### 8.4 Grid Configurator
 
-- Visual grid; each pixel shows assigned `motor_x` and `motor_y` (by MAC and ID).
+- Visual grid; each tile shows assigned `motor_x` and `motor_y` (by MAC and ID).
 - Assign via drag-and-drop or chooser from discovered motors.
-- Validation preventing a motor from being assigned to multiple pixels.
+- Validation preventing a motor from being assigned to multiple tiles.
 - Quick nudge on each axis to physically identify.
+- Highlight tiles and tile drivers with unassigned motors, and provide a quick action to focus the discovery list on the relevant hardware.
 
-### 8.5 Pattern Designer (MVP minimal)
+### 8.5 Pattern Designer
 
 - Canvas (for example, 256×256) with top-left origin.
-- Place points with integer intensity; optional snap-to-grid.
+- Place points (capped at available tiles); clustering points in one region prompts the conversion step to assign multiple tiles there, boosting brightness.
+- Optional snap-to-grid: rounds point placement to the nearest whole tile coordinate so users can quickly draft grid-aligned patterns before switching back to free positioning for overlap control.
+- Interactive heatmap-style canvas: users draw directly via click/drag, and cell coloration reflects how many tiles will converge on that region as points accumulate.
 - Load/save single active pattern in `localStorage`.
 
 ### 8.6 Projection Parameters & Preview
@@ -248,13 +253,13 @@ Target users are technical; keep the interface clean and efficient.
 ### 8.7 Playback Controls
 
 - Select pattern and press Play.
-- Pre-flight warning lists offline/unassigned pixel axes; user may proceed (skip) or cancel.
+- Pre-flight warning lists offline/unassigned tile axes; user may proceed (skip) or cancel.
 - Live status of motors (moving/settled); overall completion via status.
 
 ### 8.8 Log Panel (rolling, non-persistent)
 
 - Entries capture time, MAC, `cmd_id`, code, message.
-- Filters by node or severity.
+- Filters by tile driver or severity.
 
 ### 8.9 Pattern Library
 
@@ -268,13 +273,14 @@ Target users are technical; keep the interface clean and efficient.
 
 **Nudge (for identification)**
 
-- Fixed ±500 steps per click.
+- Fixed 500 steps to one direction and back per click
+- Direction of steps depending on current motor position, first moving to the direction where it's still within bounds.
 - Per axis (X or Y) only.
-- Node enforces limits; UI is not required to throttle. If a command would exceed range, node rejects it.
+- Tile driver enforces limits; UI is not required to throttle. If a command would exceed range, the tile driver rejects it.
 
 **Homing**
 
-- Home All runs concurrently across nodes.
+- Home All runs concurrently across tile drivers.
 - UI shows per-motor homed state and `steps_since_home` with yellow/red thresholds.
 
 **Command timeouts & retries**
@@ -288,8 +294,8 @@ Target users are technical; keep the interface clean and efficient.
 
 **Inputs**
 
-- Pattern pixels `(x, y, intensity)` on canvas.
-- Grid geometry (pitch 53 mm; grid dimensions; pixel locations).
+- Pattern points `(x, y)` on the canvas (count limited to available tiles).
+- Grid geometry (pitch 53 mm; grid dimensions; tile locations).
 - Projection settings (wall distance, wall and light angles).
 
 **Outputs**
@@ -304,22 +310,19 @@ Target users are technical; keep the interface clean and efficient.
 **Algorithm (MVP sketch)**
 
 1. Map canvas points to physical wall coordinates using canvas size, wall distance, and wall angles.
-2. For each grid pixel (mirror center), compute desired reflection angles based on target wall point and incoming light vector.
+2. Assign each canvas point to a tile (nearest-neighbor/Hungarian-style mapping) so clustered points cause neighboring tiles to target nearby wall coordinates, yielding overlap where desired.
 3. Convert required mirror tilt angles (horizontal/vertical) to motor absolute steps using the linear constant; clamp to [-1200, +1200].
 4. Emit per-motor MOVE commands with `cmd_id`; rely on status to track completion.
 
-**Over-subscription policy (more active points than mirrors)**
+**Point limit enforcement**
 
-- MVP default: nearest-neighbor mapping of active points to mirror centers. On conflicts:
-  1. Choose the higher-intensity point.
-  2. Tie-break deterministically (top-to-bottom, left-to-right).
-- Unmapped active points are ignored; emit warning in pre-flight list and log.
+- The editor enforces `activePoints <= availableTiles`; if future workflows need over-subscription, define a redistribution policy before implementation.
 
 ---
 
 ## 11. Playback Completion Semantics
 
-- A pattern is considered applied when all assigned axes report `moving = false` and `abs_steps` approximately equals `target_steps` (if target is reported) in status messages.
+- A pattern is considered applied when all assigned axes report `moving = false` and their reported `position` matches the last commanded target.
 - UI also shows estimated finish time from `cmd/resp` for user feedback but relies on status for ground truth.
 - Apply a global timeout (for example, 15 seconds) to avoid UI hangs; mark as incomplete and log if exceeded.
 
@@ -327,8 +330,8 @@ Target users are technical; keep the interface clean and efficient.
 
 ## 12. Error Handling & Safety
 
-- Global Stop button sends stop/abort command to all nodes.
-- Nodes enforce thermal limits and may reject commands; UI surfaces rejections.
+- Global Stop button sends stop/abort command to all tile drivers.
+- Tile drivers enforce thermal limits and may reject commands; UI surfaces rejections.
 - Pre-flight warnings for offline or unassigned axes; playback proceeds while skipping unavailable axes.
 - Rolling error log linked by `cmd_id`.
 
@@ -337,7 +340,7 @@ Target users are technical; keep the interface clean and efficient.
 ## 13. Non-Functional Requirements
 
 - **Responsiveness:** UI updates as status messages arrive (event-driven). Header counters aggregate quickly without throttling; internal batching acceptable.
-- **Scalability (initial):** Support up to roughly eight nodes / 64 motors smoothly (adjust based on real targets).
+- **Scalability (initial):** Support up to roughly eight tile drivers / 64 motors smoothly (adjust based on real targets).
 - **Reliability:** Commands use QoS 1; status uses QoS 0; retained status enables cold-start population.
 - **Security (MVP):** LAN only, no authentication/TLS. (Future enhancement: broker auth/TLS.)
 
@@ -350,7 +353,7 @@ Target users are technical; keep the interface clean and efficient.
 - Cloud/backend persistence.
 - Per-motor calibration; nonlinear geometric correction beyond linear mapping.
 - Full 3D simulation or advanced renderings.
-- Aliases for nodes/motors; instead, show grid position if assigned, otherwise last four characters of MAC.
+- Aliases for tile drivers/motors; instead, show grid position if assigned, otherwise last four characters of MAC.
 
 ---
 
@@ -359,20 +362,22 @@ Target users are technical; keep the interface clean and efficient.
 1. WebSocket endpoint details: final scheme/port/path; confirm LAN open (no auth/TLS).
 2. Apply timeout: choose final default (suggest 15 s) and determine whether to expose per-run override.
 3. ACK timestamp units: define format for estimated finish time (for example, epoch milliseconds vs ISO 8601).
-4. Scale targets: expected upper bounds (nodes/motors) to validate UI virtualization thresholds.
+4. Scale targets: expected upper bounds (tile drivers/motors) to validate UI virtualization thresholds.
 5. `steps_per_degree`: initial default and tuning location (settings panel?).
 
 ---
 
 ## 16. Acceptance Criteria (MVP)
 
-- **Connect & discover:** On load, user sets broker settings (or uses defaults). UI connects, loads retained statuses, and lists nodes.
-- **Offline handling:** Killing a node triggers LWT; UI promptly marks it offline.
-- **Grid assign:** User assigns motors (X/Y) to pixels; UI prevents assigning one motor to multiple pixels.
+- **Connect & discover:** On load, user sets broker settings (or uses defaults). UI connects, loads retained statuses, and lists tile drivers.
+- **Offline handling:** Killing a tile driver triggers LWT; UI promptly marks it offline.
+- **Discovery cues:** Newly spotted tile drivers surface instantly with a visible "New" badge and increment the session discovery counter until acknowledged.
+- **Grid assign:** User assigns motors (X/Y) to tiles; UI prevents assigning one motor to multiple tiles.
+- **Assignment visibility:** Tile drivers or tiles with unassigned motors are clearly highlighted with quick links back to the discovery list.
 - **Nudge:** Clicking Nudge ± on a motor axis sends a ±500-step move and motion is visible in status.
 - **Home All:** Triggers homing concurrently; homed flags update; `steps_since_home` resets.
 - **Projection params:** User sets wall distance/angles and incoming light; preview updates (top and side views) and shows derived size.
-- **Pattern design:** User places active points; intensity stored as integer.
+- **Pattern design:** User places active points (capped at tile count); denser clusters lead to brighter projected regions.
 - **Play:** Pre-flight warning lists offline/unassigned axes; user can continue. UI issues per-axis moves, shows progress, and marks completion via status (or timeout).
 - **Logging:** Command errors/denials appear with time, MAC, `cmd_id`, code, message.
 - **Persistence:** MQTT settings, grid configuration, projection parameters, and the single active pattern persist in `localStorage`.
@@ -391,8 +396,9 @@ Target users are technical; keep the interface clean and efficient.
 **Epic B — Status Ingest & Discovery**
 
 - B1: Subscribe to `devices/+/status` (retained).
-- B2: Normalize node and motor models in store.
+- B2: Normalize tile-driver and motor models in store.
 - B3: LWT/offline handling and header counters.
+- B4: Session-based discovery indicators, filters, and "new tile driver" lifecycle.
 
 **Epic C — Grid Configurator**
 
@@ -404,12 +410,13 @@ Target users are technical; keep the interface clean and efficient.
 
 - D1: Per-axis Nudge UI; publish ±500 moves.
 - D2: Home All command; progress and homed flags.
-- D3: `steps_since_home` indicators (yellow/red thresholds).
+- D3: Home a single motor
+- D4: `steps_since_home` indicators (yellow/red thresholds).
 
-**Epic E — Pattern Designer (Minimal)**
+- **Epic E — Pattern Designer (Minimal)**
 
-- E1: Canvas with point placement and integer intensity.
-- E2: Optional snap-to-grid; save/load single pattern.
+- E1: Interactive heatmap-style canvas for point placement with tile-count guardrails.
+- E2: Optional snap-to-grid toggle that rounds placement to tile centers; save/load single pattern.
 - E3: Pattern Library view (list, preview, select active, delete), leveraging localStorage.
 
 **Epic F — Geometry Panel & 2D Preview**
@@ -420,7 +427,7 @@ Target users are technical; keep the interface clean and efficient.
 **Epic G — Conversion & Playback**
 
 - G1: Shared conversion utility (pattern → angles → steps, linear mapping).
-- G2: Mapping policy (nearest-neighbor with intensity and deterministic tie-breaks).
+- G2: Mapping policy (assign tiles to canvas points with deterministic tie-breaks for clustered regions).
 - G3: Per-motor MOVE dispatch; `cmd/resp` tracking; status-based completion with global timeout.
 
 **Epic H — Logging & Diagnostics**
@@ -438,7 +445,7 @@ Target users are technical; keep the interface clean and efficient.
 ## 18. Developer Notes
 
 - Mock services and shared types exist to accelerate UI work and will be replaced when wiring a live broker:
-  - `services/mockApi.ts` — placeholder discovery and node data.
+  - `services/mockApi.ts` — placeholder discovery and tile-driver data.
   - `types.ts` — shared domain types used across pages/components.
 - Keep the MQTT client as a swappable layer so environments can shift between mocked, LAN broker, and future secure setups.
 
