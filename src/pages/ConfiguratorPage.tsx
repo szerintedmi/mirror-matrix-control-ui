@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import DiscoveredNodes from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
+import { useMqtt } from '../context/MqttContext';
 import { discoverNodes } from '../services/mockApi';
 
 import type { NavigationControls } from '../App';
@@ -34,6 +35,9 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     gridSize,
     onGridSizeChange,
 }) => {
+    const { settings } = useMqtt();
+    const isMockScheme = settings.scheme === 'mock';
+
     const [discoveredNodes, setDiscoveredNodes] = useState<Node[]>([]);
     const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(new Map());
     const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +52,13 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     });
 
     const fetchNodes = useCallback(async () => {
+        setIsLoading(true);
+        if (!isMockScheme) {
+            setDiscoveredNodes([]);
+            setIsLoading(false);
+            return;
+        }
+
         try {
             const nodes = await discoverNodes();
             setDiscoveredNodes(nodes);
@@ -56,7 +67,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [isMockScheme]);
 
     useEffect(() => {
         fetchNodes();
@@ -387,10 +398,10 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 </div>
                                 <button
                                     onClick={() => {
-                                        setIsLoading(true);
                                         fetchNodes();
                                     }}
-                                    className="p-2 rounded-full hover:bg-gray-700 transition-colors"
+                                    disabled={!isMockScheme}
+                                    className="p-2 rounded-full hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Rediscover Nodes"
                                 >
                                     <svg
@@ -411,7 +422,14 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             </div>
                         </div>
                         <div className="flex-grow overflow-y-auto pr-2">
-                            {isLoading ? (
+                            {!isMockScheme ? (
+                                <div className="text-sm text-gray-400 bg-gray-900/60 border border-gray-700 rounded-lg p-4">
+                                    Live MQTT discovery will be enabled in a future build. Switch the connection
+                                    scheme to{' '}
+                                    <span className="text-emerald-400 font-semibold">mock</span>{' '}
+                                    to interact with simulated tile drivers.
+                                </div>
+                            ) : isLoading ? (
                                 <div className="flex items-center justify-center h-full">
                                     <p className="text-gray-400">Discovering nodes...</p>
                                 </div>

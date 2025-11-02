@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+import ConnectionSettingsPanel from './components/ConnectionSettingsPanel';
+import { MqttProvider } from './context/MqttContext';
 import ConfiguratorPage from './pages/ConfiguratorPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
@@ -110,7 +112,16 @@ const App: React.FC = () => {
         }
     };
 
-    return <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">{renderPage()}</div>;
+    return (
+        <MqttProvider>
+            <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
+                <ConnectionSettingsPanel />
+                <main data-testid="app-root" className="mx-auto max-w-5xl px-4 py-8">
+                    {renderPage()}
+                </main>
+            </div>
+        </MqttProvider>
+    );
 };
 
 export default App;

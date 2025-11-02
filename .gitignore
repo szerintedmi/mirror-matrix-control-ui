@@ -3,6 +3,8 @@ agent_notes
 .corepack
 .yarn
 
+.tmp/
+
 playwright-report
 test-results
 
