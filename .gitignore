@@ -1,6 +1,7 @@
 agent_notes
 
 .corepack
+.yarn
 
 playwright-report
 test-results
