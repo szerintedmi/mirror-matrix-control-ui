@@ -10,10 +10,19 @@ import globals from 'globals';
 
 export default [
     {
-        ignores: ['dist', 'node_modules', '.yarn', '.history', '.corepack'],
+        ignores: [
+            'dist',
+            'dist-ssr',
+            'node_modules',
+            '.yarn',
+            '.history',
+            '.corepack',
+            'playwright-report',
+            'test-results',
+        ],
     },
     {
-        files: ['**/*.{ts,tsx,js,jsx}'],
+        files: ['**/*.{js,jsx,ts,tsx,mjs}'],
         languageOptions: {
             parser: tsParser,
             parserOptions: {
@@ -76,7 +85,14 @@ export default [
         },
     },
     {
-        files: ['**/*.test.{ts,tsx,js,jsx}', '**/__tests__/**/*.{ts,tsx,js,jsx}'],
+        files: [
+            'src/**/*.test.{ts,tsx,js,jsx}',
+            'tests/**/*.test.{ts,tsx,js,jsx}',
+            'e2e/**/*.test.{ts,tsx,js,jsx}',
+            'src/**/__tests__/**/*.{ts,tsx,js,jsx}',
+            'tests/**/__tests__/**/*.{ts,tsx,js,jsx}',
+            'e2e/**/__tests__/**/*.{ts,tsx,js,jsx}',
+        ],
         languageOptions: {
             parser: tsParser,
             parserOptions: {

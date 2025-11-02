@@ -1,2 +1,8 @@
 dist
+dist-ssr
 node_modules
+.yarn
+.history
+.corepack
+playwright-report
+test-results
