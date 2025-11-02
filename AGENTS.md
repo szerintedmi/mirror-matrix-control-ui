@@ -11,6 +11,7 @@
 - Update presets in `metadata.json` when needed.
 - Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
 - Primary framework: React. Vue can be introduced later, but is not configured yet. If/when introducing Vue makes sense suggest it.
+- Install: `yarn install`
 
 ## Build, Test, and Development Commands
 
@@ -20,8 +21,8 @@
   - `yarn lint` / `yarn lint:fix` → ESLint checks and safe autofixes.
   - `yarn format` / `yarn format:fix` → Prettier checks and writes.
   - `yarn typecheck` → explicit TypeScript check (same as the `prebuild` hook).
-- Dev server error overlay: TypeScript errors are shown in-browser via `vite-plugin-checker`.
 - Always run the above after changes and resolve any findings before hand-off.
+- Dev server error overlay: TypeScript errors are shown in-browser via `vite-plugin-checker`.
 
 ## Working Practices
 
