@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 
 import { STEPS_SINCE_HOME_CRITICAL, STEPS_SINCE_HOME_WARNING } from '../constants/control';
+import { useCommandFeedback } from '../hooks/useCommandFeedback';
+import { useMotorCommands } from '../hooks/useMotorCommands';
 import { useMotorController } from '../hooks/useMotorController';
+import { normalizeCommandError } from '../utils/commandErrors';
 
 import MotorActionButtons from './MotorActionButtons';
 
@@ -22,7 +25,6 @@ interface AxisDotView {
     animate: boolean;
     title: string;
     motor: Motor | null;
-    telemetry?: MotorTelemetry;
     extraClass?: string;
 }
 
@@ -37,14 +39,14 @@ interface SelectedMotorState {
     axis: 'x' | 'y';
     tileTitle: string;
     motor: Motor;
-    telemetry?: MotorTelemetry;
 }
 
 const SelectedMotorPanel: React.FC<{
     selection: SelectedMotorState;
+    telemetry?: MotorTelemetry;
     onClear: () => void;
-}> = ({ selection, onClear }) => {
-    const controller = useMotorController(selection.motor, selection.telemetry);
+}> = ({ selection, telemetry, onClear }) => {
+    const controller = useMotorController(selection.motor, telemetry);
 
     return (
         <div className="mt-4 rounded-lg border border-gray-700 bg-gray-900/70 p-4">
@@ -64,7 +66,7 @@ const SelectedMotorPanel: React.FC<{
             <div className="mt-3">
                 <MotorActionButtons
                     motor={selection.motor}
-                    telemetry={selection.telemetry}
+                    telemetry={telemetry}
                     controller={controller}
                     dataTestIdPrefix={`overview-${selection.key}`}
                 />
@@ -96,6 +98,9 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
     mirrorConfig,
     drivers,
 }) => {
+    const { homeAll } = useMotorCommands();
+    const homeFeedback = useCommandFeedback();
+
     const motorStatus = useMemo(() => {
         const map = new Map<
             string,
@@ -120,6 +125,22 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
         }
         return map;
     }, [drivers]);
+
+    const handleHomeAll = async () => {
+        if (drivers.length === 0) {
+            homeFeedback.fail('No drivers available');
+            return;
+        }
+        const macAddresses = Array.from(new Set(drivers.map((driver) => driver.snapshot.topicMac)));
+        homeFeedback.begin('Homing all axes…');
+        try {
+            await homeAll({ macAddresses });
+            homeFeedback.succeed('Home All dispatched');
+        } catch (error) {
+            const details = normalizeCommandError(error);
+            homeFeedback.fail(details.message, details.code);
+        }
+    };
 
     const [selectedMotor, setSelectedMotor] = useState<SelectedMotorState | null>(null);
 
@@ -176,7 +197,6 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                         animate: presence === 'ready' && moving,
                         title: label,
                         motor,
-                        telemetry: status?.telemetry,
                         extraClass: stepsClass,
                     };
                 });
@@ -197,8 +217,35 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
 
     return (
         <section className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-            <div className="mb-3 flex items-center justify-between text-sm text-gray-300">
-                <span className="font-semibold text-gray-100">Array Overview</span>
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3 text-sm text-gray-300">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-semibold text-gray-100">Array Overview</span>
+                    <button
+                        type="button"
+                        onClick={handleHomeAll}
+                        className="rounded-md border border-emerald-600/70 bg-emerald-900/40 px-3 py-1 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-700/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                    >
+                        Home All
+                    </button>
+                    {homeFeedback.feedback.state !== 'idle' && homeFeedback.feedback.message && (
+                        <span
+                            className={`text-xs ${
+                                homeFeedback.feedback.state === 'error'
+                                    ? 'text-red-200'
+                                    : homeFeedback.feedback.state === 'pending'
+                                      ? 'text-sky-200'
+                                      : 'text-emerald-200'
+                            }`}
+                        >
+                            {homeFeedback.feedback.message}
+                            {homeFeedback.feedback.code && (
+                                <span className="ml-1 text-[10px] text-gray-400">
+                                    ({homeFeedback.feedback.code})
+                                </span>
+                            )}
+                        </span>
+                    )}
+                </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
                     <span className="flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-emerald-400" /> Assigned
@@ -261,7 +308,6 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                                                           axis: dot.axis,
                                                           tileTitle: tile.tileTitle,
                                                           motor,
-                                                          telemetry: dot.telemetry,
                                                       },
                                             );
                                         }}
@@ -278,6 +324,11 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
             {selectedMotor && (
                 <SelectedMotorPanel
                     selection={selectedMotor}
+                    telemetry={
+                        motorStatus.get(
+                            `${selectedMotor.motor.nodeMac}-${selectedMotor.motor.motorIndex}`,
+                        )?.telemetry
+                    }
                     onClear={() => setSelectedMotor(null)}
                 />
             )}

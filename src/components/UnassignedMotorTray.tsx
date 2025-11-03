@@ -89,10 +89,7 @@ const UnassignedMotorTray: React.FC<UnassignedMotorTrayProps> = ({
                 <h3 className="text-sm font-semibold text-gray-100 uppercase tracking-wide">
                     Unassigned Motors
                 </h3>
-                <span
-                    className="text-xs text-gray-300"
-                    data-testid="unassigned-axes-summary"
-                >
+                <span className="text-xs text-gray-300" data-testid="unassigned-axes-summary">
                     {totalUnassigned} {totalUnassigned === 1 ? 'axis' : 'axes'} available
                 </span>
             </div>
