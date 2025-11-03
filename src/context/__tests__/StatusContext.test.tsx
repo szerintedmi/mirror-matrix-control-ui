@@ -10,8 +10,11 @@ import {
     type PublishOptions,
     type SubscriptionOptions,
 } from '../../services/mqttClient';
-import { MqttProvider } from '../MqttContext';
+import { MqttProvider, useMqtt, type ConnectionScheme } from '../MqttContext';
 import { StatusProvider, useStatusStore } from '../StatusContext';
+
+// Enable act() support for Vitest's JSDOM environment
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 class StatusStubClient {
     private listeners = new Set<(state: ConnectionState) => void>();
@@ -136,6 +139,19 @@ const TestConsumer: React.FC = () => {
                 Ack
             </button>
         </div>
+    );
+};
+
+const SchemeSwitcher: React.FC<{ scheme: ConnectionScheme }> = ({ scheme }) => {
+    const { updateSettings } = useMqtt();
+    return (
+        <button
+            type="button"
+            data-role={`scheme-${scheme}`}
+            onClick={() => updateSettings({ scheme })}
+        >
+            Switch {scheme}
+        </button>
     );
 };
 
@@ -267,6 +283,7 @@ describe('StatusProvider', () => {
     it('records schema errors and halts further processing', () => {
         const client = new StatusStubClient();
         const { container, root } = createContainer();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
         act(() => {
             root.render(
@@ -297,6 +314,92 @@ describe('StatusProvider', () => {
         });
 
         expect(stateNode.dataset.drivers).toBe('0');
+
+        destroyContainer({ container, root });
+        errorSpy.mockRestore();
+    });
+
+    it('filters drivers by active connection scheme', () => {
+        const client = new StatusStubClient();
+        const { container, root } = createContainer();
+
+        act(() => {
+            root.render(
+                <MqttProvider client={client as unknown as MirrorMqttClient}>
+                    <StatusProvider>
+                        <TestConsumer />
+                        <SchemeSwitcher scheme="mock" />
+                    </StatusProvider>
+                </MqttProvider>,
+            );
+        });
+
+        act(() => {
+            client.emit(
+                'devices/AA11/status',
+                encode({
+                    node_state: 'ready',
+                    motors: {
+                        '0': {
+                            id: 0,
+                            position: 5,
+                            moving: false,
+                            awake: true,
+                            homed: true,
+                            steps_since_home: 0,
+                            budget_s: 90,
+                            ttfc_s: 0,
+                            speed: 4000,
+                            accel: 12000,
+                            est_ms: 0,
+                            started_ms: 0,
+                            actual_ms: 0,
+                        },
+                    },
+                }),
+            );
+        });
+
+        const stateNode = container.querySelector('[data-role="state"]') as HTMLElement;
+        expect(stateNode.dataset.drivers).toBe('1');
+
+        const switchButton = container.querySelector(
+            '[data-role="scheme-mock"]',
+        ) as HTMLButtonElement;
+
+        act(() => {
+            switchButton.click();
+        });
+
+        expect(stateNode.dataset.drivers).toBe('0');
+
+        act(() => {
+            client.emit(
+                'devices/AA11/status',
+                encode({
+                    node_state: 'ready',
+                    motors: {
+                        '0': {
+                            id: 0,
+                            position: 10,
+                            moving: true,
+                            awake: true,
+                            homed: true,
+                            steps_since_home: 0,
+                            budget_s: 90,
+                            ttfc_s: 0,
+                            speed: 4000,
+                            accel: 12000,
+                            est_ms: 0,
+                            started_ms: 0,
+                            actual_ms: 0,
+                        },
+                    },
+                }),
+            );
+        });
+
+        expect(stateNode.dataset.drivers).toBe('1');
 
         destroyContainer({ container, root });
     });

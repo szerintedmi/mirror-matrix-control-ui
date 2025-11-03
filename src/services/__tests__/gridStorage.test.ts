@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { loadGridState, persistGridState } from '../gridStorage';
 
@@ -93,6 +93,14 @@ describe('gridStorage', () => {
         const storage = new MemoryStorage();
         storage.setItem(STORAGE_KEY, '{ invalid json');
 
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
         expect(loadGridState(storage)).toBeNull();
+        expect(warnSpy).toHaveBeenCalledWith(
+            'Failed to load grid state from storage',
+            expect.any(SyntaxError),
+        );
+
+        warnSpy.mockRestore();
     });
 });
