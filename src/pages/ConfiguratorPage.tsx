@@ -23,7 +23,7 @@ import type {
     DriverStatusSnapshot,
 } from '../types';
 
-type DiscoveryFilter = 'all' | 'new' | 'offline' | 'unassigned';
+type DiscoveryFilter = 'online' | 'all' | 'new' | 'offline' | 'unassigned';
 
 interface ModalState {
     isOpen: boolean;
@@ -64,9 +64,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         staleThresholdMs,
     } = useStatusStore();
 
-    const [isTestMode, setIsTestMode] = useState(false);
     const [selectedNodeMac, setSelectedNodeMac] = useState<string | null>(null);
-    const [activeFilter, setActiveFilter] = useState<DiscoveryFilter>('all');
+    const [activeFilter, setActiveFilter] = useState<DiscoveryFilter>('online');
     const [modalState, setModalState] = useState<ModalState>({
         isOpen: false,
         title: '',
@@ -239,7 +238,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
 
     const handleMotorDrop = useCallback(
         (pos: GridPosition, axis: Axis, dragDataString: string) => {
-            if (isTestMode) return;
             const dragData: DraggedMotorInfo = JSON.parse(dragDataString);
             const motorToMove = dragData.motor;
 
@@ -290,7 +288,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 return newConfig;
             });
         },
-        [isTestMode, setMirrorConfig],
+        [setMirrorConfig],
     );
 
     const handleUnassignByDrop = useCallback(
@@ -302,21 +300,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         },
         [unassignMotor],
     );
-
-    const handleMoveCommand = (pos: GridPosition, axis: 'x' | 'y', direction: number) => {
-        const key = `${pos.row}-${pos.col}`;
-        const motor = mirrorConfig.get(key)?.[axis];
-        if (motor) {
-            console.log(`MQTT OUT:
-  Topic: nodes/${motor.nodeMac}/motors/${motor.motorIndex}/move
-  Payload: { "direction": ${direction > 0 ? '"+"' : '"-"'}, "speed": 100 }
-  (Simulating move command for mirror at [${pos.row}, ${pos.col}] on axis ${axis.toUpperCase()})`);
-        } else {
-            console.warn(
-                `No motor assigned to axis ${axis.toUpperCase()} for mirror at [${pos.row}, ${pos.col}]`,
-            );
-        }
-    };
 
     const handleNodeSelect = useCallback(
         (mac: string | null) => {
@@ -464,6 +447,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
 
     const filteredNodes = useMemo<DiscoveredNode[]>(() => {
         switch (activeFilter) {
+            case 'online':
+                return discoveredNodes.filter((node) => node.presence !== 'offline');
             case 'new':
                 return discoveredNodes.filter((node) => node.isNew);
             case 'offline':
@@ -476,15 +461,26 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         }
     }, [activeFilter, discoveredNodes]);
 
-    const filterOptions = useMemo(
-        () => [
+    const filterOptions = useMemo(() => {
+        const onlineCount = discoveredNodes.filter((node) => node.presence !== 'offline').length;
+        const offlineCount = discoveredNodes.filter((node) => node.presence === 'offline').length;
+        const unassignedCount = discoveredNodes.filter((node) => node.hasUnassigned).length;
+
+        return [
+            { id: 'online' as const, label: onlineCount > 0 ? `Online (${onlineCount})` : 'Online' },
             { id: 'all' as const, label: 'All' },
             { id: 'new' as const, label: discoveryCount > 0 ? `New (${discoveryCount})` : 'New' },
-            { id: 'offline' as const, label: 'Offline' },
-            { id: 'unassigned' as const, label: 'Unassigned' },
-        ],
-        [discoveryCount],
-    );
+            {
+                id: 'offline' as const,
+                label: offlineCount > 0 ? `Offline (${offlineCount})` : 'Offline',
+            },
+            {
+                id: 'unassigned' as const,
+                label:
+                    unassignedCount > 0 ? `Unassigned (${unassignedCount})` : 'Unassigned',
+            },
+        ];
+    }, [discoveredNodes, discoveryCount]);
 
     const unassignedGroups = useMemo(
         () =>
@@ -749,8 +745,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             rows={gridSize.rows}
                             cols={gridSize.cols}
                             onSizeChange={handleGridSizeChange}
-                            isTestMode={isTestMode}
-                            onTestModeChange={setIsTestMode}
                             assignedAxes={assignmentMetrics.assignedAxes}
                             assignedTiles={assignmentMetrics.assignedTiles}
                             totalMotors={totalMotors}
@@ -770,8 +764,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 cols={gridSize.cols}
                                 mirrorConfig={mirrorConfig}
                                 onMotorDrop={handleMotorDrop}
-                                onMoveCommand={handleMoveCommand}
-                                isTestMode={isTestMode}
                                 selectedNodeMac={selectedNodeMacEffective}
                                 driverStatuses={driverStatusByMac}
                             />
@@ -792,6 +784,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                         key={option.id}
                                         type="button"
                                         onClick={() => setActiveFilter(option.id)}
+                                        data-testid={`node-filter-${option.id}`}
                                         className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                                             activeFilter === option.id
                                                 ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'

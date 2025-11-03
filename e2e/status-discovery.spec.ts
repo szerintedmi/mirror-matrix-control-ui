@@ -22,13 +22,15 @@ test.describe('Status discovery', () => {
         await expect(firstNodeButton).toBeVisible({ timeout: 2_000 });
         await expect(firstNodeButton.locator('text=New')).toBeVisible();
 
+        await page.getByTestId('node-filter-all').click();
+
         for (const mac of MAC_ADDRESSES) {
             await page.getByRole('button', { name: new RegExp(mac) }).click();
         }
 
         await expect(page.getByText(/Session discoveries:/)).toBeVisible();
 
-        await page.getByRole('button', { name: 'Offline', exact: true }).click();
+        await page.getByTestId('node-filter-offline').click();
         await expect(
             page.getByRole('button', { name: new RegExp(MAC_ADDRESSES[2]) }),
         ).toBeVisible();
