@@ -3,6 +3,15 @@ export interface Motor {
     motorIndex: number;
 }
 
+export interface MotorTelemetry {
+    id: number;
+    position: number;
+    moving: boolean;
+    awake: boolean;
+    homed: boolean;
+    stepsSinceHome: number;
+}
+
 export interface Node {
     macAddress: string;
     status: 'ready' | 'offline';
@@ -47,4 +56,5 @@ export interface DriverStatusSnapshot {
     presence: DriverPresenceSummary;
     staleForMs: number;
     brokerDisconnected: boolean;
+    motors: Record<number, MotorTelemetry>;
 }

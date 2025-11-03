@@ -1,10 +1,15 @@
+import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '../constants/control';
+
 import type { Node } from '../types';
 
 export interface MockMotorState {
     id: number;
-    basePosition: number;
+    position: number;
+    moving: boolean;
     awake: boolean;
     homed: boolean;
+    stepsSinceHome: number;
+    motionTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export interface MockTileDriver {
@@ -21,9 +26,12 @@ const DEFAULT_TILE_DRIVERS: MockTileDriver[] = [
         status: 'ready',
         motors: Array.from({ length: 6 }, (_, index) => ({
             id: index,
-            basePosition: index * 75,
+            position: index * 75,
+            moving: false,
             awake: true,
             homed: true,
+            stepsSinceHome: Math.abs(index * 75),
+            motionTimer: null,
         })),
     },
     {
@@ -32,9 +40,12 @@ const DEFAULT_TILE_DRIVERS: MockTileDriver[] = [
         status: 'ready',
         motors: Array.from({ length: 6 }, (_, index) => ({
             id: index,
-            basePosition: index * -60,
+            position: index * -60,
+            moving: false,
             awake: true,
             homed: index % 2 === 0,
+            stepsSinceHome: index % 2 === 0 ? Math.abs(index * -60) : 6_500 + index * 120,
+            motionTimer: null,
         })),
     },
     {
@@ -43,9 +54,12 @@ const DEFAULT_TILE_DRIVERS: MockTileDriver[] = [
         status: 'offline',
         motors: Array.from({ length: 4 }, (_, index) => ({
             id: index,
-            basePosition: 0,
+            position: 0,
+            moving: false,
             awake: false,
             homed: false,
+            stepsSinceHome: 0,
+            motionTimer: null,
         })),
     },
 ];
@@ -53,7 +67,7 @@ const DEFAULT_TILE_DRIVERS: MockTileDriver[] = [
 export const getMockTileDrivers = (): MockTileDriver[] =>
     DEFAULT_TILE_DRIVERS.map((driver) => ({
         ...driver,
-        motors: driver.motors.map((motor) => ({ ...motor })),
+        motors: driver.motors.map((motor) => ({ ...motor, motionTimer: null })),
     }));
 
 export const getMockNodes = (): Node[] =>
@@ -85,8 +99,6 @@ export class MockMqttTransport {
 
     private interval: ReturnType<typeof setInterval> | null = null;
 
-    private tick = 0;
-
     constructor(drivers: MockTileDriver[] = getMockTileDrivers()) {
         this.tileDrivers = drivers;
     }
@@ -103,6 +115,15 @@ export class MockMqttTransport {
             clearInterval(this.interval);
             this.interval = null;
         }
+        for (const driver of this.tileDrivers) {
+            for (const motor of driver.motors) {
+                if (motor.motionTimer) {
+                    clearTimeout(motor.motionTimer);
+                    motor.motionTimer = null;
+                }
+                motor.moving = false;
+            }
+        }
         this.handler = null;
     }
 
@@ -111,33 +132,47 @@ export class MockMqttTransport {
             return Promise.resolve();
         }
 
+        const macMatch = /devices\/([^/]+)\/cmd/.exec(topic);
+        const mac = macMatch?.[1];
+        if (!mac) {
+            return Promise.resolve();
+        }
+
+        const driver = this.tileDrivers.find((entry) => entry.mac === mac);
+        if (!driver) {
+            return Promise.resolve();
+        }
+
+        interface CommandEnvelope {
+            cmd_id?: string;
+            action?: string;
+            params?: Record<string, unknown>;
+        }
+
+        let envelope: CommandEnvelope;
         try {
-            const parsed = JSON.parse(payload) as { cmd_id?: string; action?: string };
-            const cmdId =
-                parsed.cmd_id ??
-                (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                    ? crypto.randomUUID()
-                    : `cmd-${Math.random().toString(16).slice(2)}`);
-            const ack = {
-                cmd_id: cmdId,
-                action: parsed.action ?? 'UNKNOWN',
-                status: 'ack',
-                result: { est_ms: 250 },
-            };
-            const done = {
-                cmd_id: cmdId,
-                action: parsed.action ?? 'UNKNOWN',
-                status: 'done',
-                result: { actual_ms: 275 },
-            };
-            const macMatch = /devices\/([^/]+)\/cmd/.exec(topic);
-            const mac = macMatch?.[1];
-            if (mac) {
-                this.emit(`devices/${mac}/cmd/resp`, ack);
-                this.emit(`devices/${mac}/cmd/resp`, done);
-            }
+            envelope = JSON.parse(payload) as CommandEnvelope;
         } catch (error) {
             console.warn('Mock transport failed to parse publish payload', error);
+            return Promise.resolve();
+        }
+
+        const action =
+            typeof envelope.action === 'string' ? envelope.action.toUpperCase() : 'UNKNOWN';
+        const cmdId = envelope.cmd_id ?? this.generateCommandId();
+        const params = envelope.params ?? {};
+
+        switch (action) {
+            case 'MOVE':
+                this.handleMove(driver, mac, cmdId, params);
+                break;
+            case 'HOME':
+                this.handleHome(driver, mac, cmdId, params);
+                break;
+            default:
+                this.emitAck(mac, cmdId, action, { est_ms: 100 });
+                this.emitDone(mac, cmdId, action, { actual_ms: 110 });
+                break;
         }
 
         return Promise.resolve();
@@ -160,21 +195,23 @@ export class MockMqttTransport {
         if (!this.handler) {
             return;
         }
-        this.tick += 1;
         for (const driver of this.tileDrivers) {
             const motorsPayload: Record<string, unknown> = {};
             for (const motor of driver.motors) {
-                const oscillationPhase = this.tick % 4;
-                const offset = oscillationPhase < 2 ? motor.basePosition : -motor.basePosition;
                 motorsPayload[motor.id.toString()] = {
                     id: motor.id,
-                    position: offset,
-                    moving: oscillationPhase % 2 === 0,
+                    position: motor.position,
+                    moving: motor.moving,
                     awake: motor.awake,
                     homed: motor.homed,
-                    steps_since_home: motor.homed ? 0 : Math.abs(offset) + 500,
+                    steps_since_home: motor.stepsSinceHome,
                     budget_s: 120,
                     ttfc_s: 0,
+                    speed: 4_000,
+                    accel: 16_000,
+                    est_ms: motor.moving ? 200 : 0,
+                    started_ms: 0,
+                    actual_ms: 0,
                 };
             }
             const payload = {
@@ -192,5 +229,190 @@ export class MockMqttTransport {
             return;
         }
         this.handler({ topic, payload: encodeJson(payload) });
+    }
+
+    private generateCommandId(): string {
+        if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+            return crypto.randomUUID();
+        }
+        return `cmd-${Math.random().toString(16).slice(2)}`;
+    }
+
+    private resolveTargets(driver: MockTileDriver, targetIds: unknown): MockMotorState[] {
+        if (targetIds === 'ALL' || targetIds === 'all') {
+            return driver.motors.slice();
+        }
+        if (Array.isArray(targetIds)) {
+            const ids = targetIds
+                .map((value) =>
+                    typeof value === 'number'
+                        ? value
+                        : typeof value === 'string'
+                          ? Number.parseInt(value, 10)
+                          : NaN,
+                )
+                .filter((value) => Number.isFinite(value));
+            return driver.motors.filter((motor) => ids.includes(motor.id));
+        }
+        if (typeof targetIds === 'number') {
+            return driver.motors.filter((motor) => motor.id === targetIds);
+        }
+        if (typeof targetIds === 'string') {
+            const parsed = Number.parseInt(targetIds, 10);
+            if (Number.isFinite(parsed)) {
+                return driver.motors.filter((motor) => motor.id === parsed);
+            }
+        }
+        return [];
+    }
+
+    private handleMove(
+        driver: MockTileDriver,
+        mac: string,
+        cmdId: string,
+        params: Record<string, unknown>,
+    ): void {
+        const targetIds = params['target_ids'];
+        const position = params['position_steps'];
+        if (typeof position !== 'number' || Number.isNaN(position)) {
+            this.emitError(mac, cmdId, 'MOVE', 'E03', 'BAD_PARAM');
+            return;
+        }
+
+        const targets = this.resolveTargets(driver, targetIds);
+        if (targets.length === 0) {
+            this.emitError(mac, cmdId, 'MOVE', 'E02', 'BAD_ID');
+            return;
+        }
+
+        if (targets.some((motor) => motor.moving)) {
+            this.emitError(mac, cmdId, 'MOVE', 'E04', 'BUSY');
+            return;
+        }
+
+        const clampedPosition = Math.max(
+            MOTOR_MIN_POSITION_STEPS,
+            Math.min(MOTOR_MAX_POSITION_STEPS, position),
+        );
+
+        targets.forEach((motor) => {
+            if (motor.motionTimer) {
+                clearTimeout(motor.motionTimer);
+                motor.motionTimer = null;
+            }
+            motor.moving = true;
+            motor.awake = true;
+        });
+
+        this.emitAck(mac, cmdId, 'MOVE', { est_ms: 220 });
+
+        const duration = 220 + Math.floor(Math.random() * 120);
+        const timer = setTimeout(() => {
+            targets.forEach((motor) => {
+                motor.position = clampedPosition;
+                motor.stepsSinceHome = Math.abs(clampedPosition);
+                motor.moving = false;
+                motor.motionTimer = null;
+            });
+            this.emitDone(mac, cmdId, 'MOVE', { actual_ms: duration });
+        }, duration);
+
+        targets.forEach((motor) => {
+            motor.motionTimer = timer;
+        });
+    }
+
+    private handleHome(
+        driver: MockTileDriver,
+        mac: string,
+        cmdId: string,
+        params: Record<string, unknown>,
+    ): void {
+        const targetIds = params['target_ids'];
+        const targets = this.resolveTargets(driver, targetIds);
+        if (targets.length === 0) {
+            this.emitError(mac, cmdId, 'HOME', 'E02', 'BAD_ID');
+            return;
+        }
+
+        if (targets.some((motor) => motor.moving)) {
+            this.emitError(mac, cmdId, 'HOME', 'E04', 'BUSY');
+            return;
+        }
+
+        targets.forEach((motor) => {
+            if (motor.motionTimer) {
+                clearTimeout(motor.motionTimer);
+                motor.motionTimer = null;
+            }
+            motor.moving = true;
+            motor.awake = true;
+        });
+
+        this.emitAck(mac, cmdId, 'HOME', { est_ms: 360 });
+
+        const duration = 360 + Math.floor(Math.random() * 160);
+        const timer = setTimeout(() => {
+            targets.forEach((motor) => {
+                motor.position = 0;
+                motor.stepsSinceHome = 0;
+                motor.homed = true;
+                motor.moving = false;
+                motor.motionTimer = null;
+            });
+            this.emitDone(mac, cmdId, 'HOME', { actual_ms: duration });
+        }, duration);
+
+        targets.forEach((motor) => {
+            motor.motionTimer = timer;
+        });
+    }
+
+    private emitAck(
+        mac: string,
+        cmdId: string,
+        action: string,
+        result: Record<string, unknown>,
+    ): void {
+        this.emit(`devices/${mac}/cmd/resp`, {
+            cmd_id: cmdId,
+            action,
+            status: 'ack',
+            result,
+        });
+    }
+
+    private emitDone(
+        mac: string,
+        cmdId: string,
+        action: string,
+        result: Record<string, unknown>,
+    ): void {
+        this.emit(`devices/${mac}/cmd/resp`, {
+            cmd_id: cmdId,
+            action,
+            status: 'done',
+            result,
+        });
+    }
+
+    private emitError(
+        mac: string,
+        cmdId: string,
+        action: string,
+        code: string,
+        message: string,
+    ): void {
+        this.emit(`devices/${mac}/cmd/resp`, {
+            cmd_id: cmdId,
+            action,
+            status: 'error',
+            errors: [
+                {
+                    code,
+                    message,
+                },
+            ],
+        });
     }
 }

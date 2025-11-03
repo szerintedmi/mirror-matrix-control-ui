@@ -89,7 +89,10 @@ const UnassignedMotorTray: React.FC<UnassignedMotorTrayProps> = ({
                 <h3 className="text-sm font-semibold text-gray-100 uppercase tracking-wide">
                     Unassigned Motors
                 </h3>
-                <span className="text-xs text-gray-300">
+                <span
+                    className="text-xs text-gray-300"
+                    data-testid="unassigned-axes-summary"
+                >
                     {totalUnassigned} {totalUnassigned === 1 ? 'axis' : 'axes'} available
                 </span>
             </div>
@@ -100,6 +103,7 @@ const UnassignedMotorTray: React.FC<UnassignedMotorTrayProps> = ({
             )}
             <div className="mt-3 space-y-3">
                 {groups.map((group) => {
+                    const macLabel = group.macAddress.toUpperCase();
                     const staleSeconds = group.staleForMs / 1_000;
                     const presenceDescription =
                         group.brokerDisconnected && group.presence === 'offline'
@@ -121,7 +125,7 @@ const UnassignedMotorTray: React.FC<UnassignedMotorTrayProps> = ({
                                     className={`h-2.5 w-2.5 rounded-full ${presenceDotClass(group.presence)}`}
                                 />
                                 <span className="font-mono text-sm text-emerald-300">
-                                    {group.macAddress}
+                                    {macLabel}
                                 </span>
                                 <span>{presenceDescription}</span>
                             </div>

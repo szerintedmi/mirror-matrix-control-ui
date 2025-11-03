@@ -6,9 +6,19 @@ import type { DriverStatusSnapshot, MirrorAssignment, Motor } from '../../types'
 
 const createMotor = (nodeMac: string, motorIndex: number): Motor => ({ nodeMac, motorIndex });
 
-const asMap = (
-    entries: Array<[string, DriverStatusSnapshot]>,
-): Map<string, DriverStatusSnapshot> => new Map(entries);
+const asMap = (entries: Array<[string, DriverStatusSnapshot]>): Map<string, DriverStatusSnapshot> =>
+    new Map(entries);
+
+const createStatus = (
+    presence: DriverStatusSnapshot['presence'],
+    overrides: Partial<DriverStatusSnapshot> = {},
+): DriverStatusSnapshot => ({
+    presence,
+    staleForMs: 0,
+    brokerDisconnected: false,
+    motors: {},
+    ...overrides,
+});
 
 describe('analyzeMirrorCell', () => {
     it('returns defaults when no motors are assigned', () => {
@@ -28,8 +38,8 @@ describe('analyzeMirrorCell', () => {
             y: createMotor('mac-2', 1),
         };
         const statuses = asMap([
-            ['mac-1', { presence: 'ready', staleForMs: 0, brokerDisconnected: false }],
-            ['mac-2', { presence: 'ready', staleForMs: 0, brokerDisconnected: false }],
+            ['mac-1', createStatus('ready')],
+            ['mac-2', createStatus('ready')],
         ]);
 
         const analysis = analyzeMirrorCell(assignment, statuses);
@@ -45,9 +55,7 @@ describe('analyzeMirrorCell', () => {
             x: createMotor('mac-1', 0),
             y: null,
         };
-        const statuses = asMap([
-            ['mac-1', { presence: 'ready', staleForMs: 0, brokerDisconnected: false }],
-        ]);
+        const statuses = asMap([['mac-1', createStatus('ready')]]);
 
         const analysis = analyzeMirrorCell(assignment, statuses);
         const labels = analysis.warningBadges.map((badge) => badge.label);
@@ -62,9 +70,7 @@ describe('analyzeMirrorCell', () => {
             x: createMotor('mac-1', 0),
             y: null,
         };
-        const statuses = asMap([
-            ['mac-1', { presence: 'offline', staleForMs: 5_000, brokerDisconnected: false }],
-        ]);
+        const statuses = asMap([['mac-1', createStatus('offline', { staleForMs: 5_000 })]]);
 
         const analysis = analyzeMirrorCell(assignment, statuses);
         const labels = analysis.warningBadges.map((badge) => badge.label);

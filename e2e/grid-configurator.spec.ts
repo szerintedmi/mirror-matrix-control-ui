@@ -31,7 +31,7 @@ test.describe('Grid configurator interactions', () => {
             throw new Error('Could not determine test id for first motor chip');
         }
 
-        const axisSummaryLocator = unassignedTray.locator('text=/axes? available/i').first();
+        const axisSummaryLocator = unassignedTray.getByTestId('unassigned-axes-summary');
         await expect(axisSummaryLocator).toBeVisible({ timeout: 30_000 });
         const initialAxes = await getAxisCount(axisSummaryLocator);
 
@@ -40,18 +40,30 @@ test.describe('Grid configurator interactions', () => {
         const performDrag = async (sourceId: string, targetId: string) => {
             await page.evaluate(
                 ({ sourceId: s, targetId: t }) => {
-                    const source = document.querySelector(`[data-testid="${s}"]`) as HTMLElement | null;
-                    const target = document.querySelector(`[data-testid="${t}"]`) as HTMLElement | null;
+                    const source = document.querySelector(
+                        `[data-testid="${s}"]`,
+                    ) as HTMLElement | null;
+                    const target = document.querySelector(
+                        `[data-testid="${t}"]`,
+                    ) as HTMLElement | null;
                     if (!source || !target) {
                         throw new Error(`Missing drag handles for ${s} -> ${t}`);
                     }
                     const dataTransfer = new DataTransfer();
                     dataTransfer.effectAllowed = 'move';
                     source.dispatchEvent(
-                        new DragEvent('dragstart', { dataTransfer, bubbles: true, cancelable: true }),
+                        new DragEvent('dragstart', {
+                            dataTransfer,
+                            bubbles: true,
+                            cancelable: true,
+                        }),
                     );
                     target.dispatchEvent(
-                        new DragEvent('dragover', { dataTransfer, bubbles: true, cancelable: true }),
+                        new DragEvent('dragover', {
+                            dataTransfer,
+                            bubbles: true,
+                            cancelable: true,
+                        }),
                     );
                     target.dispatchEvent(
                         new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }),

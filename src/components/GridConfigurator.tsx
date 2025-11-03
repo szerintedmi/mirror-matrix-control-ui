@@ -36,8 +36,7 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
     };
 
     const tileCount = rows * cols;
-    const overRecommended =
-        recommendedTileCapacity > 0 && tileCount > recommendedTileCapacity;
+    const overRecommended = recommendedTileCapacity > 0 && tileCount > recommendedTileCapacity;
 
     return (
         <div className="flex flex-col gap-3 p-3 rounded-md bg-black/20 mb-4">

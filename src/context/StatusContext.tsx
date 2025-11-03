@@ -8,6 +8,7 @@ import React, {
     type PropsWithChildren,
 } from 'react';
 
+import { STEPS_SINCE_HOME_CRITICAL, STEPS_SINCE_HOME_WARNING } from '../constants/control';
 import {
     parseStatusMessage,
     type NormalizedStatusMessage,
@@ -23,6 +24,7 @@ const HEARTBEAT_TICK_MS = 500;
 
 interface TileDriverRecord {
     mac: string;
+    topicMac: string;
     snapshot: NormalizedStatusMessage;
     firstSeenAt: number;
     lastSeenAt: number;
@@ -46,6 +48,8 @@ export interface StatusCounts {
     movingMotors: number;
     homedMotors: number;
     unhomedMotors: number;
+    needsHomeWarningMotors: number;
+    needsHomeCriticalMotors: number;
 }
 
 export interface StatusContextValue {
@@ -69,6 +73,8 @@ const defaultCounts: StatusCounts = {
     movingMotors: 0,
     homedMotors: 0,
     unhomedMotors: 0,
+    needsHomeWarningMotors: 0,
+    needsHomeCriticalMotors: 0,
 };
 
 const StatusContext = createContext<StatusContextValue | undefined>(undefined);
@@ -109,18 +115,21 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
             setRecords((prev) => {
                 const next = new Map(prev);
-                const existing = next.get(value.mac);
+                const key = value.topicMac;
+                const existing = next.get(key);
                 if (existing) {
-                    next.set(value.mac, {
+                    next.set(key, {
                         ...existing,
+                        mac: value.mac,
                         snapshot: value,
                         lastSeenAt: now,
                     });
                     return next;
                 }
 
-                next.set(value.mac, {
+                next.set(key, {
                     mac: value.mac,
+                    topicMac: value.topicMac,
                     snapshot: value,
                     firstSeenAt: now,
                     lastSeenAt: now,
@@ -220,6 +229,8 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
         let movingMotors = 0;
         let homedMotors = 0;
         let unhomedMotors = 0;
+        let needsHomeWarningMotors = 0;
+        let needsHomeCriticalMotors = 0;
 
         for (const record of drivers) {
             const isOnline = record.presence !== 'offline';
@@ -238,6 +249,12 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
                 } else {
                     unhomedMotors += 1;
                 }
+
+                if (motor.stepsSinceHome >= STEPS_SINCE_HOME_CRITICAL) {
+                    needsHomeCriticalMotors += 1;
+                } else if (motor.stepsSinceHome >= STEPS_SINCE_HOME_WARNING) {
+                    needsHomeWarningMotors += 1;
+                }
             }
         }
 
@@ -249,6 +266,8 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
             movingMotors,
             homedMotors,
             unhomedMotors,
+            needsHomeWarningMotors,
+            needsHomeCriticalMotors,
         };
     }, [drivers]);
 
