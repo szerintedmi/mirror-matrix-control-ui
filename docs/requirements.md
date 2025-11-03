@@ -120,6 +120,8 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
   - Tile-driver info: IP, MAC, status URL, etc.
   - Per-motor info: id (0–7), `position`, `moving`, `awake`, `homed`, `steps_since_home`, thermal metrics (`budget_s`, `ttfc_s`), motion settings (`speed`, `accel`), and timing values (`est_ms`, `started_ms`, `actual_ms`).
 - Store per-tile-driver first-seen and last-seen timestamps (derived from message arrival times) to power "New" indicators and session discovery counters.
+- Treat stale telemetry as a warning: if no status update arrives for a tile driver after 2 seconds, flag the driver as "potentially offline" (yellow) while still awaiting the broker LWT. Upon receipt of the explicit offline payload, transition the marker to red.
+- When the MQTT client disconnects from the broker, immediately mark all known tile drivers as offline (red) until the connection is re-established and fresh telemetry is received.
 - Homing indicators:
   - Yellow when `steps_since_home` > 5,000.
   - Red when `steps_since_home` > 10,000.
@@ -210,9 +212,10 @@ Storage: `localStorage` (single active grid configuration in MVP).
 
 Target users are technical; keep the interface clean and efficient.
 
-### 8.1 Header Summary
+### 8.1 Header Summary / Overview
 
 - Tile-driver and motor counters (online, offline, moving, homed/not homed) with color coding.
+- Pattern Library (landing dashboard) includes a compact array overview that renders the entire configured grid. Each tile shows two minimal status dots (X/Y axes) with color coding for assigned, moving, stale, offline, and placeholder states so unassigned slots remain visible.
 - Global Stop button (convenience; low-risk small steppers).
 - Quick indicators for warnings/errors (badge linking to log panel).
 - Dedicated badge showing count of tile drivers discovered during the current session and a quick link to focus the list on them.
@@ -221,6 +224,7 @@ Target users are technical; keep the interface clean and efficient.
 
 - MQTT settings (host, port, path, username, password) with defaults and `localStorage` persistence.
 - Connection status indicators (connected to broker and subscribed topics).
+- On application launch attempt an immediate connection to the configured broker (auto-connect) so discovery begins without manual input; surface failures inline.
 
 ### 8.3 Tile-Driver List & Discovery
 

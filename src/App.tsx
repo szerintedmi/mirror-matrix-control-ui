@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 
 import ConnectionSettingsPanel from './components/ConnectionSettingsPanel';
 import { MqttProvider } from './context/MqttContext';
+import { StatusProvider } from './context/StatusContext';
 import ConfiguratorPage from './pages/ConfiguratorPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
 import SimulationPage from './pages/SimulationPage';
 
-import type { Pattern } from './types';
+import type { MirrorConfig, Pattern } from './types';
 
 // Simple router state
 export type Page = 'library' | 'editor' | 'configurator' | 'simulation';
@@ -24,6 +25,7 @@ const App: React.FC = () => {
     // Global state
     const [gridSize, setGridSize] = useState({ rows: 8, cols: 8 });
     const [patterns, setPatterns] = useState<Pattern[]>([]);
+    const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(new Map());
     const [wallDistance, setWallDistance] = useState(5);
     const [horizontalAngle, setHorizontalAngle] = useState(0); // Wall angle
     const [verticalAngle, setVerticalAngle] = useState(0); // Wall angle
@@ -76,6 +78,8 @@ const App: React.FC = () => {
                         navigation={navigationControls}
                         gridSize={gridSize}
                         onGridSizeChange={(rows, cols) => setGridSize({ rows, cols })}
+                        mirrorConfig={mirrorConfig}
+                        setMirrorConfig={setMirrorConfig}
                     />
                 );
             case 'simulation':
@@ -100,6 +104,8 @@ const App: React.FC = () => {
                 return (
                     <PatternLibraryPage
                         navigation={navigationControls}
+                        gridSize={gridSize}
+                        mirrorConfig={mirrorConfig}
                         patterns={patterns}
                         onDeletePattern={handleDeletePattern}
                         wallDistance={wallDistance}
@@ -114,12 +120,14 @@ const App: React.FC = () => {
 
     return (
         <MqttProvider>
-            <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
-                <ConnectionSettingsPanel />
-                <main data-testid="app-root" className="mx-auto max-w-5xl px-4 py-8">
-                    {renderPage()}
-                </main>
-            </div>
+            <StatusProvider>
+                <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
+                    <ConnectionSettingsPanel />
+                    <main data-testid="app-root" className="mx-auto max-w-5xl px-4 py-8">
+                        {renderPage()}
+                    </main>
+                </div>
+            </StatusProvider>
         </MqttProvider>
     );
 };

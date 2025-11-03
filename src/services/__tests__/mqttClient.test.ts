@@ -21,7 +21,12 @@ class FakeMqttClient extends EventEmitter {
         /* noop */
     }
 
-    public publish(_topic: string, _payload: string, _options: unknown, cb: (error?: Error | null) => void): void {
+    public publish(
+        _topic: string,
+        _payload: string,
+        _options: unknown,
+        cb: (error?: Error | null) => void,
+    ): void {
         cb(null);
     }
 

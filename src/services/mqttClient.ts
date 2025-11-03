@@ -169,7 +169,11 @@ export class MirrorMqttClient {
         this.updateState({ status: 'disconnected', attempt: 0 });
     }
 
-    public subscribe(topic: string, handler: MessageHandler, options: SubscriptionOptions = {}): () => void {
+    public subscribe(
+        topic: string,
+        handler: MessageHandler,
+        options: SubscriptionOptions = {},
+    ): () => void {
         const entry = this.upsertSubscription(topic, options);
         entry.handlers.add(handler);
 
@@ -202,7 +206,12 @@ export class MirrorMqttClient {
 
     public publish(topic: string, payload: string, options: PublishOptions = {}): Promise<void> {
         if (this.mockMode) {
-            return this.mockTransport?.publish(topic, typeof payload === 'string' ? payload : String(payload)) ?? Promise.resolve();
+            return (
+                this.mockTransport?.publish(
+                    topic,
+                    typeof payload === 'string' ? payload : String(payload),
+                ) ?? Promise.resolve()
+            );
         }
 
         if (!this.client || this.currentState.status !== 'connected') {
@@ -240,7 +249,10 @@ export class MirrorMqttClient {
             this.client = this.createClient(url, options);
         } catch (error) {
             console.error('Failed to create MQTT client', error);
-            this.scheduleReconnect('disconnected', error instanceof Error ? error.message : 'Failed to create client');
+            this.scheduleReconnect(
+                'disconnected',
+                error instanceof Error ? error.message : 'Failed to create client',
+            );
             return;
         }
 
@@ -346,7 +358,11 @@ export class MirrorMqttClient {
             if (!this.lastConnectRequest) {
                 return;
             }
-            this.updateState({ status: 'connecting', attempt: this.reconnectAttempts, lastError: undefined });
+            this.updateState({
+                status: 'connecting',
+                attempt: this.reconnectAttempts,
+                lastError: undefined,
+            });
             this.createAndAttachClient(this.lastConnectRequest);
         }, delay);
     }

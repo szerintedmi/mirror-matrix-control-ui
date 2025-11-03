@@ -25,7 +25,8 @@ const schemeOptions: ConnectionSettings['scheme'][] = import.meta.env.PROD
     : ['ws', 'wss', 'mock'];
 
 const ConnectionSettingsPanel: React.FC = () => {
-    const { settings, updateSettings, state, connect, disconnect, manualReconnect, connectionUrl } = useMqtt();
+    const { settings, updateSettings, state, connect, disconnect, manualReconnect, connectionUrl } =
+        useMqtt();
     const [heartbeat, setHeartbeat] = useState(() => Date.now());
     const [showDetails, setShowDetails] = useState(false);
 
@@ -42,14 +43,16 @@ const ConnectionSettingsPanel: React.FC = () => {
     }, [state.status]);
 
     const statusText = statusLabel[state.status] ?? state.status;
-    const countdownMs = state.status === 'reconnecting' && state.nextRetryTimestamp
-        ? Math.max(0, state.nextRetryTimestamp - heartbeat)
-        : null;
+    const countdownMs =
+        state.status === 'reconnecting' && state.nextRetryTimestamp
+            ? Math.max(0, state.nextRetryTimestamp - heartbeat)
+            : null;
     const countdownLabel = useMemo(() => formatCountdown(countdownMs), [countdownMs]);
     const isConnecting = state.status === 'connecting';
     const isConnected = state.status === 'connected';
 
-    const handleChange = <Key extends keyof ConnectionSettings>(field: Key) =>
+    const handleChange =
+        <Key extends keyof ConnectionSettings>(field: Key) =>
         (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             const value = event.target.value;
             if (field === 'port') {
@@ -84,8 +87,8 @@ const ConnectionSettingsPanel: React.FC = () => {
                                     isConnected
                                         ? 'text-emerald-400'
                                         : state.status === 'reconnecting'
-                                        ? 'text-amber-400'
-                                        : 'text-gray-300'
+                                          ? 'text-amber-400'
+                                          : 'text-gray-300'
                                 }
                             >
                                 {statusText}
@@ -137,7 +140,11 @@ const ConnectionSettingsPanel: React.FC = () => {
                             <span className="text-gray-300">Scheme</span>
                             <select
                                 value={settings.scheme}
-                                onChange={(event) => handleChange('scheme')(event as React.ChangeEvent<HTMLSelectElement>)}
+                                onChange={(event) =>
+                                    handleChange('scheme')(
+                                        event as React.ChangeEvent<HTMLSelectElement>,
+                                    )
+                                }
                                 className="rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                             >
                                 {schemeOptions.map((option) => (

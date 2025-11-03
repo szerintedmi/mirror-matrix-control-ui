@@ -1,10 +1,15 @@
 import React from 'react';
 
+import MotorStatusOverview from '../components/MotorStatusOverview';
+import { useStatusStore } from '../context/StatusContext';
+
 import type { NavigationControls } from '../App';
-import type { Pattern } from '../types';
+import type { MirrorConfig, Pattern } from '../types';
 
 interface PatternLibraryPageProps {
     navigation: NavigationControls;
+    gridSize: { rows: number; cols: number };
+    mirrorConfig: MirrorConfig;
     patterns: Pattern[];
     onDeletePattern: (patternId: string) => void;
     wallDistance: number;
@@ -50,6 +55,8 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
 const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
     const {
         navigation,
+        gridSize,
+        mirrorConfig,
         patterns,
         onDeletePattern,
         wallDistance,
@@ -58,6 +65,8 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
         lightAngleHorizontal,
         lightAngleVertical,
     } = props;
+
+    const { drivers } = useStatusStore();
 
     const calculateProjectedSize = (canvasSize: { rows: number; cols: number }) => {
         const MIRROR_DIMENSION_M = 0.05; // 50mm
@@ -130,6 +139,15 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                     </button>
                 </div>
             </header>
+
+            <section className="mb-6">
+                <MotorStatusOverview
+                    rows={gridSize.rows}
+                    cols={gridSize.cols}
+                    mirrorConfig={mirrorConfig}
+                    drivers={drivers}
+                />
+            </section>
 
             <main className="flex-grow bg-gray-800/50 rounded-lg p-4 shadow-lg ring-1 ring-white/10 flex flex-col min-h-0">
                 <h2 className="text-2xl font-semibold text-gray-100 mb-4 flex-shrink-0">

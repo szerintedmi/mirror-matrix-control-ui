@@ -1,0 +1,305 @@
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+    type PropsWithChildren,
+} from 'react';
+
+import {
+    parseStatusMessage,
+    type NormalizedStatusMessage,
+    type StatusParseError,
+} from '../services/statusParser';
+
+import { useMqtt } from './MqttContext';
+
+import type { ConnectionState } from '../services/mqttClient';
+
+const STALE_THRESHOLD_MS = 2_000;
+const HEARTBEAT_TICK_MS = 500;
+
+interface TileDriverRecord {
+    mac: string;
+    snapshot: NormalizedStatusMessage;
+    firstSeenAt: number;
+    lastSeenAt: number;
+    isNew: boolean;
+    acknowledgedAt?: number;
+}
+
+export type DriverPresence = 'ready' | 'stale' | 'offline';
+
+export interface DriverView extends TileDriverRecord {
+    presence: DriverPresence;
+    staleForMs: number;
+    brokerDisconnected: boolean;
+}
+
+export interface StatusCounts {
+    totalDrivers: number;
+    onlineDrivers: number;
+    offlineDrivers: number;
+    totalMotors: number;
+    movingMotors: number;
+    homedMotors: number;
+    unhomedMotors: number;
+}
+
+export interface StatusContextValue {
+    drivers: DriverView[];
+    counts: StatusCounts;
+    discoveryCount: number;
+    acknowledgeDriver: (mac: string) => void;
+    acknowledgeAll: () => void;
+    schemaError: StatusParseError | null;
+    brokerConnected: boolean;
+    connectionState: ConnectionState;
+    latestActivityAt: number | null;
+    staleThresholdMs: number;
+}
+
+const defaultCounts: StatusCounts = {
+    totalDrivers: 0,
+    onlineDrivers: 0,
+    offlineDrivers: 0,
+    totalMotors: 0,
+    movingMotors: 0,
+    homedMotors: 0,
+    unhomedMotors: 0,
+};
+
+const StatusContext = createContext<StatusContextValue | undefined>(undefined);
+
+export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
+    const { subscribe, state: connectionState } = useMqtt();
+    const [records, setRecords] = useState<Map<string, TileDriverRecord>>(new Map());
+    const [schemaError, setSchemaError] = useState<StatusParseError | null>(null);
+    const [heartbeat, setHeartbeat] = useState(() => Date.now());
+
+    const brokerConnected = connectionState.status === 'connected';
+    const recordCount = records.size;
+
+    useEffect(() => {
+        if (recordCount === 0) {
+            return;
+        }
+        const timer = setInterval(() => {
+            setHeartbeat(Date.now());
+        }, HEARTBEAT_TICK_MS);
+        return () => clearInterval(timer);
+    }, [recordCount]);
+
+    const handleStatusMessage = useCallback(
+        (topic: string, payload: Uint8Array) => {
+            if (schemaError) {
+                return;
+            }
+            const result = parseStatusMessage(topic, payload);
+            if (!result.ok) {
+                console.error('Failed to parse MQTT status payload', result.error);
+                setSchemaError(result.error);
+                return;
+            }
+
+            const { value } = result;
+            const now = Date.now();
+
+            setRecords((prev) => {
+                const next = new Map(prev);
+                const existing = next.get(value.mac);
+                if (existing) {
+                    next.set(value.mac, {
+                        ...existing,
+                        snapshot: value,
+                        lastSeenAt: now,
+                    });
+                    return next;
+                }
+
+                next.set(value.mac, {
+                    mac: value.mac,
+                    snapshot: value,
+                    firstSeenAt: now,
+                    lastSeenAt: now,
+                    isNew: true,
+                });
+                return next;
+            });
+        },
+        [schemaError],
+    );
+
+    useEffect(() => {
+        if (schemaError) {
+            return;
+        }
+        const unsubscribe = subscribe('devices/+/status', handleStatusMessage, { qos: 0 });
+        return () => {
+            unsubscribe();
+        };
+    }, [handleStatusMessage, schemaError, subscribe]);
+
+    const acknowledgeDriver = useCallback((mac: string) => {
+        setRecords((prev) => {
+            const existing = prev.get(mac);
+            if (!existing || !existing.isNew) {
+                return prev;
+            }
+            const next = new Map(prev);
+            next.set(mac, {
+                ...existing,
+                isNew: false,
+                acknowledgedAt: Date.now(),
+            });
+            return next;
+        });
+    }, []);
+
+    const acknowledgeAll = useCallback(() => {
+        setRecords((prev) => {
+            let mutated = false;
+            const next = new Map(prev);
+            for (const [mac, record] of next.entries()) {
+                if (record.isNew) {
+                    mutated = true;
+                    next.set(mac, {
+                        ...record,
+                        isNew: false,
+                        acknowledgedAt: Date.now(),
+                    });
+                }
+            }
+            return mutated ? next : prev;
+        });
+    }, []);
+
+    const drivers = useMemo<DriverView[]>(() => {
+        const sortable = Array.from(records.values());
+        if (sortable.length === 0) {
+            return [];
+        }
+        return sortable
+            .map((record) => {
+                const elapsedMs = heartbeat - record.lastSeenAt;
+                const staleForMs = Math.max(0, elapsedMs);
+                const deviceOffline = record.snapshot.nodeState === 'offline';
+                const presence: DriverPresence = brokerConnected
+                    ? deviceOffline
+                        ? 'offline'
+                        : staleForMs >= STALE_THRESHOLD_MS
+                          ? 'stale'
+                          : 'ready'
+                    : 'offline';
+
+                return {
+                    ...record,
+                    presence,
+                    staleForMs,
+                    brokerDisconnected: !brokerConnected,
+                };
+            })
+            .sort((a, b) => {
+                if (a.isNew !== b.isNew) {
+                    return a.isNew ? -1 : 1;
+                }
+                return a.firstSeenAt - b.firstSeenAt;
+            });
+    }, [brokerConnected, heartbeat, records]);
+
+    const counts = useMemo<StatusCounts>(() => {
+        if (drivers.length === 0) {
+            return defaultCounts;
+        }
+
+        let onlineDrivers = 0;
+        let offlineDrivers = 0;
+        let totalMotors = 0;
+        let movingMotors = 0;
+        let homedMotors = 0;
+        let unhomedMotors = 0;
+
+        for (const record of drivers) {
+            const isOnline = record.presence !== 'offline';
+            if (isOnline) {
+                onlineDrivers += 1;
+            } else {
+                offlineDrivers += 1;
+            }
+            for (const motor of Object.values(record.snapshot.motors)) {
+                totalMotors += 1;
+                if (isOnline && motor.moving) {
+                    movingMotors += 1;
+                }
+                if (motor.homed) {
+                    homedMotors += 1;
+                } else {
+                    unhomedMotors += 1;
+                }
+            }
+        }
+
+        return {
+            totalDrivers: drivers.length,
+            onlineDrivers,
+            offlineDrivers,
+            totalMotors,
+            movingMotors,
+            homedMotors,
+            unhomedMotors,
+        };
+    }, [drivers]);
+
+    const discoveryCount = useMemo(
+        () => drivers.filter((record) => record.isNew).length,
+        [drivers],
+    );
+
+    const latestActivityAt = useMemo(() => {
+        if (drivers.length === 0) {
+            return null;
+        }
+        return drivers.reduce(
+            (max, record) => Math.max(max, record.lastSeenAt),
+            drivers[0].lastSeenAt,
+        );
+    }, [drivers]);
+
+    const value = useMemo<StatusContextValue>(
+        () => ({
+            drivers,
+            counts,
+            discoveryCount,
+            acknowledgeDriver,
+            acknowledgeAll,
+            schemaError,
+            brokerConnected,
+            connectionState,
+            latestActivityAt,
+            staleThresholdMs: STALE_THRESHOLD_MS,
+        }),
+        [
+            acknowledgeAll,
+            acknowledgeDriver,
+            brokerConnected,
+            connectionState,
+            counts,
+            discoveryCount,
+            drivers,
+            latestActivityAt,
+            schemaError,
+        ],
+    );
+
+    return <StatusContext.Provider value={value}>{children}</StatusContext.Provider>;
+};
+
+export const useStatusStore = (): StatusContextValue => {
+    const context = useContext(StatusContext);
+    if (!context) {
+        throw new Error('useStatusStore must be used within a StatusProvider');
+    }
+    return context;
+};

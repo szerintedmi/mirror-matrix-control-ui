@@ -50,7 +50,10 @@ describe('MockMqttTransport messaging', () => {
         });
 
         handler.mockReset();
-        await transport.publish('devices/AA:11:BB:22:CC:33/cmd', JSON.stringify({ action: 'MOVE', cmd_id: 'cmd-1' }));
+        await transport.publish(
+            'devices/AA:11:BB:22:CC:33/cmd',
+            JSON.stringify({ action: 'MOVE', cmd_id: 'cmd-1' }),
+        );
 
         const topics = handler.mock.calls.map(([topic]) => topic);
         expect(topics).toContain('devices/AA:11:BB:22:CC:33/cmd/resp');

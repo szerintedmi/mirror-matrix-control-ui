@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
-import DiscoveredNodes from '../components/DiscoveredNodes';
+import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
 import { useMqtt } from '../context/MqttContext';
-import { discoverNodes } from '../services/mockApi';
+import { useStatusStore } from '../context/StatusContext';
+import { formatRelativeTime } from '../utils/time';
 
 import type { NavigationControls } from '../App';
 import type {
-    Node,
     Motor,
     MirrorConfig,
     MirrorAssignment,
@@ -16,6 +16,8 @@ import type {
     DraggedMotorInfo,
     Axis,
 } from '../types';
+
+type DiscoveryFilter = 'all' | 'new' | 'offline' | 'unassigned';
 
 interface ModalState {
     isOpen: boolean;
@@ -28,50 +30,38 @@ interface ConfiguratorPageProps {
     navigation: NavigationControls;
     gridSize: { rows: number; cols: number };
     onGridSizeChange: (rows: number, cols: number) => void;
+    mirrorConfig: MirrorConfig;
+    setMirrorConfig: React.Dispatch<React.SetStateAction<MirrorConfig>>;
 }
 
 const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     navigation,
     gridSize,
     onGridSizeChange,
+    mirrorConfig,
+    setMirrorConfig,
 }) => {
-    const { settings } = useMqtt();
-    const isMockScheme = settings.scheme === 'mock';
+    const { state: connectionState, connectionUrl } = useMqtt();
+    const {
+        drivers,
+        counts,
+        discoveryCount,
+        acknowledgeDriver,
+        schemaError,
+        brokerConnected,
+        latestActivityAt,
+        staleThresholdMs,
+    } = useStatusStore();
 
-    const [discoveredNodes, setDiscoveredNodes] = useState<Node[]>([]);
-    const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(new Map());
-    const [isLoading, setIsLoading] = useState(true);
     const [isTestMode, setIsTestMode] = useState(false);
     const [selectedNodeMac, setSelectedNodeMac] = useState<string | null>(null);
-    const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
+    const [activeFilter, setActiveFilter] = useState<DiscoveryFilter>('all');
     const [modalState, setModalState] = useState<ModalState>({
         isOpen: false,
         title: '',
         message: '',
         onConfirm: () => {},
     });
-
-    const fetchNodes = useCallback(async () => {
-        setIsLoading(true);
-        if (!isMockScheme) {
-            setDiscoveredNodes([]);
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            const nodes = await discoverNodes();
-            setDiscoveredNodes(nodes);
-        } catch (error) {
-            console.error('Failed to discover nodes', error);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [isMockScheme]);
-
-    useEffect(() => {
-        fetchNodes();
-    }, [fetchNodes]);
 
     const handleGridSizeChange = (rows: number, cols: number) => {
         onGridSizeChange(rows, cols);
@@ -146,7 +136,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             }
             return updated ? newConfig : prevConfig;
         });
-    }, []);
+    }, [setMirrorConfig]);
 
     const handleMotorDrop = useCallback(
         (pos: GridPosition, axis: Axis, dragDataString: string) => {
@@ -201,7 +191,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 return newConfig;
             });
         },
-        [isTestMode],
+        [isTestMode, setMirrorConfig],
     );
 
     const handleUnassignByDrop = useCallback(
@@ -229,9 +219,18 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         }
     };
 
-    const handleNodeSelect = (mac: string | null) => {
-        setSelectedNodeMac((current) => (current === mac ? null : mac));
-    };
+    const handleNodeSelect = useCallback(
+        (mac: string | null) => {
+            setSelectedNodeMac((current) => {
+                const next = current === mac ? null : mac;
+                if (mac && next === mac) {
+                    acknowledgeDriver(mac);
+                }
+                return next;
+            });
+        },
+        [acknowledgeDriver],
+    );
 
     const confirmAction = (title: string, message: string, onConfirm: () => void) => {
         setModalState({ isOpen: true, title, message, onConfirm });
@@ -288,6 +287,103 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         );
     };
 
+    const discoveredNodes = useMemo<DiscoveredNode[]>(() => {
+        if (drivers.length === 0) {
+            return [];
+        }
+        return drivers.map((driver) => {
+            const motorEntries = Object.values(driver.snapshot.motors);
+            const motors = motorEntries
+                .slice()
+                .sort((a, b) => a.id - b.id)
+                .map<Motor>((motor) => ({
+                    nodeMac: driver.mac,
+                    motorIndex: motor.id,
+                }));
+            const unassignedMotors = motors.filter((motor) => !isMotorAssigned(motor)).length;
+            const movingMotors = motorEntries.filter((motor) => motor.moving).length;
+            const homedMotors = motorEntries.filter((motor) => motor.homed).length;
+            return {
+                macAddress: driver.mac,
+                presence: driver.presence,
+                nodeState: driver.snapshot.nodeState,
+                motors,
+                isNew: driver.isNew,
+                firstSeenAt: driver.firstSeenAt,
+                lastSeenAt: driver.lastSeenAt,
+                ip: driver.snapshot.ip,
+                movingMotors,
+                homedMotors,
+                totalMotors: motors.length,
+                hasUnassigned: unassignedMotors > 0,
+                unassignedMotors,
+                staleForMs: driver.staleForMs,
+                brokerDisconnected: driver.brokerDisconnected,
+            };
+        });
+    }, [drivers, isMotorAssigned]);
+
+    const filteredNodes = useMemo<DiscoveredNode[]>(() => {
+        switch (activeFilter) {
+            case 'new':
+                return discoveredNodes.filter((node) => node.isNew);
+            case 'offline':
+                return discoveredNodes.filter((node) => node.presence === 'offline');
+            case 'unassigned':
+                return discoveredNodes.filter((node) => node.hasUnassigned);
+            case 'all':
+            default:
+                return discoveredNodes;
+        }
+    }, [activeFilter, discoveredNodes]);
+
+    const filterOptions = useMemo(
+        () => [
+            { id: 'all' as const, label: 'All' },
+            { id: 'new' as const, label: discoveryCount > 0 ? `New (${discoveryCount})` : 'New' },
+            { id: 'offline' as const, label: 'Offline' },
+            { id: 'unassigned' as const, label: 'Unassigned' },
+        ],
+        [discoveryCount],
+    );
+
+    const connectionPhaseLabel = useMemo(() => {
+        switch (connectionState.status) {
+            case 'connected':
+                return 'Connected';
+            case 'connecting':
+                return 'Connecting';
+            case 'reconnecting':
+                return 'Reconnecting';
+            default:
+                return 'Disconnected';
+        }
+    }, [connectionState.status]);
+
+    const connectionIndicatorClass = useMemo(() => {
+        if (brokerConnected) {
+            return 'bg-emerald-400';
+        }
+        if (connectionState.status === 'connecting' || connectionState.status === 'reconnecting') {
+            return 'bg-amber-400';
+        }
+        return 'bg-red-500';
+    }, [brokerConnected, connectionState.status]);
+
+    const lastActivityLabel = useMemo(
+        () => formatRelativeTime(latestActivityAt),
+        [latestActivityAt],
+    );
+
+    const selectedNodeMacEffective = useMemo(() => {
+        if (!selectedNodeMac) {
+            return null;
+        }
+        return discoveredNodes.some((node) => node.macAddress === selectedNodeMac)
+            ? selectedNodeMac
+            : null;
+    }, [discoveredNodes, selectedNodeMac]);
+
     return (
         <>
             {modalState.isOpen && (
@@ -326,34 +422,81 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             Visually assign motors to mirrors and test your configuration.
                         </p>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => navigation.navigateTo('library')}
-                            className="px-4 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors border border-gray-600"
-                        >
-                            &larr; Back to Library
-                        </button>
-                        <button
-                            onClick={handleResetAll}
-                            className="flex items-center gap-2 px-4 py-2 rounded-md bg-red-800/70 text-red-200 hover:bg-red-700/80 transition-colors border border-red-600/80"
-                            title="Reset all assignments"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                            >
-                                <path
-                                    fillRule="evenodd"
-                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                                    clipRule="evenodd"
+                    <div className="flex flex-col items-end gap-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-end gap-3">
+                            <span className="flex items-center gap-2 text-gray-300">
+                                <span
+                                    className={`h-2.5 w-2.5 rounded-full ${connectionIndicatorClass}`}
                                 />
-                            </svg>
-                            Reset All
-                        </button>
+                                {connectionPhaseLabel}
+                            </span>
+                            <span className="text-gray-500" title={connectionUrl}>
+                                {connectionUrl}
+                            </span>
+                            <span className="text-gray-400">Last activity {lastActivityLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => navigation.navigateTo('library')}
+                                className="px-4 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors border border-gray-600"
+                            >
+                                &larr; Back to Library
+                            </button>
+                            <button
+                                onClick={handleResetAll}
+                                className="flex items-center gap-2 px-4 py-2 rounded-md bg-red-800/70 text-red-200 hover:bg-red-700/80 transition-colors border border-red-600/80"
+                                title="Reset all assignments"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                        clipRule="evenodd"
+                                    />
+                                </svg>
+                                Reset All
+                            </button>
+                        </div>
                     </div>
                 </header>
+
+                <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
+                        <p className="text-sm text-gray-400">Online Drivers</p>
+                        <p className="mt-1 text-2xl font-semibold text-gray-100">
+                            {counts.onlineDrivers}
+                            <span className="ml-1 text-sm font-normal text-gray-400">
+                                / {counts.totalDrivers}
+                            </span>
+                        </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
+                        <p className="text-sm text-gray-400">Offline Drivers</p>
+                        <p className="mt-1 text-2xl font-semibold text-gray-100">
+                            {counts.offlineDrivers}
+                        </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
+                        <p className="text-sm text-gray-400">Moving Motors</p>
+                        <p className="mt-1 text-2xl font-semibold text-gray-100">
+                            {counts.movingMotors}
+                        </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
+                        <p className="text-sm text-gray-400">Homed Motors</p>
+                        <p className="mt-1 text-2xl font-semibold text-gray-100">
+                            {counts.homedMotors}
+                            <span className="ml-2 text-xs font-normal text-gray-400">
+                                Unhomed: {counts.unhomedMotors}
+                            </span>
+                        </p>
+                    </div>
+                </section>
 
                 <div className="flex flex-col lg:flex-row flex-grow gap-8">
                     <main className="flex-grow lg:w-2/3 flex flex-col bg-gray-800/50 rounded-lg p-4 shadow-lg ring-1 ring-white/10">
@@ -372,78 +515,58 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 onMotorDrop={handleMotorDrop}
                                 onMoveCommand={handleMoveCommand}
                                 isTestMode={isTestMode}
-                                selectedNodeMac={selectedNodeMac}
+                                selectedNodeMac={selectedNodeMacEffective}
                             />
                         </div>
                     </main>
 
                     <aside className="lg:w-1/3 flex flex-col bg-gray-800/50 rounded-lg p-4 shadow-lg ring-1 ring-white/10">
                         <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
-                            <h2 className="text-2xl font-semibold text-gray-100">Nodes</h2>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        id="unassignedFilter"
-                                        checked={showOnlyUnassigned}
-                                        onChange={(e) => setShowOnlyUnassigned(e.target.checked)}
-                                        className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-600"
-                                    />
-                                    <label
-                                        htmlFor="unassignedFilter"
-                                        className="text-sm text-gray-300"
+                            <div>
+                                <h2 className="text-2xl font-semibold text-gray-100">Nodes</h2>
+                                <p className="text-xs text-gray-400">
+                                    Session discoveries: {discoveryCount}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {filterOptions.map((option) => (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => setActiveFilter(option.id)}
+                                        className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                                            activeFilter === option.id
+                                                ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                                                : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'
+                                        }`}
                                     >
-                                        Show only unassigned
-                                    </label>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        fetchNodes();
-                                    }}
-                                    disabled={!isMockScheme}
-                                    className="p-2 rounded-full hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                    title="Rediscover Nodes"
-                                >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className={`h-6 w-6 ${isLoading ? 'animate-spin' : ''}`}
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M4 4v5h5M20 20v-5h-5M4 4a8 8 0 0113.52 4.857M20 20a8 8 0 01-13.52-4.857"
-                                        />
-                                    </svg>
-                                </button>
+                                        {option.label}
+                                    </button>
+                                ))}
                             </div>
                         </div>
+                        {schemaError && (
+                            <div className="mb-4 rounded-md border border-red-500/70 bg-red-900/30 p-3 text-sm text-red-200">
+                                Failed to parse status payloads. Discovery paused until the payload
+                                format is fixed.
+                            </div>
+                        )}
+                        {!brokerConnected && (
+                            <div className="mb-4 rounded-md border border-amber-500/70 bg-amber-900/30 p-3 text-sm text-amber-200">
+                                Broker offline. Retaining last known statuses while awaiting
+                                reconnection.
+                            </div>
+                        )}
                         <div className="flex-grow overflow-y-auto pr-2">
-                            {!isMockScheme ? (
-                                <div className="text-sm text-gray-400 bg-gray-900/60 border border-gray-700 rounded-lg p-4">
-                                    Live MQTT discovery will be enabled in a future build. Switch the connection
-                                    scheme to{' '}
-                                    <span className="text-emerald-400 font-semibold">mock</span>{' '}
-                                    to interact with simulated tile drivers.
-                                </div>
-                            ) : isLoading ? (
-                                <div className="flex items-center justify-center h-full">
-                                    <p className="text-gray-400">Discovering nodes...</p>
-                                </div>
-                            ) : (
-                                <DiscoveredNodes
-                                    nodes={discoveredNodes}
-                                    isMotorAssigned={isMotorAssigned}
-                                    selectedNodeMac={selectedNodeMac}
-                                    onNodeSelect={handleNodeSelect}
-                                    onUnassignByDrop={handleUnassignByDrop}
-                                    showOnlyUnassigned={showOnlyUnassigned}
-                                    onClearNodeAssignments={handleClearNodeAssignments}
-                                />
-                            )}
+                            <DiscoveredNodes
+                                nodes={filteredNodes}
+                                isMotorAssigned={isMotorAssigned}
+                                selectedNodeMac={selectedNodeMacEffective}
+                                onNodeSelect={handleNodeSelect}
+                                onUnassignByDrop={handleUnassignByDrop}
+                                onClearNodeAssignments={handleClearNodeAssignments}
+                                staleThresholdMs={staleThresholdMs}
+                            />
                         </div>
                     </aside>
                 </div>

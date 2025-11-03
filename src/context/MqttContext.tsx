@@ -1,9 +1,20 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
 import {
     MirrorMqttClient,
     type ConnectionState,
     createUuid,
+    type MessageHandler,
+    type PublishOptions,
+    type SubscriptionOptions,
 } from '../services/mqttClient';
 
 export type ConnectionScheme = 'ws' | 'wss' | 'mock';
@@ -102,6 +113,12 @@ export interface MqttContextValue {
     manualReconnect: () => void;
     createCommandId: () => string;
     connectionUrl: string;
+    subscribe: (
+        topic: string,
+        handler: MessageHandler,
+        options?: SubscriptionOptions,
+    ) => () => void;
+    publish: (topic: string, payload: string, options?: PublishOptions) => Promise<void>;
 }
 
 const MqttContext = createContext<MqttContextValue | undefined>(undefined);
@@ -112,13 +129,20 @@ interface ProviderProps {
     storage?: Storage;
 }
 
-export const MqttProvider: React.FC<ProviderProps> = ({ children, client: providedClient, storage }) => {
-    const resolvedStorage = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+export const MqttProvider: React.FC<ProviderProps> = ({
+    children,
+    client: providedClient,
+    storage,
+}) => {
+    const resolvedStorage =
+        storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
     const shouldDisposeClient = !providedClient;
     const [client] = useState(() => providedClient ?? new MirrorMqttClient());
-    const [settings, setSettings] = useState<ConnectionSettings>(() => loadStoredSettings(resolvedStorage));
+    const [settings, setSettings] = useState<ConnectionSettings>(() =>
+        loadStoredSettings(resolvedStorage),
+    );
     const [state, setState] = useState<ConnectionState>({ status: 'disconnected', attempt: 0 });
-    const hasAttemptedAutoConnect = useRef(false);
+    const manualDisconnectRef = useRef(false);
 
     useEffect(() => {
         const unsubscribe = client.onStateChange((nextState) => {
@@ -136,17 +160,20 @@ export const MqttProvider: React.FC<ProviderProps> = ({ children, client: provid
         persistSettings(resolvedStorage, settings);
     }, [resolvedStorage, settings]);
 
-    useEffect(() => {
-        if (hasAttemptedAutoConnect.current) {
-            return;
-        }
-        hasAttemptedAutoConnect.current = true;
+    const connectUsingSettings = useCallback(() => {
         client.connect({
             url: buildUrl(settings),
             username: settings.username,
             password: settings.password,
         });
     }, [client, settings]);
+
+    useEffect(() => {
+        if (manualDisconnectRef.current) {
+            return;
+        }
+        connectUsingSettings();
+    }, [connectUsingSettings]);
 
     const updateSettings = useCallback((partial: Partial<ConnectionSettings>) => {
         setSettings((prev) => mergeWithDefaults({ ...prev, ...partial }));
@@ -157,22 +184,33 @@ export const MqttProvider: React.FC<ProviderProps> = ({ children, client: provid
     }, []);
 
     const connect = useCallback(() => {
-        client.connect({
-            url: buildUrl(settings),
-            username: settings.username,
-            password: settings.password,
-        });
-    }, [client, settings]);
+        manualDisconnectRef.current = false;
+        connectUsingSettings();
+    }, [connectUsingSettings]);
 
     const disconnect = useCallback(() => {
+        manualDisconnectRef.current = true;
         client.disconnect();
     }, [client]);
 
     const manualReconnect = useCallback(() => {
+        manualDisconnectRef.current = false;
         client.manualReconnect();
     }, [client]);
 
     const createCommandId = useCallback(() => createUuid(), []);
+
+    const subscribe = useCallback(
+        (topic: string, handler: MessageHandler, options?: SubscriptionOptions) =>
+            client.subscribe(topic, handler, options),
+        [client],
+    );
+
+    const publish = useCallback(
+        (topic: string, payload: string, options?: PublishOptions) =>
+            client.publish(topic, payload, options),
+        [client],
+    );
 
     const connectionUrl = useMemo(() => buildUrl(settings), [settings]);
 
@@ -187,8 +225,22 @@ export const MqttProvider: React.FC<ProviderProps> = ({ children, client: provid
             manualReconnect,
             createCommandId,
             connectionUrl,
+            subscribe,
+            publish,
         }),
-        [connect, connectionUrl, createCommandId, disconnect, manualReconnect, replaceSettings, settings, state, updateSettings],
+        [
+            connect,
+            connectionUrl,
+            createCommandId,
+            disconnect,
+            manualReconnect,
+            publish,
+            replaceSettings,
+            settings,
+            state,
+            subscribe,
+            updateSettings,
+        ],
     );
 
     return <MqttContext.Provider value={value}>{children}</MqttContext.Provider>;

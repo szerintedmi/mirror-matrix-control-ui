@@ -9,7 +9,7 @@ import {
     type ConnectionSettings,
 } from '../MqttContext';
 
-import type { ConnectionState, MirrorMqttClient } from '../../services/mqttClient';
+import type { ConnectionState, MessageHandler, MirrorMqttClient } from '../../services/mqttClient';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -17,6 +17,35 @@ class StubMqttClient {
     private listeners = new Set<(state: ConnectionState) => void>();
 
     private state: ConnectionState = { status: 'disconnected', attempt: 0 };
+
+    private subscriptions = new Map<string, Set<MessageHandler>>();
+
+    public readonly subscribeMock = vi.fn(
+        (topic: string, handler: MessageHandler, options?: unknown): (() => void) => {
+            void options;
+            const existing = this.subscriptions.get(topic) ?? new Set();
+            existing.add(handler);
+            this.subscriptions.set(topic, existing);
+            return () => {
+                const current = this.subscriptions.get(topic);
+                if (!current) {
+                    return;
+                }
+                current.delete(handler);
+                if (current.size === 0) {
+                    this.subscriptions.delete(topic);
+                }
+            };
+        },
+    );
+
+    public readonly publishMock = vi.fn(
+        async (topic: string, payload: string, options?: unknown): Promise<void> => {
+            void topic;
+            void payload;
+            void options;
+        },
+    );
 
     public onStateChange(listener: (state: ConnectionState) => void): () => void {
         this.listeners.add(listener);
@@ -38,8 +67,17 @@ class StubMqttClient {
         this.updateState({ status: 'connecting', attempt: 0 });
     }
 
+    public subscribe(topic: string, handler: MessageHandler, options?: unknown): () => void {
+        return this.subscribeMock(topic, handler, options);
+    }
+
+    public publish(topic: string, payload: string, options?: unknown): Promise<void> {
+        return this.publishMock(topic, payload, options);
+    }
+
     public dispose(): void {
         this.listeners.clear();
+        this.subscriptions.clear();
     }
 
     private updateState(next: ConnectionState): void {
@@ -57,7 +95,9 @@ class MemoryStorage implements Storage {
 
     public readonly getItemMock = vi.fn((key: string) => this.store.get(key) ?? null);
 
-    public readonly keyMock = vi.fn((index: number) => Array.from(this.store.keys())[index] ?? null);
+    public readonly keyMock = vi.fn(
+        (index: number) => Array.from(this.store.keys())[index] ?? null,
+    );
 
     public readonly removeItemMock = vi.fn((key: string) => {
         this.store.delete(key);
@@ -98,7 +138,8 @@ class MemoryStorage implements Storage {
     }
 }
 
-const createStorage = (initial: Record<string, string> = {}): MemoryStorage => new MemoryStorage(initial);
+const createStorage = (initial: Record<string, string> = {}): MemoryStorage =>
+    new MemoryStorage(initial);
 
 const stubClient = (): MirrorMqttClient => new StubMqttClient() as unknown as MirrorMqttClient;
 
