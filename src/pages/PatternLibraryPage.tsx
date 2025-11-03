@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import MotorStatusOverview from '../components/MotorStatusOverview';
+import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { useStatusStore } from '../context/StatusContext';
+import {
+    calculateDisplayIntensity,
+    intensityToFill,
+    intensityToStroke,
+} from '../utils/patternIntensity';
 
 import type { NavigationControls } from '../App';
-import type { MirrorConfig, Pattern } from '../types';
+import type { MirrorConfig, Pattern, PatternCanvas } from '../types';
 
 interface PatternLibraryPageProps {
     navigation: NavigationControls;
@@ -20,34 +26,95 @@ interface PatternLibraryPageProps {
 }
 
 const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
-    const { canvasSize, litPixels } = pattern;
-    const { rows, cols } = canvasSize;
-    const aspectRatio = cols / rows;
+    const canvasWidth = Math.max(pattern.canvas.width, TILE_PLACEMENT_UNIT);
+    const canvasHeight = Math.max(pattern.canvas.height, TILE_PLACEMENT_UNIT);
+    const aspectRatio = canvasWidth / canvasHeight;
     const containerStyle: React.CSSProperties = {
-        paddingBottom: `${100 / aspectRatio}%`,
+        paddingBottom: `${(1 / aspectRatio) * 100}%`,
         position: 'relative',
     };
+
+    const { entries, maxCount } = useMemo(() => {
+        const aggregates = new Map<
+            string,
+            { x: number; y: number; width: number; height: number; count: number }
+        >();
+
+        for (const tile of pattern.tiles) {
+            const row = Math.round(tile.center.y / TILE_PLACEMENT_UNIT - 0.5);
+            const col = Math.round(tile.center.x / TILE_PLACEMENT_UNIT - 0.5);
+            const key = `${row}-${col}`;
+            const existing = aggregates.get(key);
+            if (existing) {
+                existing.count += 1;
+            } else {
+                aggregates.set(key, {
+                    x: col * TILE_PLACEMENT_UNIT,
+                    y: row * TILE_PLACEMENT_UNIT,
+                    width: tile.size.width,
+                    height: tile.size.height,
+                    count: 1,
+                });
+            }
+        }
+
+        const aggregateEntries = Array.from(aggregates.entries()).map(([key, value]) => ({
+            key,
+            ...value,
+        }));
+        const maxCount = aggregateEntries.reduce((acc, entry) => Math.max(acc, entry.count), 0);
+        return {
+            entries: aggregateEntries,
+            maxCount: maxCount > 0 ? maxCount : 1,
+        };
+    }, [pattern.tiles]);
+
     return (
         <div style={containerStyle}>
-            <div
-                className="absolute top-0 left-0 w-full h-full grid gap-px bg-gray-800"
-                style={{
-                    gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                    gridTemplateRows: `repeat(${rows}, 1fr)`,
-                }}
+            <svg
+                viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+                preserveAspectRatio="xMidYMid meet"
+                className="absolute top-0 left-0 w-full h-full bg-gray-800"
             >
-                {Array.from({ length: rows * cols }).map((_, i) => {
-                    const row = Math.floor(i / cols);
-                    const col = i % cols;
-                    const isLit = litPixels.has(`${row}-${col}`);
+                <rect
+                    x={0}
+                    y={0}
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    fill="rgba(17, 24, 39, 0.65)"
+                />
+                {entries.map((entry) => {
+                    const intensity = calculateDisplayIntensity(entry.count, maxCount);
+                    const fill = intensityToFill(intensity);
+                    const stroke = intensityToStroke(intensity);
                     return (
-                        <div
-                            key={`${row}-${col}`}
-                            className={isLit ? 'bg-cyan-400' : 'bg-gray-700/50'}
-                        />
+                        <g key={entry.key} pointerEvents="none">
+                            <rect
+                                x={entry.x}
+                                y={entry.y}
+                                width={entry.width}
+                                height={entry.height}
+                                fill={fill}
+                                stroke={stroke}
+                                strokeWidth={Math.max(entry.width * 0.12, 0.6)}
+                                rx={entry.width * 0.1}
+                                ry={entry.height * 0.1}
+                            />
+                            <text
+                                x={entry.x + entry.width / 2}
+                                y={entry.y + entry.height / 2 + entry.height * 0.1}
+                                textAnchor="middle"
+                                fontSize={Math.max(entry.width * 0.32, 4)}
+                                fill="rgba(15, 23, 42, 0.5)"
+                                fontWeight={500}
+                                pointerEvents="none"
+                            >
+                                {entry.count}
+                            </text>
+                        </g>
                     );
                 })}
-            </div>
+            </svg>
         </div>
     );
 };
@@ -68,12 +135,15 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
 
     const { drivers } = useStatusStore();
 
-    const calculateProjectedSize = (canvasSize: { rows: number; cols: number }) => {
+    const calculateProjectedSize = (canvas: PatternCanvas) => {
         const MIRROR_DIMENSION_M = 0.05; // 50mm
         const degToRad = (deg: number) => deg * (Math.PI / 180);
 
-        const arrayWidth = canvasSize.cols * MIRROR_DIMENSION_M;
-        const arrayHeight = canvasSize.rows * MIRROR_DIMENSION_M;
+        const cols = Math.max(1, Math.round(canvas.width / TILE_PLACEMENT_UNIT));
+        const rows = Math.max(1, Math.round(canvas.height / TILE_PLACEMENT_UNIT));
+
+        const arrayWidth = cols * MIRROR_DIMENSION_M;
+        const arrayHeight = rows * MIRROR_DIMENSION_M;
 
         const wallH = horizontalAngle;
         const wallV = verticalAngle;
@@ -178,7 +248,15 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                             {patterns.map((pattern) => {
-                                const projectedSize = calculateProjectedSize(pattern.canvasSize);
+                                const projectedSize = calculateProjectedSize(pattern.canvas);
+                                const inferredRows = Math.max(
+                                    1,
+                                    Math.round(pattern.canvas.height / TILE_PLACEMENT_UNIT),
+                                );
+                                const inferredCols = Math.max(
+                                    1,
+                                    Math.round(pattern.canvas.width / TILE_PLACEMENT_UNIT),
+                                );
                                 return (
                                     <div
                                         key={pattern.id}
@@ -192,8 +270,8 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                 {pattern.name}
                                             </h3>
                                             <p className="text-sm text-gray-400 font-mono">
-                                                {pattern.canvasSize.rows}x{pattern.canvasSize.cols}{' '}
-                                                - {pattern.litPixels.size} pixels
+                                                {inferredRows}x{inferredCols} - {pattern.tiles.length}{' '}
+                                                tiles
                                             </p>
 
                                             <div className="mt-2 pt-2 border-t border-gray-700/50 text-xs">

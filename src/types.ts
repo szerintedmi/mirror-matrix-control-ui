@@ -43,11 +43,30 @@ export interface DraggedMotorInfo {
     axis?: Axis;
 }
 
+export interface PatternCanvas {
+    width: number;
+    height: number;
+}
+
+export interface PatternTile {
+    id: string;
+    center: {
+        x: number;
+        y: number;
+    };
+    size: {
+        width: number;
+        height: number;
+    };
+}
+
 export interface Pattern {
     id: string;
     name: string;
-    canvasSize: { rows: number; cols: number };
-    litPixels: Set<string>; // "row-col" format
+    canvas: PatternCanvas;
+    tiles: PatternTile[];
+    createdAt: string;
+    updatedAt: string;
 }
 
 export type DriverPresenceSummary = 'ready' | 'stale' | 'offline';

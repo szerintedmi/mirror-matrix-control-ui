@@ -8,6 +8,7 @@ import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
 import SimulationPage from './pages/SimulationPage';
 import { loadGridState, persistGridState } from './services/gridStorage';
+import { loadPatterns, persistPatterns } from './services/patternStorage';
 
 import type { MirrorConfig, Pattern } from './types';
 
@@ -34,7 +35,9 @@ const App: React.FC = () => {
         rows: persistedState?.gridSize.rows ?? 8,
         cols: persistedState?.gridSize.cols ?? 8,
     }));
-    const [patterns, setPatterns] = useState<Pattern[]>([]);
+    const persistedPatterns = useMemo(() => loadPatterns(resolvedStorage), [resolvedStorage]);
+
+    const [patterns, setPatterns] = useState<Pattern[]>(persistedPatterns);
     const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(
         () => new Map(persistedState?.mirrorConfig ?? []),
     );
@@ -55,6 +58,10 @@ const App: React.FC = () => {
         });
     }, [gridSize, mirrorConfig, resolvedStorage]);
 
+    useEffect(() => {
+        persistPatterns(resolvedStorage, patterns);
+    }, [patterns, resolvedStorage]);
+
     const editPattern = (patternId: string | null) => {
         setEditingPatternId(patternId);
         setPage('editor');
@@ -66,9 +73,9 @@ const App: React.FC = () => {
         setPatterns((prev) => {
             const existingIndex = prev.findIndex((p) => p.id === pattern.id);
             if (existingIndex > -1) {
-                const newPatterns = [...prev];
-                newPatterns[existingIndex] = pattern;
-                return newPatterns;
+                const next = [...prev];
+                next[existingIndex] = pattern;
+                return next;
             }
             return [...prev, pattern];
         });

@@ -1,0 +1,10 @@
+export const TILE_PLACEMENT_UNIT = 10;
+export const MAX_CANVAS_DIMENSION_UNITS = 1024;
+export const MIN_CANVAS_CELLS = 1;
+export const MAX_CANVAS_CELLS = Math.max(
+    MIN_CANVAS_CELLS,
+    Math.floor(MAX_CANVAS_DIMENSION_UNITS / TILE_PLACEMENT_UNIT),
+);
+
+export const MIN_TILE_INTENSITY = 0.35;
+export const MAX_TILE_INTENSITY = 0.95;
