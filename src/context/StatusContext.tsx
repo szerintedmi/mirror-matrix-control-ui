@@ -8,26 +8,32 @@ import React, {
     type PropsWithChildren,
 } from 'react';
 
+import { STEPS_SINCE_HOME_CRITICAL, STEPS_SINCE_HOME_WARNING } from '../constants/control';
 import {
     parseStatusMessage,
     type NormalizedStatusMessage,
     type StatusParseError,
 } from '../services/statusParser';
 
-import { useMqtt } from './MqttContext';
+import { useMqtt, type ConnectionScheme } from './MqttContext';
 
 import type { ConnectionState } from '../services/mqttClient';
 
 const STALE_THRESHOLD_MS = 2_000;
 const HEARTBEAT_TICK_MS = 500;
 
+const createRecordKey = (source: ConnectionScheme, topicMac: string): string =>
+    `${source}:${topicMac}`;
+
 interface TileDriverRecord {
     mac: string;
+    topicMac: string;
     snapshot: NormalizedStatusMessage;
     firstSeenAt: number;
     lastSeenAt: number;
     isNew: boolean;
     acknowledgedAt?: number;
+    source: ConnectionScheme;
 }
 
 export type DriverPresence = 'ready' | 'stale' | 'offline';
@@ -46,6 +52,8 @@ export interface StatusCounts {
     movingMotors: number;
     homedMotors: number;
     unhomedMotors: number;
+    needsHomeWarningMotors: number;
+    needsHomeCriticalMotors: number;
 }
 
 export interface StatusContextValue {
@@ -69,16 +77,19 @@ const defaultCounts: StatusCounts = {
     movingMotors: 0,
     homedMotors: 0,
     unhomedMotors: 0,
+    needsHomeWarningMotors: 0,
+    needsHomeCriticalMotors: 0,
 };
 
 const StatusContext = createContext<StatusContextValue | undefined>(undefined);
 
 export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
-    const { subscribe, state: connectionState } = useMqtt();
+    const { subscribe, state: connectionState, settings } = useMqtt();
     const [records, setRecords] = useState<Map<string, TileDriverRecord>>(new Map());
     const [schemaError, setSchemaError] = useState<StatusParseError | null>(null);
     const [heartbeat, setHeartbeat] = useState(() => Date.now());
 
+    const activeSource = settings.scheme;
     const brokerConnected = connectionState.status === 'connected';
     const recordCount = records.size;
 
@@ -106,30 +117,35 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
             const { value } = result;
             const now = Date.now();
+            const recordKey = createRecordKey(activeSource, value.topicMac);
 
             setRecords((prev) => {
                 const next = new Map(prev);
-                const existing = next.get(value.mac);
+                const existing = next.get(recordKey);
                 if (existing) {
-                    next.set(value.mac, {
+                    next.set(recordKey, {
                         ...existing,
+                        mac: value.mac,
                         snapshot: value,
                         lastSeenAt: now,
+                        source: activeSource,
                     });
                     return next;
                 }
 
-                next.set(value.mac, {
+                next.set(recordKey, {
                     mac: value.mac,
+                    topicMac: value.topicMac,
                     snapshot: value,
                     firstSeenAt: now,
                     lastSeenAt: now,
                     isNew: true,
+                    source: activeSource,
                 });
                 return next;
             });
         },
-        [schemaError],
+        [activeSource, schemaError],
     );
 
     useEffect(() => {
@@ -142,42 +158,67 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
         };
     }, [handleStatusMessage, schemaError, subscribe]);
 
-    const acknowledgeDriver = useCallback((mac: string) => {
-        setRecords((prev) => {
-            const existing = prev.get(mac);
-            if (!existing || !existing.isNew) {
-                return prev;
-            }
-            const next = new Map(prev);
-            next.set(mac, {
-                ...existing,
-                isNew: false,
-                acknowledgedAt: Date.now(),
+    const acknowledgeDriver = useCallback(
+        (mac: string) => {
+            setRecords((prev) => {
+                let targetKey: string | null = null;
+                let targetRecord: TileDriverRecord | undefined;
+
+                for (const [key, record] of prev.entries()) {
+                    if (record.mac === mac && record.source === activeSource) {
+                        targetKey = key;
+                        targetRecord = record;
+                        break;
+                    }
+                }
+
+                if (!targetKey || !targetRecord || !targetRecord.isNew) {
+                    return prev;
+                }
+
+                const next = new Map(prev);
+                next.set(targetKey, {
+                    ...targetRecord,
+                    isNew: false,
+                    acknowledgedAt: Date.now(),
+                });
+                return next;
             });
-            return next;
-        });
-    }, []);
+        },
+        [activeSource],
+    );
 
     const acknowledgeAll = useCallback(() => {
         setRecords((prev) => {
             let mutated = false;
             const next = new Map(prev);
-            for (const [mac, record] of next.entries()) {
-                if (record.isNew) {
-                    mutated = true;
-                    next.set(mac, {
-                        ...record,
-                        isNew: false,
-                        acknowledgedAt: Date.now(),
-                    });
+            for (const [key, record] of next.entries()) {
+                if (record.source !== activeSource || !record.isNew) {
+                    continue;
                 }
+                mutated = true;
+                next.set(key, {
+                    ...record,
+                    isNew: false,
+                    acknowledgedAt: Date.now(),
+                });
             }
             return mutated ? next : prev;
         });
-    }, []);
+    }, [activeSource]);
 
     const drivers = useMemo<DriverView[]>(() => {
-        const sortable = Array.from(records.values());
+        const dedupedByTopic = new Map<string, TileDriverRecord>();
+        for (const record of records.values()) {
+            if (record.source !== activeSource) {
+                continue;
+            }
+            const existing = dedupedByTopic.get(record.topicMac);
+            if (!existing || record.lastSeenAt >= existing.lastSeenAt) {
+                dedupedByTopic.set(record.topicMac, record);
+            }
+        }
+        const sortable = Array.from(dedupedByTopic.values());
         if (sortable.length === 0) {
             return [];
         }
@@ -207,7 +248,7 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
                 }
                 return a.firstSeenAt - b.firstSeenAt;
             });
-    }, [brokerConnected, heartbeat, records]);
+    }, [activeSource, brokerConnected, heartbeat, records]);
 
     const counts = useMemo<StatusCounts>(() => {
         if (drivers.length === 0) {
@@ -220,6 +261,8 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
         let movingMotors = 0;
         let homedMotors = 0;
         let unhomedMotors = 0;
+        let needsHomeWarningMotors = 0;
+        let needsHomeCriticalMotors = 0;
 
         for (const record of drivers) {
             const isOnline = record.presence !== 'offline';
@@ -238,6 +281,12 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
                 } else {
                     unhomedMotors += 1;
                 }
+
+                if (motor.stepsSinceHome >= STEPS_SINCE_HOME_CRITICAL) {
+                    needsHomeCriticalMotors += 1;
+                } else if (motor.stepsSinceHome >= STEPS_SINCE_HOME_WARNING) {
+                    needsHomeWarningMotors += 1;
+                }
             }
         }
 
@@ -249,6 +298,8 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
             movingMotors,
             homedMotors,
             unhomedMotors,
+            needsHomeWarningMotors,
+            needsHomeCriticalMotors,
         };
     }, [drivers]);
 

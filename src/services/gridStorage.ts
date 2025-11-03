@@ -109,10 +109,7 @@ export const loadGridState = (storage: Storage | undefined): GridStateSnapshot |
     }
 };
 
-export const persistGridState = (
-    storage: Storage | undefined,
-    state: GridStateSnapshot,
-): void => {
+export const persistGridState = (storage: Storage | undefined, state: GridStateSnapshot): void => {
     if (!storage) {
         return;
     }

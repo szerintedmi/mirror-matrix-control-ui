@@ -25,6 +25,7 @@ export interface NormalizedMotorStatus {
 
 export interface NormalizedStatusMessage {
     mac: string;
+    topicMac: string;
     nodeState: string;
     ip?: string;
     motors: Record<string, NormalizedMotorStatus>;
@@ -71,8 +72,6 @@ const toBoolean = (value: unknown): boolean => {
     return Boolean(value);
 };
 
-const normalizeMac = (mac: string): string => mac.trim().toUpperCase();
-
 export const parseStatusMessage = (topic: string, payload: Uint8Array): StatusParseResult => {
     const match = STATUS_TOPIC_REGEX.exec(topic);
     if (!match) {
@@ -85,7 +84,8 @@ export const parseStatusMessage = (topic: string, payload: Uint8Array): StatusPa
         };
     }
 
-    const mac = normalizeMac(match[1]);
+    const topicMac = match[1].trim();
+    const displayMac = topicMac.toUpperCase();
 
     let jsonText: string;
     try {
@@ -200,7 +200,8 @@ export const parseStatusMessage = (topic: string, payload: Uint8Array): StatusPa
     return {
         ok: true,
         value: {
-            mac,
+            mac: displayMac,
+            topicMac,
             nodeState,
             ip,
             motors,

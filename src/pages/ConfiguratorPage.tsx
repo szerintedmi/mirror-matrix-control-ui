@@ -6,11 +6,15 @@ import MirrorGrid from '../components/MirrorGrid';
 import UnassignedMotorTray from '../components/UnassignedMotorTray';
 import { useMqtt } from '../context/MqttContext';
 import { useStatusStore } from '../context/StatusContext';
+import { useCommandFeedback } from '../hooks/useCommandFeedback';
+import { useMotorCommands } from '../hooks/useMotorCommands';
+import { normalizeCommandError } from '../utils/commandErrors';
 import { formatRelativeTime } from '../utils/time';
 
 import type { NavigationControls } from '../App';
 import type {
     Motor,
+    MotorTelemetry,
     MirrorConfig,
     MirrorAssignment,
     GridPosition,
@@ -19,7 +23,7 @@ import type {
     DriverStatusSnapshot,
 } from '../types';
 
-type DiscoveryFilter = 'all' | 'new' | 'offline' | 'unassigned';
+type DiscoveryFilter = 'online' | 'all' | 'new' | 'offline' | 'unassigned';
 
 interface ModalState {
     isOpen: boolean;
@@ -30,7 +34,6 @@ interface ModalState {
     confirmLabel?: string;
     cancelLabel?: string;
 }
-
 
 interface ConfiguratorPageProps {
     navigation: NavigationControls;
@@ -48,6 +51,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     setMirrorConfig,
 }) => {
     const { state: connectionState, connectionUrl } = useMqtt();
+    const { homeAll } = useMotorCommands();
+    const globalHomeFeedback = useCommandFeedback();
     const {
         drivers,
         counts,
@@ -59,9 +64,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         staleThresholdMs,
     } = useStatusStore();
 
-    const [isTestMode, setIsTestMode] = useState(false);
     const [selectedNodeMac, setSelectedNodeMac] = useState<string | null>(null);
-    const [activeFilter, setActiveFilter] = useState<DiscoveryFilter>('all');
+    const [activeFilter, setActiveFilter] = useState<DiscoveryFilter>('online');
     const [modalState, setModalState] = useState<ModalState>({
         isOpen: false,
         title: '',
@@ -93,8 +97,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
 
     const totalMotors = counts.totalMotors;
     const unassignedAxesEstimate = Math.max(totalMotors - assignmentMetrics.assignedAxes, 0);
-    const recommendedTileCapacity =
-        totalMotors > 0 ? Math.floor(totalMotors / 2) : 0;
+    const recommendedTileCapacity = totalMotors > 0 ? Math.floor(totalMotors / 2) : 0;
 
     const pruneAssignmentsWithinBounds = useCallback(
         (rows: number, cols: number) => {
@@ -123,8 +126,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             return;
         }
 
-        const isShrink =
-            normalizedRows < gridSize.rows || normalizedCols < gridSize.cols;
+        const isShrink = normalizedRows < gridSize.rows || normalizedCols < gridSize.cols;
 
         const outOfBoundsKeys: string[] = [];
         for (const key of mirrorConfig.keys()) {
@@ -190,50 +192,52 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         [mirrorConfig],
     );
 
-    const unassignMotor = useCallback((motor: Motor) => {
-        setMirrorConfig((prevConfig) => {
-            const newConfig: MirrorConfig = new Map(prevConfig);
-            let updated = false;
-            for (const key of newConfig.keys()) {
-                const assignment = newConfig.get(key);
-                if (!assignment) {
-                    continue;
-                }
-                const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
-                let assignmentChanged = false;
-
-                if (
-                    newAssignment.x?.nodeMac === motor.nodeMac &&
-                    newAssignment.x?.motorIndex === motor.motorIndex
-                ) {
-                    newAssignment.x = null;
-                    assignmentChanged = true;
-                }
-                if (
-                    newAssignment.y?.nodeMac === motor.nodeMac &&
-                    newAssignment.y?.motorIndex === motor.motorIndex
-                ) {
-                    newAssignment.y = null;
-                    assignmentChanged = true;
-                }
-
-                if (assignmentChanged) {
-                    if (newAssignment.x === null && newAssignment.y === null) {
-                        newConfig.delete(key);
-                    } else {
-                        newConfig.set(key, newAssignment);
+    const unassignMotor = useCallback(
+        (motor: Motor) => {
+            setMirrorConfig((prevConfig) => {
+                const newConfig: MirrorConfig = new Map(prevConfig);
+                let updated = false;
+                for (const key of newConfig.keys()) {
+                    const assignment = newConfig.get(key);
+                    if (!assignment) {
+                        continue;
                     }
-                    updated = true;
-                    break;
+                    const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
+                    let assignmentChanged = false;
+
+                    if (
+                        newAssignment.x?.nodeMac === motor.nodeMac &&
+                        newAssignment.x?.motorIndex === motor.motorIndex
+                    ) {
+                        newAssignment.x = null;
+                        assignmentChanged = true;
+                    }
+                    if (
+                        newAssignment.y?.nodeMac === motor.nodeMac &&
+                        newAssignment.y?.motorIndex === motor.motorIndex
+                    ) {
+                        newAssignment.y = null;
+                        assignmentChanged = true;
+                    }
+
+                    if (assignmentChanged) {
+                        if (newAssignment.x === null && newAssignment.y === null) {
+                            newConfig.delete(key);
+                        } else {
+                            newConfig.set(key, newAssignment);
+                        }
+                        updated = true;
+                        break;
+                    }
                 }
-            }
-            return updated ? newConfig : prevConfig;
-        });
-    }, [setMirrorConfig]);
+                return updated ? newConfig : prevConfig;
+            });
+        },
+        [setMirrorConfig],
+    );
 
     const handleMotorDrop = useCallback(
         (pos: GridPosition, axis: Axis, dragDataString: string) => {
-            if (isTestMode) return;
             const dragData: DraggedMotorInfo = JSON.parse(dragDataString);
             const motorToMove = dragData.motor;
 
@@ -284,7 +288,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 return newConfig;
             });
         },
-        [isTestMode, setMirrorConfig],
+        [setMirrorConfig],
     );
 
     const handleUnassignByDrop = useCallback(
@@ -296,21 +300,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         },
         [unassignMotor],
     );
-
-    const handleMoveCommand = (pos: GridPosition, axis: 'x' | 'y', direction: number) => {
-        const key = `${pos.row}-${pos.col}`;
-        const motor = mirrorConfig.get(key)?.[axis];
-        if (motor) {
-            console.log(`MQTT OUT:
-  Topic: nodes/${motor.nodeMac}/motors/${motor.motorIndex}/move
-  Payload: { "direction": ${direction > 0 ? '"+"' : '"-"'}, "speed": 100 }
-  (Simulating move command for mirror at [${pos.row}, ${pos.col}] on axis ${axis.toUpperCase()})`);
-        } else {
-            console.warn(
-                `No motor assigned to axis ${axis.toUpperCase()} for mirror at [${pos.row}, ${pos.col}]`,
-            );
-        }
-    };
 
     const handleNodeSelect = useCallback(
         (mac: string | null) => {
@@ -352,9 +341,25 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         );
     };
 
+    const handleHomeAllDrivers = async () => {
+        if (drivers.length === 0) {
+            globalHomeFeedback.fail('No drivers available');
+            return;
+        }
+        globalHomeFeedback.begin('Dispatching Home All…');
+        try {
+            await homeAll({ macAddresses: drivers.map((driver) => driver.topicMac) });
+            globalHomeFeedback.succeed('Home All dispatched');
+        } catch (error) {
+            const details = normalizeCommandError(error);
+            globalHomeFeedback.fail(details.message, details.code);
+        }
+    };
+
     const handleClearNodeAssignments = (nodeMac: string) => {
+        const label = nodeMac.toUpperCase();
         confirmAction(
-            `Clear Assignments for ${nodeMac.slice(-5)}?`,
+            `Clear Assignments for ${label.slice(-5)}?`,
             `Are you sure you want to unassign all motors from this node?`,
             () => {
                 setMirrorConfig((prevConfig) => {
@@ -401,17 +406,30 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 .slice()
                 .sort((a, b) => a.id - b.id)
                 .map<Motor>((motor) => ({
-                    nodeMac: driver.mac,
+                    nodeMac: driver.topicMac,
                     motorIndex: motor.id,
                 }));
+            const motorTelemetry: Record<number, MotorTelemetry> = {};
+            motorEntries.forEach((motor) => {
+                motorTelemetry[motor.id] = {
+                    id: motor.id,
+                    position: motor.position,
+                    moving: motor.moving,
+                    awake: motor.awake,
+                    homed: motor.homed,
+                    stepsSinceHome: motor.stepsSinceHome,
+                };
+            });
             const unassignedMotors = motors.filter((motor) => !isMotorAssigned(motor)).length;
             const movingMotors = motorEntries.filter((motor) => motor.moving).length;
             const homedMotors = motorEntries.filter((motor) => motor.homed).length;
             return {
-                macAddress: driver.mac,
+                macAddress: driver.topicMac,
+                macLabel: driver.mac,
                 presence: driver.presence,
                 nodeState: driver.snapshot.nodeState,
                 motors,
+                motorTelemetry,
                 isNew: driver.isNew,
                 firstSeenAt: driver.firstSeenAt,
                 lastSeenAt: driver.lastSeenAt,
@@ -429,6 +447,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
 
     const filteredNodes = useMemo<DiscoveredNode[]>(() => {
         switch (activeFilter) {
+            case 'online':
+                return discoveredNodes.filter((node) => node.presence !== 'offline');
             case 'new':
                 return discoveredNodes.filter((node) => node.isNew);
             case 'offline':
@@ -441,15 +461,26 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         }
     }, [activeFilter, discoveredNodes]);
 
-    const filterOptions = useMemo(
-        () => [
+    const filterOptions = useMemo(() => {
+        const onlineCount = discoveredNodes.filter((node) => node.presence !== 'offline').length;
+        const offlineCount = discoveredNodes.filter((node) => node.presence === 'offline').length;
+        const unassignedCount = discoveredNodes.filter((node) => node.hasUnassigned).length;
+
+        return [
+            { id: 'online' as const, label: onlineCount > 0 ? `Online (${onlineCount})` : 'Online' },
             { id: 'all' as const, label: 'All' },
             { id: 'new' as const, label: discoveryCount > 0 ? `New (${discoveryCount})` : 'New' },
-            { id: 'offline' as const, label: 'Offline' },
-            { id: 'unassigned' as const, label: 'Unassigned' },
-        ],
-        [discoveryCount],
-    );
+            {
+                id: 'offline' as const,
+                label: offlineCount > 0 ? `Offline (${offlineCount})` : 'Offline',
+            },
+            {
+                id: 'unassigned' as const,
+                label:
+                    unassignedCount > 0 ? `Unassigned (${unassignedCount})` : 'Unassigned',
+            },
+        ];
+    }, [discoveredNodes, discoveryCount]);
 
     const unassignedGroups = useMemo(
         () =>
@@ -468,10 +499,23 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     const driverStatusByMac = useMemo(() => {
         const map = new Map<string, DriverStatusSnapshot>();
         drivers.forEach((driver) => {
-            map.set(driver.mac, {
+            const motors: DriverStatusSnapshot['motors'] = {};
+            Object.values(driver.snapshot.motors).forEach((motor) => {
+                motors[motor.id] = {
+                    id: motor.id,
+                    position: motor.position,
+                    moving: motor.moving,
+                    awake: motor.awake,
+                    homed: motor.homed,
+                    stepsSinceHome: motor.stepsSinceHome,
+                };
+            });
+
+            map.set(driver.topicMac, {
                 presence: driver.presence,
                 staleForMs: driver.staleForMs,
                 brokerDisconnected: driver.brokerDisconnected,
+                motors,
             });
         });
         return map;
@@ -595,6 +639,20 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 &larr; Back to Library
                             </button>
                             <button
+                                onClick={handleHomeAllDrivers}
+                                className="flex items-center gap-2 px-4 py-2 rounded-md border border-emerald-600/70 bg-emerald-900/40 text-emerald-200 transition-colors hover:bg-emerald-700/40"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path d="M10 2a1 1 0 01.894.553l5 10A1 1 0 0115 14H5a1 1 0 01-.894-1.447l5-10A1 1 0 0110 2zM10 6.118L6.764 12h6.472L10 6.118z" />
+                                </svg>
+                                Home All
+                            </button>
+                            <button
                                 onClick={handleResetAll}
                                 className="flex items-center gap-2 px-4 py-2 rounded-md bg-red-800/70 text-red-200 hover:bg-red-700/80 transition-colors border border-red-600/80"
                                 title="Reset all assignments"
@@ -614,10 +672,29 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 Reset All
                             </button>
                         </div>
+                        {globalHomeFeedback.feedback.state !== 'idle' &&
+                            globalHomeFeedback.feedback.message && (
+                                <p
+                                    className={`text-xs ${
+                                        globalHomeFeedback.feedback.state === 'error'
+                                            ? 'text-red-200'
+                                            : globalHomeFeedback.feedback.state === 'pending'
+                                              ? 'text-sky-200'
+                                              : 'text-emerald-200'
+                                    }`}
+                                >
+                                    {globalHomeFeedback.feedback.message}
+                                    {globalHomeFeedback.feedback.code && (
+                                        <span className="ml-1 text-[10px] text-gray-400">
+                                            ({globalHomeFeedback.feedback.code})
+                                        </span>
+                                    )}
+                                </p>
+                            )}
                     </div>
                 </header>
 
-                <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
                         <p className="text-sm text-gray-400">Online Drivers</p>
                         <p className="mt-1 text-2xl font-semibold text-gray-100">
@@ -648,6 +725,18 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             </span>
                         </p>
                     </div>
+                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
+                        <p className="text-sm text-gray-400">Needs Homing</p>
+                        <p className="mt-1 text-2xl font-semibold text-gray-100">
+                            {counts.needsHomeCriticalMotors + counts.needsHomeWarningMotors}
+                            <span className="ml-2 text-xs font-normal text-red-300">
+                                Critical: {counts.needsHomeCriticalMotors}
+                            </span>
+                            <span className="ml-2 text-xs font-normal text-amber-300">
+                                Warning: {counts.needsHomeWarningMotors}
+                            </span>
+                        </p>
+                    </div>
                 </section>
 
                 <div className="flex flex-col lg:flex-row flex-grow gap-8">
@@ -656,8 +745,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             rows={gridSize.rows}
                             cols={gridSize.cols}
                             onSizeChange={handleGridSizeChange}
-                            isTestMode={isTestMode}
-                            onTestModeChange={setIsTestMode}
                             assignedAxes={assignmentMetrics.assignedAxes}
                             assignedTiles={assignmentMetrics.assignedTiles}
                             totalMotors={totalMotors}
@@ -677,8 +764,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 cols={gridSize.cols}
                                 mirrorConfig={mirrorConfig}
                                 onMotorDrop={handleMotorDrop}
-                                onMoveCommand={handleMoveCommand}
-                                isTestMode={isTestMode}
                                 selectedNodeMac={selectedNodeMacEffective}
                                 driverStatuses={driverStatusByMac}
                             />
@@ -699,6 +784,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                         key={option.id}
                                         type="button"
                                         onClick={() => setActiveFilter(option.id)}
+                                        data-testid={`node-filter-${option.id}`}
                                         className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                                             activeFilter === option.id
                                                 ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'

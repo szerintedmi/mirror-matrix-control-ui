@@ -4,8 +4,6 @@ interface GridConfiguratorProps {
     rows: number;
     cols: number;
     onSizeChange: (rows: number, cols: number) => void;
-    isTestMode: boolean;
-    onTestModeChange: (enabled: boolean) => void;
     assignedAxes: number;
     assignedTiles: number;
     totalMotors: number;
@@ -17,8 +15,6 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
     rows,
     cols,
     onSizeChange,
-    isTestMode,
-    onTestModeChange,
     assignedAxes,
     assignedTiles,
     totalMotors,
@@ -36,8 +32,7 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
     };
 
     const tileCount = rows * cols;
-    const overRecommended =
-        recommendedTileCapacity > 0 && tileCount > recommendedTileCapacity;
+    const overRecommended = recommendedTileCapacity > 0 && tileCount > recommendedTileCapacity;
 
     return (
         <div className="flex flex-col gap-3 p-3 rounded-md bg-black/20 mb-4">
@@ -69,23 +64,6 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
                         min="1"
                         max="32"
                     />
-                </div>
-                <div className="flex items-center gap-3 ml-auto">
-                    <label htmlFor="testModeToggle" className="font-medium text-gray-400">
-                        Click to move
-                    </label>
-                    <button
-                        id="testModeToggle"
-                        onClick={() => onTestModeChange(!isTestMode)}
-                        className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 ${isTestMode ? 'bg-cyan-500' : 'bg-gray-600'}`}
-                        aria-checked={isTestMode}
-                        role="switch"
-                    >
-                        <span className="sr-only">Enable click to move mode</span>
-                        <span
-                            className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${isTestMode ? 'translate-x-6' : 'translate-x-1'}`}
-                        />
-                    </button>
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">

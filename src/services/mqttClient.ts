@@ -121,11 +121,19 @@ export class MirrorMqttClient {
     }
 
     public connect(request: ConnectRequest): void {
-        this.disposed = false;
         this.clearReconnectTimer();
         this.lastConnectRequest = request;
         this.reconnectAttempts = 0;
-        this.mockMode = request.url.startsWith('mock://');
+
+        const nextMockMode = request.url.startsWith('mock://');
+        const hasExistingConnection =
+            this.client !== null || (this.mockTransport !== null && this.mockMode);
+        if (hasExistingConnection) {
+            this.disconnect();
+        }
+
+        this.disposed = false;
+        this.mockMode = nextMockMode;
         if (this.mockMode) {
             if (!this.mockTransport) {
                 this.mockTransport = new MockMqttTransport();

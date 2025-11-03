@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 
+import { useMotorController } from '../hooks/useMotorController';
+
+import MotorActionButtons from './MotorActionButtons';
+
 import type {
     GridPosition,
     MirrorAssignment,
     Motor,
+    MotorTelemetry,
     Axis,
     DraggedMotorInfo,
     DriverStatusSnapshot,
@@ -16,7 +21,10 @@ interface WarningBadge {
     className: string;
 }
 
-const MOTOR_SLOT_VARIANT_STYLES: Record<MotorSlotVariant, { idle: string; hover: string; text: string; border: string }> = {
+const MOTOR_SLOT_VARIANT_STYLES: Record<
+    MotorSlotVariant,
+    { idle: string; hover: string; text: string; border: string }
+> = {
     default: {
         idle: 'bg-gray-700/50',
         hover: 'bg-cyan-500/30',
@@ -117,10 +125,9 @@ export const analyzeMirrorCell = (
 interface MotorSlotProps {
     axis: Axis;
     motor: Motor | null;
+    telemetry?: MotorTelemetry;
     position: GridPosition;
-    isTestMode: boolean;
     onMotorDrop: (pos: GridPosition, axis: Axis, dragDataString: string) => void;
-    onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
     variant?: MotorSlotVariant;
     dataTestId?: string;
 }
@@ -129,27 +136,24 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
     axis,
     motor,
     position,
-    isTestMode,
+    telemetry,
     onMotorDrop,
-    onMoveCommand,
     variant = 'default',
     dataTestId,
 }) => {
     const [isHovering, setIsHovering] = useState(false);
+    const controller = useMotorController(motor, telemetry);
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        if (isTestMode) return;
         e.preventDefault();
         setIsHovering(true);
     };
 
     const handleDragLeave = () => {
-        if (isTestMode) return;
         setIsHovering(false);
     };
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        if (isTestMode) return;
         e.preventDefault();
         setIsHovering(false);
         const dragData = e.dataTransfer.getData('application/json');
@@ -158,25 +162,8 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
         }
     };
 
-    const isInteractive = isTestMode && !!motor;
-
-    const handleClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isInteractive) {
-            onMoveCommand(position, axis, 1);
-        }
-    };
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        if (isInteractive) {
-            e.stopPropagation();
-            e.preventDefault();
-            onMoveCommand(position, axis, -1);
-        }
-    };
-
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-        if (!motor || isTestMode) {
+        if (!motor) {
             e.preventDefault();
             return;
         }
@@ -190,31 +177,13 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
         e.dataTransfer.effectAllowed = 'move';
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (!isInteractive) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onMoveCommand(position, axis, 1);
-        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            onMoveCommand(position, axis, -1);
-        } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            onMoveCommand(position, axis, 1);
-        }
-    };
-
     const styles = MOTOR_SLOT_VARIANT_STYLES[variant];
     const baseBg = isHovering ? styles.hover : styles.idle;
-    const testModeClasses = isInteractive ? 'cursor-pointer hover:brightness-110' : '';
-    const draggableClasses = !isTestMode && motor ? 'cursor-grab' : '';
+    const draggableClasses = motor ? 'cursor-grab' : '';
     const motorTextColor = motor ? styles.text : 'text-gray-500';
-    const borderClasses = `border ${styles.border}`;
+    const borderClasses = styles.border;
 
     const slotTitle = (() => {
-        if (isTestMode && motor) {
-            return 'Left-click to move +, right-click to move -';
-        }
         if (!motor) {
             return 'Drop a motor here';
         }
@@ -228,29 +197,36 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
     })();
 
     return (
-        <div
+        <div className="space-y-2">
+            <div
             data-testid={dataTestId}
-            draggable={!isTestMode && !!motor}
+            draggable={!!motor}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onClick={handleClick}
-            onContextMenu={handleContextMenu}
-            onKeyDown={handleKeyDown}
-            role={isInteractive ? 'button' : undefined}
-            tabIndex={isInteractive ? 0 : undefined}
             aria-disabled={!motor}
-            className={`flex items-center justify-center p-2 rounded transition-colors duration-200 h-10 ${borderClasses} ${baseBg} ${testModeClasses} ${draggableClasses}`}
+            className={`flex h-10 items-center justify-center rounded transition-colors duration-200 border ${borderClasses} ${baseBg} ${draggableClasses}`}
             title={slotTitle}
         >
             {motor ? (
                 <span className={`font-mono text-sm ${motorTextColor}`}>
                     {motor.nodeMac.slice(-5)}:{motor.motorIndex}
-                </span>
-            ) : (
-                <span className="font-mono text-sm text-gray-500">--</span>
-            )}
+                    </span>
+                ) : (
+                    <span className="font-mono text-sm text-gray-500">--</span>
+                )}
+            </div>
+            {motor ? (
+                <MotorActionButtons
+                    motor={motor}
+                    telemetry={telemetry}
+                    controller={controller}
+                    layout="vertical"
+                    dataTestIdPrefix={`grid-${position.row}-${position.col}-${axis}`}
+                    compact
+                />
+            ) : null}
         </div>
     );
 };
@@ -259,8 +235,6 @@ interface MirrorCellProps {
     position: GridPosition;
     assignment: MirrorAssignment;
     onMotorDrop: (pos: GridPosition, axis: Axis, dragDataString: string) => void;
-    onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
-    isTestMode: boolean;
     selectedNodeMac: string | null;
     driverStatuses: Map<string, DriverStatusSnapshot>;
 }
@@ -269,8 +243,6 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
     position,
     assignment,
     onMotorDrop,
-    onMoveCommand,
-    isTestMode,
     selectedNodeMac,
     driverStatuses,
 }) => {
@@ -284,6 +256,13 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
         selectedNodeMac && (isNodeXHighlighted || isNodeYHighlighted)
             ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]'
             : '';
+
+    const telemetryX = assignment.x
+        ? driverStatuses.get(assignment.x.nodeMac)?.motors[assignment.x.motorIndex]
+        : undefined;
+    const telemetryY = assignment.y
+        ? driverStatuses.get(assignment.y.nodeMac)?.motors[assignment.y.motorIndex]
+        : undefined;
 
     const ringClasses = analysis.hasOffline
         ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-red-500/80'
@@ -339,20 +318,18 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                 <MotorSlot
                     axis="x"
                     motor={assignment.x}
+                    telemetry={telemetryX}
                     position={position}
-                    isTestMode={isTestMode}
                     onMotorDrop={onMotorDrop}
-                    onMoveCommand={onMoveCommand}
                     variant={analysis.variants.x}
                     dataTestId={`mirror-slot-x-${position.row}-${position.col}`}
                 />
                 <MotorSlot
                     axis="y"
                     motor={assignment.y}
+                    telemetry={telemetryY}
                     position={position}
-                    isTestMode={isTestMode}
                     onMotorDrop={onMotorDrop}
-                    onMoveCommand={onMoveCommand}
                     variant={analysis.variants.y}
                     dataTestId={`mirror-slot-y-${position.row}-${position.col}`}
                 />

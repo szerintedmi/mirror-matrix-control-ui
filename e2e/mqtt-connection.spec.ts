@@ -59,6 +59,8 @@ test.describe('MQTT connection panel', () => {
         await expect(
             page.getByRole('heading', { name: 'Mirror Array Configurator' }),
         ).toBeVisible();
-        await expect(page.getByText('AA:11:BB:22:CC:33')).toBeVisible();
+        await expect(
+            page.getByRole('heading', { name: 'AA:11:BB:22:CC:33', exact: true }),
+        ).toBeVisible();
     });
 });

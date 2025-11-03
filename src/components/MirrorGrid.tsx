@@ -9,8 +9,6 @@ interface MirrorGridProps {
     cols: number;
     mirrorConfig: MirrorConfig;
     onMotorDrop: (pos: GridPosition, axis: Axis, dragDataString: string) => void;
-    onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
-    isTestMode: boolean;
     selectedNodeMac: string | null;
     driverStatuses: Map<string, DriverStatusSnapshot>;
 }
@@ -20,8 +18,6 @@ const MirrorGrid: React.FC<MirrorGridProps> = ({
     cols,
     mirrorConfig,
     onMotorDrop,
-    onMoveCommand,
-    isTestMode,
     selectedNodeMac,
     driverStatuses,
 }) => {
@@ -46,8 +42,6 @@ const MirrorGrid: React.FC<MirrorGridProps> = ({
                         position={pos}
                         assignment={assignment}
                         onMotorDrop={onMotorDrop}
-                        onMoveCommand={onMoveCommand}
-                        isTestMode={isTestMode}
                         selectedNodeMac={selectedNodeMac}
                         driverStatuses={driverStatuses}
                     />
