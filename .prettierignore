@@ -6,3 +6,5 @@ node_modules
 .corepack
 playwright-report
 test-results
+.tmp
+.local

@@ -19,6 +19,8 @@ export default [
             '.corepack',
             'playwright-report',
             'test-results',
+            '.tmp',
+            '.local',
         ],
     },
     {
