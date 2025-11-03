@@ -1,6 +1,118 @@
 import React, { useState } from 'react';
 
-import type { GridPosition, MirrorAssignment, Motor, Axis, DraggedMotorInfo } from '../types';
+import type {
+    GridPosition,
+    MirrorAssignment,
+    Motor,
+    Axis,
+    DraggedMotorInfo,
+    DriverStatusSnapshot,
+} from '../types';
+
+type MotorSlotVariant = 'default' | 'warning' | 'info';
+
+interface WarningBadge {
+    label: string;
+    className: string;
+}
+
+const MOTOR_SLOT_VARIANT_STYLES: Record<MotorSlotVariant, { idle: string; hover: string; text: string; border: string }> = {
+    default: {
+        idle: 'bg-gray-700/50',
+        hover: 'bg-cyan-500/30',
+        text: 'text-cyan-300',
+        border: 'border-gray-700/70',
+    },
+    warning: {
+        idle: 'bg-amber-900/40',
+        hover: 'bg-amber-500/30',
+        text: 'text-amber-200',
+        border: 'border-amber-500/50',
+    },
+    info: {
+        idle: 'bg-sky-900/35',
+        hover: 'bg-sky-500/25',
+        text: 'text-sky-200',
+        border: 'border-sky-500/40',
+    },
+};
+
+export interface MirrorCellAnalysis {
+    crossDriver: boolean;
+    orphanAxis: boolean;
+    hasOffline: boolean;
+    hasStale: boolean;
+    warningBadges: WarningBadge[];
+    variants: {
+        x: MotorSlotVariant;
+        y: MotorSlotVariant;
+    };
+}
+
+export const analyzeMirrorCell = (
+    assignment: MirrorAssignment,
+    driverStatuses: Map<string, DriverStatusSnapshot>,
+): MirrorCellAnalysis => {
+    const axisCount = (assignment.x ? 1 : 0) + (assignment.y ? 1 : 0);
+    const orphanAxis = axisCount === 1;
+    const crossDriver = Boolean(
+        assignment.x && assignment.y && assignment.x.nodeMac !== assignment.y.nodeMac,
+    );
+
+    const statuses = [assignment.x, assignment.y]
+        .map((motor) => (motor ? driverStatuses.get(motor.nodeMac) : undefined))
+        .filter((status): status is DriverStatusSnapshot => Boolean(status));
+
+    const hasOffline = statuses.some(
+        (status) => status.presence === 'offline' || status.brokerDisconnected,
+    );
+    const hasStale = statuses.some((status) => status.presence === 'stale');
+
+    const warningBadges: WarningBadge[] = [];
+    if (hasOffline) {
+        warningBadges.push({ label: 'Driver offline', className: 'bg-red-500/20 text-red-200' });
+    } else if (hasStale) {
+        warningBadges.push({ label: 'Driver stale', className: 'bg-amber-500/20 text-amber-200' });
+    }
+    if (crossDriver) {
+        warningBadges.push({ label: 'Mixed drivers', className: 'bg-pink-500/20 text-pink-200' });
+    }
+    if (orphanAxis) {
+        warningBadges.push({ label: 'Needs partner', className: 'bg-sky-500/20 text-sky-200' });
+    }
+
+    const resolveVariant = (motor: Motor | null): MotorSlotVariant => {
+        if (!motor) {
+            return 'default';
+        }
+        const status = driverStatuses.get(motor.nodeMac);
+        if (status?.presence === 'offline' || status?.brokerDisconnected) {
+            return 'warning';
+        }
+        if (status?.presence === 'stale') {
+            return 'warning';
+        }
+        if (crossDriver) {
+            return 'warning';
+        }
+        if (orphanAxis) {
+            return 'info';
+        }
+        return 'default';
+    };
+
+    return {
+        crossDriver,
+        orphanAxis,
+        hasOffline,
+        hasStale,
+        warningBadges,
+        variants: {
+            x: resolveVariant(assignment.x),
+            y: resolveVariant(assignment.y),
+        },
+    };
+};
 
 interface MotorSlotProps {
     axis: Axis;
@@ -9,6 +121,8 @@ interface MotorSlotProps {
     isTestMode: boolean;
     onMotorDrop: (pos: GridPosition, axis: Axis, dragDataString: string) => void;
     onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
+    variant?: MotorSlotVariant;
+    dataTestId?: string;
 }
 
 const MotorSlot: React.FC<MotorSlotProps> = ({
@@ -18,6 +132,8 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
     isTestMode,
     onMotorDrop,
     onMoveCommand,
+    variant = 'default',
+    dataTestId,
 }) => {
     const [isHovering, setIsHovering] = useState(false);
 
@@ -88,13 +204,32 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
         }
     };
 
-    const baseBg = isHovering ? 'bg-cyan-500/30' : 'bg-gray-700/50';
-    const testModeClasses = isInteractive ? 'cursor-pointer hover:bg-cyan-600/50' : '';
+    const styles = MOTOR_SLOT_VARIANT_STYLES[variant];
+    const baseBg = isHovering ? styles.hover : styles.idle;
+    const testModeClasses = isInteractive ? 'cursor-pointer hover:brightness-110' : '';
     const draggableClasses = !isTestMode && motor ? 'cursor-grab' : '';
-    const motorTextColor = motor ? 'text-cyan-300' : 'text-gray-500';
+    const motorTextColor = motor ? styles.text : 'text-gray-500';
+    const borderClasses = `border ${styles.border}`;
+
+    const slotTitle = (() => {
+        if (isTestMode && motor) {
+            return 'Left-click to move +, right-click to move -';
+        }
+        if (!motor) {
+            return 'Drop a motor here';
+        }
+        if (variant === 'warning') {
+            return 'Driver needs attention — drag to reassign or inspect status';
+        }
+        if (variant === 'info') {
+            return 'Single axis assigned — add a partner or drag to adjust';
+        }
+        return 'Drag to reassign';
+    })();
 
     return (
         <div
+            data-testid={dataTestId}
             draggable={!isTestMode && !!motor}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
@@ -106,14 +241,8 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
             role={isInteractive ? 'button' : undefined}
             tabIndex={isInteractive ? 0 : undefined}
             aria-disabled={!motor}
-            className={`flex items-center justify-center p-2 rounded transition-colors duration-200 h-10 ${baseBg} ${testModeClasses} ${draggableClasses}`}
-            title={
-                isTestMode && motor
-                    ? `Left-click to move +, Right-click to move -`
-                    : motor
-                      ? `Drag to reassign`
-                      : `Drop a motor here`
-            }
+            className={`flex items-center justify-center p-2 rounded transition-colors duration-200 h-10 ${borderClasses} ${baseBg} ${testModeClasses} ${draggableClasses}`}
+            title={slotTitle}
         >
             {motor ? (
                 <span className={`font-mono text-sm ${motorTextColor}`}>
@@ -133,6 +262,7 @@ interface MirrorCellProps {
     onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
     isTestMode: boolean;
     selectedNodeMac: string | null;
+    driverStatuses: Map<string, DriverStatusSnapshot>;
 }
 
 const MirrorCell: React.FC<MirrorCellProps> = ({
@@ -142,12 +272,11 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
     onMoveCommand,
     isTestMode,
     selectedNodeMac,
+    driverStatuses,
 }) => {
     const [isSelected, setIsSelected] = useState(false);
 
-    const borderStyle = isSelected
-        ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-cyan-400'
-        : 'ring-1 ring-gray-700';
+    const analysis = analyzeMirrorCell(assignment, driverStatuses);
 
     const isNodeXHighlighted = assignment.x?.nodeMac === selectedNodeMac;
     const isNodeYHighlighted = assignment.y?.nodeMac === selectedNodeMac;
@@ -155,6 +284,19 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
         selectedNodeMac && (isNodeXHighlighted || isNodeYHighlighted)
             ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]'
             : '';
+
+    const ringClasses = analysis.hasOffline
+        ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-red-500/80'
+        : analysis.hasStale
+          ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-amber-400/80'
+          : isSelected
+            ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-cyan-400'
+            : 'ring-1 ring-gray-700';
+
+    const backgroundClass = isSelected ? 'bg-gray-700' : 'bg-gray-800 hover:bg-gray-700/70';
+    const borderVisualClass = analysis.crossDriver
+        ? 'border border-amber-500/60'
+        : 'border border-transparent';
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -167,17 +309,31 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
 
     return (
         <div
+            data-testid={`mirror-cell-${position.row}-${position.col}`}
             onClick={() => setIsSelected(!isSelected)}
             onBlur={() => setIsSelected(false)}
             onKeyDown={handleKeyDown}
             role="button"
             aria-pressed={isSelected}
             tabIndex={0}
-            className={`relative aspect-square flex flex-col rounded-md p-1.5 gap-2 transition-all duration-200 outline-none ${borderStyle} ${isSelected ? 'bg-gray-700' : 'bg-gray-800 hover:bg-gray-700/70'} ${nodeHighlightClass}`}
+            className={`relative aspect-square flex flex-col rounded-md p-1.5 gap-2 transition-all duration-200 outline-none ${ringClasses} ${backgroundClass} ${borderVisualClass} ${nodeHighlightClass}`}
         >
             <div className="text-center text-xs font-semibold text-gray-400 select-none">
                 [{position.row},{position.col}]
             </div>
+
+            {analysis.warningBadges.length > 0 && (
+                <div className="flex flex-wrap gap-1 text-[10px] font-semibold uppercase tracking-wide">
+                    {analysis.warningBadges.map((badge) => (
+                        <span
+                            key={badge.label}
+                            className={`rounded-full px-2 py-0.5 ${badge.className}`}
+                        >
+                            {badge.label}
+                        </span>
+                    ))}
+                </div>
+            )}
 
             <div className="w-full flex flex-col gap-1.5 mt-auto">
                 <MotorSlot
@@ -187,6 +343,8 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                     isTestMode={isTestMode}
                     onMotorDrop={onMotorDrop}
                     onMoveCommand={onMoveCommand}
+                    variant={analysis.variants.x}
+                    dataTestId={`mirror-slot-x-${position.row}-${position.col}`}
                 />
                 <MotorSlot
                     axis="y"
@@ -195,6 +353,8 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                     isTestMode={isTestMode}
                     onMotorDrop={onMotorDrop}
                     onMoveCommand={onMoveCommand}
+                    variant={analysis.variants.y}
+                    dataTestId={`mirror-slot-y-${position.row}-${position.col}`}
                 />
             </div>
         </div>

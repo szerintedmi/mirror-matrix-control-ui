@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import ConnectionSettingsPanel from './components/ConnectionSettingsPanel';
 import { MqttProvider } from './context/MqttContext';
@@ -7,6 +7,7 @@ import ConfiguratorPage from './pages/ConfiguratorPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
 import SimulationPage from './pages/SimulationPage';
+import { loadGridState, persistGridState } from './services/gridStorage';
 
 import type { MirrorConfig, Pattern } from './types';
 
@@ -23,9 +24,20 @@ const App: React.FC = () => {
     const [editingPatternId, setEditingPatternId] = useState<string | null>(null);
 
     // Global state
-    const [gridSize, setGridSize] = useState({ rows: 8, cols: 8 });
+    const resolvedStorage = useMemo(
+        () => (typeof window !== 'undefined' ? window.localStorage : undefined),
+        [],
+    );
+    const persistedState = useMemo(() => loadGridState(resolvedStorage), [resolvedStorage]);
+
+    const [gridSize, setGridSize] = useState(() => ({
+        rows: persistedState?.gridSize.rows ?? 8,
+        cols: persistedState?.gridSize.cols ?? 8,
+    }));
     const [patterns, setPatterns] = useState<Pattern[]>([]);
-    const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(new Map());
+    const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(
+        () => new Map(persistedState?.mirrorConfig ?? []),
+    );
     const [wallDistance, setWallDistance] = useState(5);
     const [horizontalAngle, setHorizontalAngle] = useState(0); // Wall angle
     const [verticalAngle, setVerticalAngle] = useState(0); // Wall angle
@@ -35,6 +47,13 @@ const App: React.FC = () => {
     const navigateTo = (targetPage: Page) => {
         setPage(targetPage);
     };
+
+    useEffect(() => {
+        persistGridState(resolvedStorage, {
+            gridSize,
+            mirrorConfig,
+        });
+    }, [gridSize, mirrorConfig, resolvedStorage]);
 
     const editPattern = (patternId: string | null) => {
         setEditingPatternId(patternId);

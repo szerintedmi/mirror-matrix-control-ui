@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
+import UnassignedMotorTray from '../components/UnassignedMotorTray';
 import { useMqtt } from '../context/MqttContext';
 import { useStatusStore } from '../context/StatusContext';
 import { formatRelativeTime } from '../utils/time';
@@ -15,6 +16,7 @@ import type {
     GridPosition,
     DraggedMotorInfo,
     Axis,
+    DriverStatusSnapshot,
 } from '../types';
 
 type DiscoveryFilter = 'all' | 'new' | 'offline' | 'unassigned';
@@ -24,7 +26,11 @@ interface ModalState {
     title: string;
     message: string;
     onConfirm: () => void;
+    onCancel?: () => void;
+    confirmLabel?: string;
+    cancelLabel?: string;
 }
+
 
 interface ConfiguratorPageProps {
     navigation: NavigationControls;
@@ -61,21 +67,108 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         title: '',
         message: '',
         onConfirm: () => {},
+        onCancel: undefined,
+        confirmLabel: undefined,
+        cancelLabel: undefined,
     });
 
-    const handleGridSizeChange = (rows: number, cols: number) => {
-        onGridSizeChange(rows, cols);
-        // Preserve existing config for cells that are still within bounds
-        setMirrorConfig((prevConfig) => {
-            const newConfig: MirrorConfig = new Map();
-            for (const [key, assignment] of prevConfig.entries()) {
-                const [row, col] = key.split('-').map(Number);
-                if (row < rows && col < cols) {
-                    newConfig.set(key, assignment);
-                }
+    const assignmentMetrics = useMemo(() => {
+        let assignedAxes = 0;
+        let assignedTiles = 0;
+        for (const assignment of mirrorConfig.values()) {
+            const hasX = Boolean(assignment.x);
+            const hasY = Boolean(assignment.y);
+            if (hasX) {
+                assignedAxes += 1;
             }
-            return newConfig;
-        });
+            if (hasY) {
+                assignedAxes += 1;
+            }
+            if (hasX || hasY) {
+                assignedTiles += 1;
+            }
+        }
+        return { assignedAxes, assignedTiles };
+    }, [mirrorConfig]);
+
+    const totalMotors = counts.totalMotors;
+    const unassignedAxesEstimate = Math.max(totalMotors - assignmentMetrics.assignedAxes, 0);
+    const recommendedTileCapacity =
+        totalMotors > 0 ? Math.floor(totalMotors / 2) : 0;
+
+    const pruneAssignmentsWithinBounds = useCallback(
+        (rows: number, cols: number) => {
+            setMirrorConfig((prevConfig) => {
+                let mutated = false;
+                const nextConfig: MirrorConfig = new Map();
+                for (const [key, assignment] of prevConfig.entries()) {
+                    const [row, col] = key.split('-').map(Number);
+                    if (row >= rows || col >= cols) {
+                        mutated = true;
+                        continue;
+                    }
+                    nextConfig.set(key, assignment);
+                }
+                return mutated ? nextConfig : prevConfig;
+            });
+        },
+        [setMirrorConfig],
+    );
+
+    const handleGridSizeChange = (rows: number, cols: number) => {
+        const normalizedRows = Math.max(1, rows);
+        const normalizedCols = Math.max(1, cols);
+
+        if (normalizedRows === gridSize.rows && normalizedCols === gridSize.cols) {
+            return;
+        }
+
+        const isShrink =
+            normalizedRows < gridSize.rows || normalizedCols < gridSize.cols;
+
+        const outOfBoundsKeys: string[] = [];
+        for (const key of mirrorConfig.keys()) {
+            const [row, col] = key.split('-').map(Number);
+            if (row >= normalizedRows || col >= normalizedCols) {
+                outOfBoundsKeys.push(key);
+            }
+        }
+
+        if (isShrink && outOfBoundsKeys.length > 0) {
+            const previous = gridSize;
+            const next = { rows: normalizedRows, cols: normalizedCols };
+            const affectedPositions = outOfBoundsKeys
+                .slice(0, 6)
+                .map((key) => {
+                    const [row, col] = key.split('-');
+                    return `[${row},${col}]`;
+                })
+                .join(', ');
+            const truncatedList =
+                outOfBoundsKeys.length > 6
+                    ? `${affectedPositions}, … (${outOfBoundsKeys.length} total)`
+                    : affectedPositions;
+
+            onGridSizeChange(normalizedRows, normalizedCols);
+            confirmAction(
+                `Shrink grid to ${normalizedRows}×${normalizedCols}?`,
+                `This change will unassign ${outOfBoundsKeys.length} tile${outOfBoundsKeys.length === 1 ? '' : 's'} (${truncatedList}). Continue?`,
+                () => {
+                    pruneAssignmentsWithinBounds(next.rows, next.cols);
+                },
+                {
+                    confirmLabel: 'Shrink and unassign',
+                    cancelLabel: 'Keep current size',
+                    onCancel: () => {
+                        onGridSizeChange(previous.rows, previous.cols);
+                    },
+                },
+            );
+            return;
+        }
+
+        onGridSizeChange(normalizedRows, normalizedCols);
+        pruneAssignmentsWithinBounds(normalizedRows, normalizedCols);
     };
 
     const isMotorAssigned = useCallback(
@@ -232,8 +325,21 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         [acknowledgeDriver],
     );
 
-    const confirmAction = (title: string, message: string, onConfirm: () => void) => {
-        setModalState({ isOpen: true, title, message, onConfirm });
+    const confirmAction = (
+        title: string,
+        message: string,
+        onConfirm: () => void,
+        options?: Pick<ModalState, 'confirmLabel' | 'cancelLabel' | 'onCancel'>,
+    ) => {
+        setModalState({
+            isOpen: true,
+            title,
+            message,
+            onConfirm,
+            confirmLabel: options?.confirmLabel,
+            cancelLabel: options?.cancelLabel,
+            onCancel: options?.onCancel,
+        });
     };
 
     const handleResetAll = () => {
@@ -242,7 +348,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             'Are you sure you want to clear the entire grid? This action cannot be undone.',
             () => {
                 setMirrorConfig(new Map());
-                setModalState({ ...modalState, isOpen: false });
             },
         );
     };
@@ -282,7 +387,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                     }
                     return newConfig;
                 });
-                setModalState({ ...modalState, isOpen: false });
             },
         );
     };
@@ -347,6 +451,32 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         [discoveryCount],
     );
 
+    const unassignedGroups = useMemo(
+        () =>
+            discoveredNodes
+                .map((node) => ({
+                    macAddress: node.macAddress,
+                    presence: node.presence,
+                    staleForMs: node.staleForMs,
+                    brokerDisconnected: node.brokerDisconnected,
+                    motors: node.motors.filter((motor) => !isMotorAssigned(motor)),
+                }))
+                .filter((group) => group.motors.length > 0),
+        [discoveredNodes, isMotorAssigned],
+    );
+
+    const driverStatusByMac = useMemo(() => {
+        const map = new Map<string, DriverStatusSnapshot>();
+        drivers.forEach((driver) => {
+            map.set(driver.mac, {
+                presence: driver.presence,
+                staleForMs: driver.staleForMs,
+                brokerDisconnected: driver.brokerDisconnected,
+            });
+        });
+        return map;
+    }, [drivers]);
+
     const connectionPhaseLabel = useMemo(() => {
         switch (connectionState.status) {
             case 'connected':
@@ -397,16 +527,38 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                         <p className="mt-2 text-gray-300">{modalState.message}</p>
                         <div className="mt-6 flex justify-end space-x-4">
                             <button
-                                onClick={() => setModalState({ ...modalState, isOpen: false })}
+                                onClick={() => {
+                                    modalState.onCancel?.();
+                                    setModalState({
+                                        isOpen: false,
+                                        title: '',
+                                        message: '',
+                                        onConfirm: () => {},
+                                        onCancel: undefined,
+                                        confirmLabel: undefined,
+                                        cancelLabel: undefined,
+                                    });
+                                }}
                                 className="px-4 py-2 rounded-md bg-gray-600 text-white font-semibold hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
                             >
-                                Cancel
+                                {modalState.cancelLabel ?? 'Cancel'}
                             </button>
                             <button
-                                onClick={modalState.onConfirm}
+                                onClick={() => {
+                                    modalState.onConfirm();
+                                    setModalState({
+                                        isOpen: false,
+                                        title: '',
+                                        message: '',
+                                        onConfirm: () => {},
+                                        onCancel: undefined,
+                                        confirmLabel: undefined,
+                                        cancelLabel: undefined,
+                                    });
+                                }}
                                 className="px-4 py-2 rounded-md bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400"
                             >
-                                Confirm
+                                {modalState.confirmLabel ?? 'Confirm'}
                             </button>
                         </div>
                     </div>
@@ -506,7 +658,19 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             onSizeChange={handleGridSizeChange}
                             isTestMode={isTestMode}
                             onTestModeChange={setIsTestMode}
+                            assignedAxes={assignmentMetrics.assignedAxes}
+                            assignedTiles={assignmentMetrics.assignedTiles}
+                            totalMotors={totalMotors}
+                            unassignedAxes={unassignedAxesEstimate}
+                            recommendedTileCapacity={recommendedTileCapacity}
                         />
+                        <div className="mt-3">
+                            <UnassignedMotorTray
+                                groups={unassignedGroups}
+                                onUnassignByDrop={handleUnassignByDrop}
+                                staleThresholdMs={staleThresholdMs}
+                            />
+                        </div>
                         <div className="flex-grow mt-4 overflow-auto p-2 bg-black/20 rounded-md">
                             <MirrorGrid
                                 rows={gridSize.rows}
@@ -516,6 +680,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 onMoveCommand={handleMoveCommand}
                                 isTestMode={isTestMode}
                                 selectedNodeMac={selectedNodeMacEffective}
+                                driverStatuses={driverStatusByMac}
                             />
                         </div>
                     </main>

@@ -2,40 +2,10 @@ import React, { useState } from 'react';
 
 import { formatRelativeTime } from '../utils/time';
 
+import MotorChip from './MotorChip';
+
 import type { DriverPresence } from '../context/StatusContext';
 import type { DraggedMotorInfo, Motor } from '../types';
-
-const DraggableMotor: React.FC<{ motor: Motor; isAssigned: boolean }> = ({ motor, isAssigned }) => {
-    const handleDragStart = (event: React.DragEvent<HTMLDivElement>) => {
-        if (isAssigned) {
-            event.preventDefault();
-            return;
-        }
-        const dragData: DraggedMotorInfo = {
-            source: 'list',
-            motor,
-        };
-        event.dataTransfer.setData('application/json', JSON.stringify(dragData));
-        event.dataTransfer.effectAllowed = 'move';
-    };
-
-    const baseClasses =
-        'flex items-center justify-center p-2 border rounded-md font-mono text-sm transition-all duration-200';
-    const assignedClasses = 'bg-gray-700 border-gray-600 text-gray-500 cursor-not-allowed';
-    const availableClasses =
-        'bg-cyan-800/50 border-cyan-700 text-cyan-200 cursor-grab hover:bg-cyan-700/70 hover:shadow-lg hover:shadow-cyan-500/20';
-
-    return (
-        <div
-            draggable={!isAssigned}
-            onDragStart={handleDragStart}
-            className={`${baseClasses} ${isAssigned ? assignedClasses : availableClasses}`}
-            title={`Node: ${motor.nodeMac}\nMotor Index: ${motor.motorIndex}\nStatus: ${isAssigned ? 'Assigned' : 'Available'}`}
-        >
-            Motor {motor.motorIndex}
-        </div>
-    );
-};
 
 export interface DiscoveredNode {
     macAddress: string;
@@ -223,10 +193,10 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {motorsToShow.map((motor) => (
-                                <DraggableMotor
+                                <MotorChip
                                     key={`${motor.nodeMac}-${motor.motorIndex}`}
                                     motor={motor}
-                                    isAssigned={isMotorAssigned(motor)}
+                                    disabled={isMotorAssigned(motor)}
                                 />
                             ))}
                         </div>

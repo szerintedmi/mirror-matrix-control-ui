@@ -2,7 +2,7 @@ import React from 'react';
 
 import MirrorCell from './MirrorCell';
 
-import type { MirrorConfig, GridPosition, Axis } from '../types';
+import type { MirrorConfig, GridPosition, Axis, DriverStatusSnapshot } from '../types';
 
 interface MirrorGridProps {
     rows: number;
@@ -12,6 +12,7 @@ interface MirrorGridProps {
     onMoveCommand: (pos: GridPosition, axis: 'x' | 'y', direction: number) => void;
     isTestMode: boolean;
     selectedNodeMac: string | null;
+    driverStatuses: Map<string, DriverStatusSnapshot>;
 }
 
 const MirrorGrid: React.FC<MirrorGridProps> = ({
@@ -22,6 +23,7 @@ const MirrorGrid: React.FC<MirrorGridProps> = ({
     onMoveCommand,
     isTestMode,
     selectedNodeMac,
+    driverStatuses,
 }) => {
     return (
         <div
@@ -47,6 +49,7 @@ const MirrorGrid: React.FC<MirrorGridProps> = ({
                         onMoveCommand={onMoveCommand}
                         isTestMode={isTestMode}
                         selectedNodeMac={selectedNodeMac}
+                        driverStatuses={driverStatuses}
                     />
                 );
             })}

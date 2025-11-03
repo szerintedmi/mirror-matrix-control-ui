@@ -40,3 +40,11 @@ export interface Pattern {
     canvasSize: { rows: number; cols: number };
     litPixels: Set<string>; // "row-col" format
 }
+
+export type DriverPresenceSummary = 'ready' | 'stale' | 'offline';
+
+export interface DriverStatusSnapshot {
+    presence: DriverPresenceSummary;
+    staleForMs: number;
+    brokerDisconnected: boolean;
+}
