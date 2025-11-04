@@ -21,7 +21,7 @@ interface PatternEditorPageProps {
     defaultCanvasSize: { rows: number; cols: number };
 }
 
-type Tool = 'paint' | 'erase';
+type Tool = 'place' | 'remove';
 
 interface TileDraft {
     id: string;
@@ -38,6 +38,7 @@ interface HoverState {
 }
 
 const TILE_HALF = TILE_PLACEMENT_UNIT / 2;
+const HISTORY_LIMIT = 200;
 
 const findNearestTileWithinThreshold = (
     tiles: TileDraft[],
@@ -148,8 +149,13 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const [name, setName] = useState('');
     const [canvasSize, setCanvasSize] = useState(defaultCanvasSize);
     const [tiles, setTiles] = useState<TileDraft[]>([]);
+    const historyRef = useRef<{ past: TileDraft[][]; future: TileDraft[][] }>({
+        past: [],
+        future: [],
+    });
+    const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
     const [pixelCountError, setPixelCountError] = useState(false);
-    const [activeTool, setActiveTool] = useState<Tool>('paint');
+    const [activeTool, setActiveTool] = useState<Tool>('place');
     const [isSnapMode, setIsSnapMode] = useState(true);
     const [isPointerDown, setIsPointerDown] = useState(false);
     const [hoverState, setHoverState] = useState<HoverState | null>(null);
@@ -161,6 +167,74 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const drawingSurfaceRef = useRef<SVGSVGElement | null>(null);
     const dragVisitedCellsRef = useRef<Set<string>>(new Set());
     const pixelErrorTimeoutRef = useRef<number | null>(null);
+
+    const syncHistoryState = useCallback(() => {
+        setHistoryState({
+            canUndo: historyRef.current.past.length > 0,
+            canRedo: historyRef.current.future.length > 0,
+        });
+    }, []);
+
+    const applyTileUpdate = useCallback(
+        (
+            updater: (prev: TileDraft[]) => TileDraft[],
+            options?: { recordHistory?: boolean; resetHistory?: boolean },
+        ) => {
+            const recordHistory = options?.recordHistory ?? true;
+            const resetHistory = options?.resetHistory ?? false;
+
+            setTiles((prev) => {
+                const next = updater(prev);
+                if (resetHistory) {
+                    historyRef.current = { past: [], future: [] };
+                    syncHistoryState();
+                    return next;
+                }
+                if (recordHistory && next !== prev) {
+                    const past =
+                        historyRef.current.past.length >= HISTORY_LIMIT
+                            ? [...historyRef.current.past.slice(1), prev]
+                            : [...historyRef.current.past, prev];
+                    historyRef.current = { past, future: [] };
+                    syncHistoryState();
+                }
+                return next;
+            });
+        },
+        [syncHistoryState],
+    );
+
+    const undoTiles = useCallback(() => {
+        setTiles((prev) => {
+            const { past, future } = historyRef.current;
+            if (past.length === 0) {
+                return prev;
+            }
+            const previous = past[past.length - 1];
+            historyRef.current = {
+                past: past.slice(0, -1),
+                future: [prev, ...future],
+            };
+            syncHistoryState();
+            return previous;
+        });
+    }, [syncHistoryState]);
+
+    const redoTiles = useCallback(() => {
+        setTiles((prev) => {
+            const { past, future } = historyRef.current;
+            if (future.length === 0) {
+                return prev;
+            }
+            const [next, ...restFuture] = future;
+            historyRef.current = {
+                past: [...past, prev],
+                future: restFuture,
+            };
+            syncHistoryState();
+            return next;
+        });
+    }, [syncHistoryState]);
 
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
@@ -202,7 +276,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
 
                 setName(existingPattern.name);
                 setCanvasSize({ rows: inferredRows, cols: inferredCols });
-                setTiles(hydratedTiles);
+                applyTileUpdate(() => hydratedTiles, { recordHistory: false, resetHistory: true });
                 setBaseline({
                     name: existingPattern.name.trim(),
                     tileSignature: hydratedTiles
@@ -213,14 +287,14 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             } else {
                 setName('New Pattern');
                 setCanvasSize({ rows: fallbackRows, cols: fallbackCols });
-                setTiles([]);
+                applyTileUpdate(() => [], { recordHistory: false, resetHistory: true });
                 setBaseline({ name: 'New Pattern', tileSignature: '' });
             }
             setHasHydrated(true);
         }, 0);
 
         return () => window.clearTimeout(timeoutId);
-    }, [existingPattern, defaultCanvasSize]);
+    }, [applyTileUpdate, existingPattern, defaultCanvasSize]);
 
     useEffect(() => {
         return () => {
@@ -233,6 +307,68 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     useEffect(() => {
         dragVisitedCellsRef.current.clear();
     }, [isSnapMode]);
+
+    useEffect(() => {
+        const isEditableTarget = (target: EventTarget | null) => {
+            if (!(target instanceof HTMLElement)) {
+                return false;
+            }
+            const tag = target.tagName.toLowerCase();
+            return (
+                target.isContentEditable ||
+                tag === 'input' ||
+                tag === 'textarea' ||
+                tag === 'select'
+            );
+        };
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target)) {
+                return;
+            }
+            const key = event.key.toLowerCase();
+            const hasMeta = event.metaKey || event.ctrlKey;
+
+            if (hasMeta && !event.altKey) {
+                if (key === 'z') {
+                    event.preventDefault();
+                    if (event.shiftKey) {
+                        redoTiles();
+                    } else {
+                        undoTiles();
+                    }
+                    return;
+                }
+                if (!event.shiftKey && key === 'y') {
+                    event.preventDefault();
+                    redoTiles();
+                    return;
+                }
+            }
+
+            if (hasMeta || event.altKey) {
+                return;
+            }
+
+            if (key === 'p') {
+                event.preventDefault();
+                setActiveTool('place');
+                return;
+            }
+            if (key === 'r') {
+                event.preventDefault();
+                setActiveTool('remove');
+                return;
+            }
+            if (key === 's') {
+                event.preventDefault();
+                setIsSnapMode((prev) => !prev);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [redoTiles, setActiveTool, setIsSnapMode, undoTiles]);
 
     const triggerPointLimit = useCallback(() => {
         if (pixelErrorTimeoutRef.current !== null) {
@@ -279,6 +415,27 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     );
 
     const heatmapTexture = useHeatmapImage(rasterizedHeatmap);
+
+    const hoveredTile = useMemo(() => {
+        if (activeTool !== 'remove' || !hoverState) {
+            return null;
+        }
+        return (
+            selectTileUnderPointer(
+                tiles,
+                hoverState.centerX,
+                hoverState.centerY,
+                isSnapMode ? SNAP_OVERLAP_EPSILON : FREE_OVERLAP_DISTANCE,
+            ) ?? null
+        );
+    }, [activeTool, hoverState, isSnapMode, tiles]);
+
+    const removeHighlight = useMemo(() => {
+        if (activeTool !== 'remove' || !hoveredTile) {
+            return null;
+        }
+        return { centerX: hoveredTile.centerX, centerY: hoveredTile.centerY };
+    }, [activeTool, hoveredTile]);
 
     useEffect(() => {
         const syncDebugFlag = () => {
@@ -369,11 +526,11 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 ? `snap-${target.row}-${target.col}`
                 : `free-${target.centerX.toFixed(1)}-${target.centerY.toFixed(1)}`;
 
-            if (activeTool === 'paint') {
+            if (activeTool === 'place') {
                 if (visited.has(visitedKey)) {
                     return;
                 }
-                setTiles((prev) => {
+                applyTileUpdate((prev) => {
                     if (prev.length >= mirrorCount) {
                         triggerPointLimit();
                         return prev;
@@ -390,7 +547,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                     ];
                 });
             } else {
-                setTiles((prev) => {
+                applyTileUpdate((prev) => {
                     if (prev.length === 0) {
                         return prev;
                     }
@@ -408,7 +565,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 });
             }
         },
-        [activeTool, isSnapMode, mirrorCount, triggerPointLimit],
+        [activeTool, applyTileUpdate, isSnapMode, mirrorCount, triggerPointLimit],
     );
 
     const updateHover = useCallback(
@@ -430,20 +587,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const clearHover = useCallback(() => {
         setHoverState(null);
     }, []);
-
-    const hoveredTileId = useMemo(() => {
-        if (activeTool !== 'erase' || !hoverState) {
-            return null;
-        }
-        return (
-            selectTileUnderPointer(
-                tiles,
-                hoverState.centerX,
-                hoverState.centerY,
-                isSnapMode ? SNAP_OVERLAP_EPSILON : FREE_OVERLAP_DISTANCE,
-            )?.id ?? null
-        );
-    }, [activeTool, hoverState, isSnapMode, tiles]);
 
     const handlePointerDown = useCallback(
         (event: React.PointerEvent<SVGSVGElement>) => {
@@ -565,7 +708,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
 
         const maxX = nextSize.cols * TILE_PLACEMENT_UNIT - TILE_HALF;
         const maxY = nextSize.rows * TILE_PLACEMENT_UNIT - TILE_HALF;
-        setTiles((prev) =>
+        applyTileUpdate((prev) =>
             prev.filter(
                 (tile) =>
                     tile.centerX >= TILE_HALF &&
@@ -591,7 +734,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     };
 
     const handleShift = (direction: 'up' | 'down' | 'left' | 'right') => {
-        setTiles((prev) => {
+        applyTileUpdate((prev) => {
             const next: TileDraft[] = [];
             for (const tile of prev) {
                 let deltaX = 0;
@@ -617,7 +760,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 'Are you sure you want to clear all tiles? This action cannot be undone.',
             )
         ) {
-            setTiles([]);
+            applyTileUpdate(() => []);
             clearHover();
         }
     };
@@ -741,25 +884,25 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                         <div className="mt-2 inline-flex gap-2">
                             <button
                                 type="button"
-                                onClick={() => setActiveTool('paint')}
-                                className={`px-3 py-1.5 rounded-md border transition-colors ${activeTool === 'paint' ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
+                                onClick={() => setActiveTool('place')}
+                                className={`px-3 py-1.5 rounded-md border transition-colors ${activeTool === 'place' ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
                             >
-                                Paint
+                                Place (P)
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setActiveTool('erase')}
-                                className={`px-3 py-1.5 rounded-md border transition-colors ${activeTool === 'erase' ? 'bg-rose-600 border-rose-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
+                                onClick={() => setActiveTool('remove')}
+                                className={`px-3 py-1.5 rounded-md border transition-colors ${activeTool === 'remove' ? 'bg-rose-600 border-rose-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
                             >
-                                Erase
+                                Remove (R)
                             </button>
                         </div>
                         <p className="mt-2 text-xs text-gray-500 leading-snug">
-                            Paint adds tiles (drag to draw). Erase removes the highlighted tile
-                            under the cursor.
+                            Place adds tiles (drag to draw). Remove deletes the highlighted tile,
+                            making it easy to tidy overlaps quickly.
                         </p>
                         <div className="mt-4 flex items-center justify-between">
-                            <span className="text-sm text-gray-400">Snap to grid</span>
+                            <span className="text-sm text-gray-400">Snap to grid (S)</span>
                             <button
                                 type="button"
                                 onClick={() => setIsSnapMode((prev) => !prev)}
@@ -771,6 +914,38 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                         <p className="mt-2 text-xs text-gray-500 leading-snug">
                             Turn snap off to position tiles freely and explore overlap intensity.
                         </p>
+                        <div className="mt-4 flex flex-col gap-2">
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={undoTiles}
+                                    disabled={!historyState.canUndo}
+                                    className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                                        historyState.canUndo
+                                            ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
+                                            : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                    Undo (⌘Z / Ctrl+Z)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={redoTiles}
+                                    disabled={!historyState.canRedo}
+                                    className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                                        historyState.canRedo
+                                            ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
+                                            : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                    Redo (⇧⌘Z / Ctrl+Shift+Z)
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-500 leading-snug">
+                                Shortcuts: P place, R remove, S snap, ⌘/Ctrl+Z undo, ⇧⌘/Ctrl+Shift+Z
+                                redo.
+                            </p>
+                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -989,28 +1164,30 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                             </text>
                                         );
                                     })}
-                                {activeTool === 'paint' && hoverState && (
+                                {activeTool === 'place' && hoverState && (
                                     <rect
                                         x={hoverState.centerX - TILE_HALF}
                                         y={hoverState.centerY - TILE_HALF}
                                         width={TILE_PLACEMENT_UNIT}
                                         height={TILE_PLACEMENT_UNIT}
-                                        fill="none"
-                                        stroke="rgba(34, 211, 238, 0.85)"
-                                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.18, 0.8)}
-                                        strokeDasharray={`${TILE_PLACEMENT_UNIT * 0.4} ${TILE_PLACEMENT_UNIT * 0.2}`}
+                                        fill="rgba(34, 211, 238, 0.12)"
+                                        stroke="rgba(34, 211, 238, 0.55)"
+                                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.14, 0.6)}
+                                        strokeDasharray={`${TILE_PLACEMENT_UNIT * 0.3} ${TILE_PLACEMENT_UNIT * 0.2}`}
                                         pointerEvents="none"
+                                        rx={TILE_PLACEMENT_UNIT * 0.18}
+                                        ry={TILE_PLACEMENT_UNIT * 0.18}
                                     />
                                 )}
-                                {activeTool === 'erase' && hoverState && hoveredTileId && (
+                                {removeHighlight && (
                                     <rect
-                                        x={hoverState.centerX - TILE_HALF}
-                                        y={hoverState.centerY - TILE_HALF}
+                                        x={removeHighlight.centerX - TILE_HALF}
+                                        y={removeHighlight.centerY - TILE_HALF}
                                         width={TILE_PLACEMENT_UNIT}
                                         height={TILE_PLACEMENT_UNIT}
-                                        fill="rgba(248, 113, 113, 0.12)"
-                                        stroke="rgba(248, 113, 113, 0.95)"
-                                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.18, 0.8)}
+                                        fill="rgba(248, 113, 113, 0.08)"
+                                        stroke="rgba(248, 113, 113, 0.65)"
+                                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.14, 0.6)}
                                         pointerEvents="none"
                                         rx={TILE_PLACEMENT_UNIT * 0.18}
                                         ry={TILE_PLACEMENT_UNIT * 0.18}
@@ -1026,7 +1203,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                         pointerEvents="none"
                                         fontWeight={500}
                                     >
-                                        Click or drag to paint
+                                        Click or drag to place tiles
                                     </text>
                                 )}
                             </svg>
