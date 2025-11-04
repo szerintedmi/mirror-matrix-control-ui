@@ -8,6 +8,13 @@ import {
     TILE_PLACEMENT_UNIT,
 } from '../constants/pattern';
 import { useHeatmapImage } from '../hooks/useHeatmapImage';
+import {
+    createHistoryStacks,
+    pushHistorySnapshot,
+    redoHistorySnapshot,
+    type HistoryStacks,
+    undoHistorySnapshot,
+} from '../utils/history';
 import { computeCanvasCoverage, rasterizeTileCoverage } from '../utils/patternIntensity';
 
 import type { NavigationControls } from '../App';
@@ -149,10 +156,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const [name, setName] = useState('');
     const [canvasSize, setCanvasSize] = useState(defaultCanvasSize);
     const [tiles, setTiles] = useState<TileDraft[]>([]);
-    const historyRef = useRef<{ past: TileDraft[][]; future: TileDraft[][] }>({
-        past: [],
-        future: [],
-    });
+    const historyRef = useRef<HistoryStacks<TileDraft[]>>(createHistoryStacks<TileDraft[]>());
     const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
     const [pixelCountError, setPixelCountError] = useState(false);
     const [activeTool, setActiveTool] = useState<Tool>('place');
@@ -186,16 +190,16 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             setTiles((prev) => {
                 const next = updater(prev);
                 if (resetHistory) {
-                    historyRef.current = { past: [], future: [] };
+                    historyRef.current = createHistoryStacks<TileDraft[]>();
                     syncHistoryState();
                     return next;
                 }
                 if (recordHistory && next !== prev) {
-                    const past =
-                        historyRef.current.past.length >= HISTORY_LIMIT
-                            ? [...historyRef.current.past.slice(1), prev]
-                            : [...historyRef.current.past, prev];
-                    historyRef.current = { past, future: [] };
+                    historyRef.current = pushHistorySnapshot(
+                        historyRef.current,
+                        prev,
+                        HISTORY_LIMIT,
+                    );
                     syncHistoryState();
                 }
                 return next;
@@ -206,33 +210,25 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
 
     const undoTiles = useCallback(() => {
         setTiles((prev) => {
-            const { past, future } = historyRef.current;
-            if (past.length === 0) {
+            const result = undoHistorySnapshot(historyRef.current, prev);
+            if (result.value === prev) {
                 return prev;
             }
-            const previous = past[past.length - 1];
-            historyRef.current = {
-                past: past.slice(0, -1),
-                future: [prev, ...future],
-            };
+            historyRef.current = result.history;
             syncHistoryState();
-            return previous;
+            return result.value;
         });
     }, [syncHistoryState]);
 
     const redoTiles = useCallback(() => {
         setTiles((prev) => {
-            const { past, future } = historyRef.current;
-            if (future.length === 0) {
+            const result = redoHistorySnapshot(historyRef.current, prev);
+            if (result.value === prev) {
                 return prev;
             }
-            const [next, ...restFuture] = future;
-            historyRef.current = {
-                past: [...past, prev],
-                future: restFuture,
-            };
+            historyRef.current = result.history;
             syncHistoryState();
-            return next;
+            return result.value;
         });
     }, [syncHistoryState]);
 
@@ -854,6 +850,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 <div className="text-center bg-gray-800/50 ring-1 ring-white/10 p-3 rounded-lg w-full max-w-xs shadow-md">
                     <p className="text-gray-400 text-sm">Active Tiles</p>
                     <p
+                        data-testid="active-tile-count"
                         className={`font-mono text-2xl font-bold mt-1 transition-colors ${pixelCountError ? 'text-red-500' : 'text-cyan-300'}`}
                     >
                         {usedTiles} / {mirrorCount}
@@ -885,6 +882,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setActiveTool('place')}
+                                aria-pressed={activeTool === 'place'}
                                 className={`px-3 py-1.5 rounded-md border transition-colors ${activeTool === 'place' ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
                             >
                                 Place (P)
@@ -892,6 +890,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setActiveTool('remove')}
+                                aria-pressed={activeTool === 'remove'}
                                 className={`px-3 py-1.5 rounded-md border transition-colors ${activeTool === 'remove' ? 'bg-rose-600 border-rose-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
                             >
                                 Remove (R)
@@ -906,6 +905,9 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setIsSnapMode((prev) => !prev)}
+                                aria-pressed={isSnapMode}
+                                aria-label="Toggle snap to grid (S)"
+                                data-testid="snap-toggle"
                                 className={`px-3 py-1 rounded-md border text-sm transition-colors ${isSnapMode ? 'bg-cyan-700/60 border-cyan-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'}`}
                             >
                                 {isSnapMode ? 'On' : 'Off'}
@@ -920,6 +922,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                     type="button"
                                     onClick={undoTiles}
                                     disabled={!historyState.canUndo}
+                                    data-testid="undo-button"
                                     className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
                                         historyState.canUndo
                                             ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
@@ -932,6 +935,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                     type="button"
                                     onClick={redoTiles}
                                     disabled={!historyState.canRedo}
+                                    data-testid="redo-button"
                                     className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
                                         historyState.canRedo
                                             ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
@@ -1076,6 +1080,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                         <div style={surfaceStyle} className="relative max-h-full w-full">
                             <svg
                                 ref={drawingSurfaceRef}
+                                data-testid="pattern-editor-canvas"
                                 width="100%"
                                 height="100%"
                                 viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
