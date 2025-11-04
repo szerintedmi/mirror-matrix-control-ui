@@ -1,10 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS, TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import {
-    calculateDisplayIntensity,
-    intensityToFill,
-} from '../utils/patternIntensity';
+    FREE_OVERLAP_DISTANCE,
+    MAX_CANVAS_CELLS,
+    MIN_CANVAS_CELLS,
+    SNAP_OVERLAP_EPSILON,
+    TILE_PLACEMENT_UNIT,
+} from '../constants/pattern';
+import { useHeatmapImage } from '../hooks/useHeatmapImage';
+import { computeCanvasCoverage, rasterizeTileCoverage } from '../utils/patternIntensity';
 
 import type { NavigationControls } from '../App';
 import type { Pattern } from '../types';
@@ -33,58 +37,62 @@ interface HoverState {
     col: number;
 }
 
-const SNAP_MATCH_EPSILON = 1e-3;
+const TILE_HALF = TILE_PLACEMENT_UNIT / 2;
 
-const findLatestSnapTile = (
-    drafts: TileDraft[],
+const findNearestTileWithinThreshold = (
+    tiles: TileDraft[],
     centerX: number,
     centerY: number,
+    threshold: number,
 ): TileDraft | null => {
+    const thresholdSq = threshold * threshold;
     let candidate: TileDraft | null = null;
-    for (const tile of drafts) {
-        if (
-            Math.abs(tile.centerX - centerX) > SNAP_MATCH_EPSILON ||
-            Math.abs(tile.centerY - centerY) > SNAP_MATCH_EPSILON
-        ) {
-            continue;
-        }
-        if (!candidate || tile.createdAt >= candidate.createdAt) {
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const tile of tiles) {
+        const dx = tile.centerX - centerX;
+        const dy = tile.centerY - centerY;
+        const distanceSq = dx * dx + dy * dy;
+        if (distanceSq <= thresholdSq && distanceSq < bestDistance) {
             candidate = tile;
+            bestDistance = distanceSq;
         }
     }
     return candidate;
 };
 
-const findNearestTile = (
-    drafts: TileDraft[],
+const selectTileUnderPointer = (
+    tiles: TileDraft[],
     centerX: number,
     centerY: number,
-): { tile: TileDraft | null; distanceSq: number } => {
-    let candidate: TileDraft | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const tile of drafts) {
-        const dx = tile.centerX - centerX;
-        const dy = tile.centerY - centerY;
-        const distanceSq = dx * dx + dy * dy;
-        if (
-            distanceSq < bestDistance ||
-            (distanceSq === bestDistance && candidate && tile.createdAt > candidate.createdAt)
-        ) {
-            candidate = tile;
-            bestDistance = distanceSq;
+    threshold: number,
+): TileDraft | null => {
+    const half = TILE_PLACEMENT_UNIT / 2;
+    let coveringTile: TileDraft | null = null;
+    for (const tile of tiles) {
+        const withinX = Math.abs(tile.centerX - centerX) <= half;
+        const withinY = Math.abs(tile.centerY - centerY) <= half;
+        if (withinX && withinY) {
+            if (!coveringTile || tile.createdAt >= coveringTile.createdAt) {
+                coveringTile = tile;
+            }
         }
     }
-    return { tile: candidate, distanceSq: bestDistance };
+
+    if (coveringTile) {
+        return coveringTile;
+    }
+
+    return findNearestTileWithinThreshold(tiles, centerX, centerY, threshold);
 };
-
-const TILE_HALF = TILE_PLACEMENT_UNIT / 2;
-
-const makeCellKey = (row: number, col: number): string => `${row}-${col}`;
 
 const tileCenterToCell = (centerX: number, centerY: number): { row: number; col: number } => ({
     row: Math.floor(centerY / TILE_PLACEMENT_UNIT),
     col: Math.floor(centerX / TILE_PLACEMENT_UNIT),
 });
+
+const isIntensityDebugEnabled = (): boolean =>
+    typeof window !== 'undefined' &&
+    window.localStorage?.getItem('debugPatternIntensity') === 'true';
 
 const clampCanvasCells = (value: number): number =>
     Math.min(MAX_CANVAS_CELLS, Math.max(MIN_CANVAS_CELLS, value));
@@ -147,6 +155,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const [hoverState, setHoverState] = useState<HoverState | null>(null);
     const [hasHydrated, setHasHydrated] = useState(false);
     const [baseline, setBaseline] = useState({ name: 'New Pattern', tileSignature: '' });
+    const [debugEnabled, setDebugEnabled] = useState<boolean>(() => isIntensityDebugEnabled());
 
     const [containerRef, containerSize] = useElementSize<HTMLDivElement>();
     const drawingSurfaceRef = useRef<SVGSVGElement | null>(null);
@@ -174,8 +183,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                     if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
                         return;
                     }
-                    const withinX = centerX >= TILE_HALF && centerX <= inferredCols * TILE_PLACEMENT_UNIT - TILE_HALF;
-                    const withinY = centerY >= TILE_HALF && centerY <= inferredRows * TILE_PLACEMENT_UNIT - TILE_HALF;
+                    const withinX =
+                        centerX >= TILE_HALF &&
+                        centerX <= inferredCols * TILE_PLACEMENT_UNIT - TILE_HALF;
+                    const withinY =
+                        centerY >= TILE_HALF &&
+                        centerY <= inferredRows * TILE_PLACEMENT_UNIT - TILE_HALF;
                     if (!withinX || !withinY) {
                         return;
                     }
@@ -234,10 +247,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             const maxX = canvasSize.cols * TILE_PLACEMENT_UNIT - TILE_HALF;
             const maxY = canvasSize.rows * TILE_PLACEMENT_UNIT - TILE_HALF;
             return (
-                centerX >= TILE_HALF &&
-                centerX <= maxX &&
-                centerY >= TILE_HALF &&
-                centerY <= maxY
+                centerX >= TILE_HALF && centerX <= maxX && centerY >= TILE_HALF && centerY <= maxY
             );
         },
         [canvasSize.cols, canvasSize.rows],
@@ -246,36 +256,66 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const canvasWidth = canvasSize.cols * TILE_PLACEMENT_UNIT;
     const canvasHeight = canvasSize.rows * TILE_PLACEMENT_UNIT;
 
-    const { cellEntries, maxOverlap } = useMemo(() => {
-        const aggregates = new Map<
-            string,
-            { centerX: number; centerY: number; tiles: TileDraft[] }
-        >();
-        for (const tile of tiles) {
-            const cell = tileCenterToCell(tile.centerX, tile.centerY);
-            const row = Math.min(Math.max(cell.row, 0), Math.max(canvasSize.rows - 1, 0));
-            const col = Math.min(Math.max(cell.col, 0), Math.max(canvasSize.cols - 1, 0));
-            const key = makeCellKey(row, col);
-            const centerX = (col + 0.5) * TILE_PLACEMENT_UNIT;
-            const centerY = (row + 0.5) * TILE_PLACEMENT_UNIT;
-            const entry = aggregates.get(key);
-            if (entry) {
-                entry.tiles.push(tile);
-            } else {
-                aggregates.set(key, {
-                    centerX,
-                    centerY,
-                    tiles: [tile],
-                });
-            }
-        }
-        const entries = Array.from(aggregates.values());
-        const maxCount = entries.reduce((acc, entry) => Math.max(acc, entry.tiles.length), 0);
-        return {
-            cellEntries: entries,
-            maxOverlap: maxCount > 0 ? maxCount : 1,
+    const tileFootprints = useMemo(
+        () =>
+            tiles.map((tile) => ({
+                id: tile.id,
+                centerX: tile.centerX,
+                centerY: tile.centerY,
+                width: TILE_PLACEMENT_UNIT,
+                height: TILE_PLACEMENT_UNIT,
+            })),
+        [tiles],
+    );
+
+    const coverage = useMemo(
+        () => computeCanvasCoverage(tileFootprints, canvasSize.rows, canvasSize.cols),
+        [canvasSize.cols, canvasSize.rows, tileFootprints],
+    );
+
+    const rasterizedHeatmap = useMemo(
+        () => rasterizeTileCoverage(tileFootprints, canvasWidth, canvasHeight),
+        [canvasHeight, canvasWidth, tileFootprints],
+    );
+
+    const heatmapTexture = useHeatmapImage(rasterizedHeatmap);
+
+    useEffect(() => {
+        const syncDebugFlag = () => {
+            setDebugEnabled((prev) => {
+                const next = isIntensityDebugEnabled();
+                return prev === next ? prev : next;
+            });
         };
-    }, [canvasSize.cols, canvasSize.rows, tiles]);
+        syncDebugFlag();
+        const interval = window.setInterval(syncDebugFlag, 1000);
+        return () => window.clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        if (!debugEnabled || coverage.cells.length === 0) {
+            return;
+        }
+
+        console.groupCollapsed(
+            '[Intensity Debug]',
+            `mode=${isSnapMode ? 'snap' : 'free'}`,
+            `maxCell=${coverage.maxCount}`,
+            `litCells=${coverage.cells.length}`,
+        );
+        console.table(
+            [...coverage.cells]
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 20)
+                .map((cell) => ({
+                    row: cell.row,
+                    col: cell.col,
+                    count: cell.count,
+                    intensity: cell.intensity.toFixed(3),
+                })),
+        );
+        console.groupEnd();
+    }, [coverage, debugEnabled, isSnapMode]);
 
     const getPointerTarget = useCallback(
         (event: React.PointerEvent<SVGSVGElement>) => {
@@ -307,14 +347,8 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 centerX = (col + 0.5) * TILE_PLACEMENT_UNIT;
                 centerY = (row + 0.5) * TILE_PLACEMENT_UNIT;
             } else {
-                centerX = Math.min(
-                    Math.max(relativeX, TILE_HALF),
-                    canvasWidth - TILE_HALF,
-                );
-                centerY = Math.min(
-                    Math.max(relativeY, TILE_HALF),
-                    canvasHeight - TILE_HALF,
-                );
+                centerX = Math.min(Math.max(relativeX, TILE_HALF), canvasWidth - TILE_HALF);
+                centerY = Math.min(Math.max(relativeY, TILE_HALF), canvasHeight - TILE_HALF);
                 const cell = tileCenterToCell(centerX, centerY);
                 row = cell.row;
                 col = cell.col;
@@ -360,15 +394,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                     if (prev.length === 0) {
                         return prev;
                     }
-                    const candidate = isSnapMode
-                        ? findLatestSnapTile(prev, target.centerX, target.centerY)
-                        : (() => {
-                              const nearest = findNearestTile(prev, target.centerX, target.centerY);
-                              const maxDistance = TILE_PLACEMENT_UNIT * TILE_PLACEMENT_UNIT * 4;
-                              return nearest.tile && nearest.distanceSq <= maxDistance
-                                  ? nearest.tile
-                                  : null;
-                          })();
+                    const candidate = selectTileUnderPointer(
+                        prev,
+                        target.centerX,
+                        target.centerY,
+                        isSnapMode ? SNAP_OVERLAP_EPSILON : FREE_OVERLAP_DISTANCE,
+                    );
                     if (!candidate) {
                         return prev;
                     }
@@ -399,6 +430,20 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const clearHover = useCallback(() => {
         setHoverState(null);
     }, []);
+
+    const hoveredTileId = useMemo(() => {
+        if (activeTool !== 'erase' || !hoverState) {
+            return null;
+        }
+        return (
+            selectTileUnderPointer(
+                tiles,
+                hoverState.centerX,
+                hoverState.centerY,
+                isSnapMode ? SNAP_OVERLAP_EPSILON : FREE_OVERLAP_DISTANCE,
+            )?.id ?? null
+        );
+    }, [activeTool, hoverState, isSnapMode, tiles]);
 
     const handlePointerDown = useCallback(
         (event: React.PointerEvent<SVGSVGElement>) => {
@@ -434,18 +479,21 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         [applyToolToTarget, clearHover, getPointerTarget, isPointerDown, updateHover],
     );
 
-    const handlePointerUp = useCallback((event: React.PointerEvent<SVGSVGElement>) => {
-        if (!isPointerDown) {
-            return;
-        }
-        try {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-        } catch {
-            // Pointer capture may not be set; ignore
-        }
-        setIsPointerDown(false);
-        dragVisitedCellsRef.current.clear();
-    }, [isPointerDown]);
+    const handlePointerUp = useCallback(
+        (event: React.PointerEvent<SVGSVGElement>) => {
+            if (!isPointerDown) {
+                return;
+            }
+            try {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            } catch {
+                // Pointer capture may not be set; ignore
+            }
+            setIsPointerDown(false);
+            dragVisitedCellsRef.current.clear();
+        },
+        [isPointerDown],
+    );
 
     const handlePointerLeave = useCallback(() => {
         setIsPointerDown(false);
@@ -509,7 +557,9 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
 
     const handleCanvasSizeChange = (axis: 'rows' | 'cols', value: string) => {
         const numericValue = Number.parseInt(value, 10);
-        const clamped = clampCanvasCells(Number.isNaN(numericValue) ? MIN_CANVAS_CELLS : numericValue);
+        const clamped = clampCanvasCells(
+            Number.isNaN(numericValue) ? MIN_CANVAS_CELLS : numericValue,
+        );
         const nextSize = { ...canvasSize, [axis]: clamped } as { rows: number; cols: number };
         setCanvasSize(nextSize);
 
@@ -596,20 +646,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         surfaceStyle.height = `${height}px`;
     }
 
-    const hoveredTileId = useMemo(() => {
-        if (activeTool !== 'erase' || !hoverState) {
-            return null;
-        }
-        if (isSnapMode) {
-            return (
-                findLatestSnapTile(tiles, hoverState.centerX, hoverState.centerY)?.id ?? null
-            );
-        }
-        const nearest = findNearestTile(tiles, hoverState.centerX, hoverState.centerY);
-        const maxDistance = TILE_PLACEMENT_UNIT * TILE_PLACEMENT_UNIT * 4;
-        return nearest.tile && nearest.distanceSq <= maxDistance ? nearest.tile.id : null;
-    }, [activeTool, hoverState, isSnapMode, tiles]);
-
     const trimmedName = useMemo(() => name.trim(), [name]);
     const tileSignature = useMemo(
         () =>
@@ -685,7 +721,10 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             <div className="flex-grow flex flex-col md:flex-row gap-6 min-h-0">
                 <aside className="w-full md:w-72 lg:w-80 bg-gray-800/50 rounded-lg p-4 ring-1 ring-white/10 flex-shrink-0 flex flex-col gap-6 overflow-y-auto">
                     <div>
-                        <label htmlFor="patternName" className="block text-sm font-medium text-gray-300">
+                        <label
+                            htmlFor="patternName"
+                            className="block text-sm font-medium text-gray-300"
+                        >
                             Pattern Name
                         </label>
                         <input
@@ -716,7 +755,8 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                             </button>
                         </div>
                         <p className="mt-2 text-xs text-gray-500 leading-snug">
-                            Paint adds tiles (drag to draw). Erase removes the highlighted tile under the cursor.
+                            Paint adds tiles (drag to draw). Erase removes the highlighted tile
+                            under the cursor.
                         </p>
                         <div className="mt-4 flex items-center justify-between">
                             <span className="text-sm text-gray-400">Snap to grid</span>
@@ -774,7 +814,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                 className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
                                 aria-label="Shift all tiles up"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
                                     <path
                                         fillRule="evenodd"
                                         d="M10 18a.75.75 0 01-.75-.75V4.66l-2.22 2.28a.75.75 0 11-1.06-1.06l3.5-3.5a.75.75 0 011.06 0l3.5 3.5a.75.75 0 11-1.06 1.06L10.75 4.66v12.59A.75.75 0 0110 18z"
@@ -789,7 +834,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                 className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
                                 aria-label="Shift all tiles left"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
                                     <path
                                         fillRule="evenodd"
                                         d="M18 10a.75.75 0 01-.75.75H4.66l2.28 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 111.06 1.06L4.66 9.92h12.59A.75.75 0 0118 10z"
@@ -802,7 +852,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                 className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
                                 aria-label="Shift all tiles down"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
                                     <path
                                         fillRule="evenodd"
                                         d="M10 2a.75.75 0 01.75.75v12.59l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V2.75A.75.75 0 0110 2z"
@@ -815,7 +870,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                 className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
                                 aria-label="Shift all tiles right"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
                                     <path
                                         fillRule="evenodd"
                                         d="M2 10a.75.75 0 01.75-.75h12.59l-2.22-2.22a.75.75 0 111.06-1.06l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 11-1.06-1.06l2.22-2.22H2.75A.75.75 0 012 10z"
@@ -839,37 +899,37 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                         className="w-full h-full flex items-center justify-center"
                     >
                         <div style={surfaceStyle} className="relative max-h-full w-full">
-            <svg
-                ref={drawingSurfaceRef}
-                width="100%"
-                height="100%"
-                viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-                className="w-full h-full touch-none cursor-crosshair"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerLeave}
-                onPointerCancel={handlePointerCancel}
-                onContextMenu={(event) => event.preventDefault()}
-            >
-                <rect
-                    x={0}
-                    y={0}
-                    width={canvasWidth}
-                    height={canvasHeight}
-                    fill="rgba(17, 24, 39, 0.85)"
-                />
-                {tiles.map((tile) => (
-                    <rect
-                        key={`bg-${tile.id}`}
-                        x={tile.centerX - TILE_HALF}
-                        y={tile.centerY - TILE_HALF}
-                        width={TILE_PLACEMENT_UNIT}
-                        height={TILE_PLACEMENT_UNIT}
-                        fill="rgba(148, 163, 184, 0.16)"
-                        pointerEvents="none"
-                    />
-                ))}
+                            <svg
+                                ref={drawingSurfaceRef}
+                                width="100%"
+                                height="100%"
+                                viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+                                className="w-full h-full touch-none cursor-crosshair"
+                                onPointerDown={handlePointerDown}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={handlePointerUp}
+                                onPointerLeave={handlePointerLeave}
+                                onPointerCancel={handlePointerCancel}
+                                onContextMenu={(event) => event.preventDefault()}
+                            >
+                                <rect
+                                    x={0}
+                                    y={0}
+                                    width={canvasWidth}
+                                    height={canvasHeight}
+                                    fill="rgba(17, 24, 39, 0.85)"
+                                />
+                                {heatmapTexture && (
+                                    <image
+                                        x={0}
+                                        y={0}
+                                        width={canvasWidth}
+                                        height={canvasHeight}
+                                        preserveAspectRatio="none"
+                                        xlinkHref={heatmapTexture}
+                                        style={{ imageRendering: 'pixelated' }}
+                                    />
+                                )}
                                 {Array.from({ length: canvasSize.cols + 1 }).map((_, index) => {
                                     const position = index * TILE_PLACEMENT_UNIT;
                                     return (
@@ -900,72 +960,35 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                         />
                                     );
                                 })}
-                {isSnapMode &&
-                    cellEntries.map((entry) => {
-                        const cellKey = `${entry.centerX.toFixed(3)}-${entry.centerY.toFixed(3)}`;
-                        const count = entry.tiles.length;
-                        const intensity = calculateDisplayIntensity(count, maxOverlap);
-                        const fill = intensityToFill(intensity * 0.6);
-                        const highlight =
-                            activeTool === 'erase' &&
-                            hoveredTileId !== null &&
-                            entry.tiles.some((tile) => tile.id === hoveredTileId);
-                        const strokeColor = highlight
-                            ? 'rgba(248, 113, 113, 0.95)'
-                            : 'none';
-                        const strokeWidth = highlight
-                            ? Math.max(TILE_PLACEMENT_UNIT * 0.18, 0.9)
-                            : 0;
-                        const x = entry.centerX - TILE_HALF;
-                        const y = entry.centerY - TILE_HALF;
-                        return (
-                            <g key={cellKey} pointerEvents="none">
-                                <rect
-                                    x={x}
-                                    y={y}
-                                    width={TILE_PLACEMENT_UNIT}
-                                    height={TILE_PLACEMENT_UNIT}
-                                    fill={fill}
-                                    stroke={strokeColor}
-                                    strokeWidth={strokeWidth}
-                                    rx={TILE_PLACEMENT_UNIT * 0.1}
-                                    ry={TILE_PLACEMENT_UNIT * 0.1}
-                                />
-                                <text
-                                    x={x + TILE_PLACEMENT_UNIT / 2}
-                                    y={y + TILE_PLACEMENT_UNIT / 2 + TILE_PLACEMENT_UNIT * 0.1}
-                                    textAnchor="middle"
-                                    fontSize={Math.max(TILE_PLACEMENT_UNIT * 0.32, 4)}
-                                    fill="rgba(15, 23, 42, 0.5)"
-                                    pointerEvents="none"
-                                    fontWeight={500}
-                                >
-                                    {count}
-                                </text>
-                            </g>
-                        );
-                    })}
-                {!isSnapMode && activeTool === 'erase' && hoveredTileId && (() => {
-                    const hoveredTile = tiles.find((tile) => tile.id === hoveredTileId);
-                    if (!hoveredTile) {
-                        return null;
-                    }
-                    return (
-                        <rect
-                            key="hover-highlight"
-                            x={hoveredTile.centerX - TILE_HALF}
-                            y={hoveredTile.centerY - TILE_HALF}
-                            width={TILE_PLACEMENT_UNIT}
-                            height={TILE_PLACEMENT_UNIT}
-                            fill="none"
-                            stroke="rgba(248, 113, 113, 0.95)"
-                            strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.18, 0.9)}
-                            rx={TILE_PLACEMENT_UNIT * 0.1}
-                            ry={TILE_PLACEMENT_UNIT * 0.1}
-                            pointerEvents="none"
-                        />
-                    );
-                })()}
+                                {isSnapMode &&
+                                    coverage.cells.map((cell) => {
+                                        if (cell.count <= 1) {
+                                            return null;
+                                        }
+                                        const x = cell.col * TILE_PLACEMENT_UNIT;
+                                        const y = cell.row * TILE_PLACEMENT_UNIT;
+                                        return (
+                                            <text
+                                                key={`count-${cell.row}-${cell.col}`}
+                                                x={x + TILE_PLACEMENT_UNIT / 2}
+                                                y={
+                                                    y +
+                                                    TILE_PLACEMENT_UNIT / 2 +
+                                                    TILE_PLACEMENT_UNIT * 0.1
+                                                }
+                                                textAnchor="middle"
+                                                fontSize={Math.max(
+                                                    TILE_PLACEMENT_UNIT * 0.32,
+                                                    4,
+                                                )}
+                                                fill="rgba(15, 23, 42, 0.55)"
+                                                pointerEvents="none"
+                                                fontWeight={500}
+                                            >
+                                                {cell.count}
+                                            </text>
+                                        );
+                                    })}
                                 {activeTool === 'paint' && hoverState && (
                                     <rect
                                         x={hoverState.centerX - TILE_HALF}
@@ -977,6 +1000,20 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                                         strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.18, 0.8)}
                                         strokeDasharray={`${TILE_PLACEMENT_UNIT * 0.4} ${TILE_PLACEMENT_UNIT * 0.2}`}
                                         pointerEvents="none"
+                                    />
+                                )}
+                                {activeTool === 'erase' && hoverState && hoveredTileId && (
+                                    <rect
+                                        x={hoverState.centerX - TILE_HALF}
+                                        y={hoverState.centerY - TILE_HALF}
+                                        width={TILE_PLACEMENT_UNIT}
+                                        height={TILE_PLACEMENT_UNIT}
+                                        fill="rgba(248, 113, 113, 0.12)"
+                                        stroke="rgba(248, 113, 113, 0.95)"
+                                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.18, 0.8)}
+                                        pointerEvents="none"
+                                        rx={TILE_PLACEMENT_UNIT * 0.18}
+                                        ry={TILE_PLACEMENT_UNIT * 0.18}
                                     />
                                 )}
                                 {tiles.length === 0 && (

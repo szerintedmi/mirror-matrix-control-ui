@@ -3,11 +3,8 @@ import React, { useMemo } from 'react';
 import MotorStatusOverview from '../components/MotorStatusOverview';
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { useStatusStore } from '../context/StatusContext';
-import {
-    calculateDisplayIntensity,
-    intensityToFill,
-    intensityToStroke,
-} from '../utils/patternIntensity';
+import { useHeatmapImage } from '../hooks/useHeatmapImage';
+import { computeCanvasCoverage, rasterizeTileCoverage } from '../utils/patternIntensity';
 
 import type { NavigationControls } from '../App';
 import type { MirrorConfig, Pattern, PatternCanvas } from '../types';
@@ -33,41 +30,30 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
         paddingBottom: `${(1 / aspectRatio) * 100}%`,
         position: 'relative',
     };
+    const rows = Math.max(1, Math.round(canvasHeight / TILE_PLACEMENT_UNIT));
+    const cols = Math.max(1, Math.round(canvasWidth / TILE_PLACEMENT_UNIT));
 
-    const { entries, maxCount } = useMemo(() => {
-        const aggregates = new Map<
-            string,
-            { x: number; y: number; width: number; height: number; count: number }
-        >();
-
-        for (const tile of pattern.tiles) {
-            const row = Math.round(tile.center.y / TILE_PLACEMENT_UNIT - 0.5);
-            const col = Math.round(tile.center.x / TILE_PLACEMENT_UNIT - 0.5);
-            const key = `${row}-${col}`;
-            const existing = aggregates.get(key);
-            if (existing) {
-                existing.count += 1;
-            } else {
-                aggregates.set(key, {
-                    x: col * TILE_PLACEMENT_UNIT,
-                    y: row * TILE_PLACEMENT_UNIT,
-                    width: tile.size.width,
-                    height: tile.size.height,
-                    count: 1,
-                });
-            }
-        }
-
-        const aggregateEntries = Array.from(aggregates.entries()).map(([key, value]) => ({
-            key,
-            ...value,
+    const footprints = useMemo(() => {
+        return pattern.tiles.map((tile) => ({
+            id: tile.id,
+            centerX: tile.center.x,
+            centerY: tile.center.y,
+            width: tile.size.width,
+            height: tile.size.height,
         }));
-        const maxCount = aggregateEntries.reduce((acc, entry) => Math.max(acc, entry.count), 0);
-        return {
-            entries: aggregateEntries,
-            maxCount: maxCount > 0 ? maxCount : 1,
-        };
     }, [pattern.tiles]);
+
+    const coverage = useMemo(
+        () => computeCanvasCoverage(footprints, rows, cols),
+        [cols, footprints, rows],
+    );
+
+    const rasterizedHeatmap = useMemo(
+        () => rasterizeTileCoverage(footprints, canvasWidth, canvasHeight),
+        [canvasHeight, canvasWidth, footprints],
+    );
+
+    const heatmapTexture = useHeatmapImage(rasterizedHeatmap);
 
     return (
         <div style={containerStyle}>
@@ -83,35 +69,35 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
                     height={canvasHeight}
                     fill="rgba(17, 24, 39, 0.65)"
                 />
-                {entries.map((entry) => {
-                    const intensity = calculateDisplayIntensity(entry.count, maxCount);
-                    const fill = intensityToFill(intensity);
-                    const stroke = intensityToStroke(intensity);
+                {heatmapTexture && (
+                    <image
+                        x={0}
+                        y={0}
+                        width={canvasWidth}
+                        height={canvasHeight}
+                        preserveAspectRatio="none"
+                        xlinkHref={heatmapTexture}
+                        style={{ imageRendering: 'pixelated' }}
+                    />
+                )}
+                {coverage.cells.map((cell) => {
+                    if (cell.count <= 1) {
+                        return null;
+                    }
+                    const x = cell.col * TILE_PLACEMENT_UNIT;
+                    const y = cell.row * TILE_PLACEMENT_UNIT;
                     return (
-                        <g key={entry.key} pointerEvents="none">
-                            <rect
-                                x={entry.x}
-                                y={entry.y}
-                                width={entry.width}
-                                height={entry.height}
-                                fill={fill}
-                                stroke={stroke}
-                                strokeWidth={Math.max(entry.width * 0.12, 0.6)}
-                                rx={entry.width * 0.1}
-                                ry={entry.height * 0.1}
-                            />
-                            <text
-                                x={entry.x + entry.width / 2}
-                                y={entry.y + entry.height / 2 + entry.height * 0.1}
-                                textAnchor="middle"
-                                fontSize={Math.max(entry.width * 0.32, 4)}
-                                fill="rgba(15, 23, 42, 0.5)"
-                                fontWeight={500}
-                                pointerEvents="none"
-                            >
-                                {entry.count}
-                            </text>
-                        </g>
+                        <text
+                            key={`cell-${pattern.id}-${cell.row}-${cell.col}`}
+                            x={x + TILE_PLACEMENT_UNIT / 2}
+                            y={y + TILE_PLACEMENT_UNIT / 2 + TILE_PLACEMENT_UNIT * 0.1}
+                            textAnchor="middle"
+                            fontSize={Math.max(TILE_PLACEMENT_UNIT * 0.32, 4)}
+                            fill="rgba(15, 23, 42, 0.55)"
+                            fontWeight={500}
+                        >
+                            {cell.count}
+                        </text>
                     );
                 })}
             </svg>
@@ -270,8 +256,8 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                 {pattern.name}
                                             </h3>
                                             <p className="text-sm text-gray-400 font-mono">
-                                                {inferredRows}x{inferredCols} - {pattern.tiles.length}{' '}
-                                                tiles
+                                                {inferredRows}x{inferredCols} -{' '}
+                                                {pattern.tiles.length} tiles
                                             </p>
 
                                             <div className="mt-2 pt-2 border-t border-gray-700/50 text-xs">

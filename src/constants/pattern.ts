@@ -6,5 +6,8 @@ export const MAX_CANVAS_CELLS = Math.max(
     Math.floor(MAX_CANVAS_DIMENSION_UNITS / TILE_PLACEMENT_UNIT),
 );
 
-export const MIN_TILE_INTENSITY = 0.35;
+export const MIN_TILE_INTENSITY = 0.2;
 export const MAX_TILE_INTENSITY = 0.95;
+export const INTENSITY_GAMMA = 1.4;
+export const SNAP_OVERLAP_EPSILON = 1e-3;
+export const FREE_OVERLAP_DISTANCE = TILE_PLACEMENT_UNIT * 0.45;
