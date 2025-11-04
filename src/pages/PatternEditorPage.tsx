@@ -380,10 +380,10 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 tiles,
                 hoverState.centerX,
                 hoverState.centerY,
-                isSnapMode ? SNAP_OVERLAP_EPSILON : FREE_OVERLAP_DISTANCE,
+                FREE_OVERLAP_DISTANCE,
             ) ?? null
         );
-    }, [activeTool, hoverState, isSnapMode, tiles]);
+    }, [activeTool, hoverState, tiles]);
 
     const removeHighlight = useMemo(() => {
         if (activeTool !== 'remove' || !hoveredTile) {
@@ -410,7 +410,9 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             let row: number;
             let col: number;
 
-            if (isSnapMode) {
+            const shouldSnapPointer = isSnapMode && activeTool === 'place';
+
+            if (shouldSnapPointer) {
                 col = Math.min(
                     Math.floor(relativeX / TILE_PLACEMENT_UNIT),
                     Math.max(canvasSize.cols - 1, 0),
@@ -434,13 +436,22 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             }
             return { centerX, centerY, row, col };
         },
-        [canvasHeight, canvasWidth, canvasSize.cols, canvasSize.rows, isCenterWithin, isSnapMode],
+        [
+            activeTool,
+            canvasHeight,
+            canvasWidth,
+            canvasSize.cols,
+            canvasSize.rows,
+            isCenterWithin,
+            isSnapMode,
+        ],
     );
 
     const applyToolToTarget = useCallback(
         (target: { centerX: number; centerY: number; row: number; col: number }) => {
             const visited = dragVisitedCellsRef.current;
-            const visitedKey = isSnapMode
+            const targetIsSnapped = isSnapMode && activeTool === 'place';
+            const visitedKey = targetIsSnapped
                 ? `snap-${target.row}-${target.col}`
                 : `free-${target.centerX.toFixed(1)}-${target.centerY.toFixed(1)}`;
 
@@ -473,7 +484,11 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                         prev,
                         target.centerX,
                         target.centerY,
-                        isSnapMode ? SNAP_OVERLAP_EPSILON : FREE_OVERLAP_DISTANCE,
+                        activeTool === 'remove'
+                            ? FREE_OVERLAP_DISTANCE
+                            : isSnapMode
+                              ? SNAP_OVERLAP_EPSILON
+                              : FREE_OVERLAP_DISTANCE,
                     );
                     if (!candidate) {
                         return prev;
