@@ -16,6 +16,7 @@ import {
     undoHistorySnapshot,
 } from '../utils/history';
 import { computeCanvasCoverage, rasterizeTileCoverage } from '../utils/patternIntensity';
+import { handlePatternShortcut, type ShortcutCallbacks } from '../utils/patternShortcuts';
 
 import type { NavigationControls } from '../App';
 import type { Pattern } from '../types';
@@ -98,10 +99,6 @@ const tileCenterToCell = (centerX: number, centerY: number): { row: number; col:
     col: Math.floor(centerX / TILE_PLACEMENT_UNIT),
 });
 
-const isIntensityDebugEnabled = (): boolean =>
-    typeof window !== 'undefined' &&
-    window.localStorage?.getItem('debugPatternIntensity') === 'true';
-
 const clampCanvasCells = (value: number): number =>
     Math.min(MAX_CANVAS_CELLS, Math.max(MIN_CANVAS_CELLS, value));
 
@@ -165,7 +162,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const [hoverState, setHoverState] = useState<HoverState | null>(null);
     const [hasHydrated, setHasHydrated] = useState(false);
     const [baseline, setBaseline] = useState({ name: 'New Pattern', tileSignature: '' });
-    const [debugEnabled, setDebugEnabled] = useState<boolean>(() => isIntensityDebugEnabled());
 
     const [containerRef, containerSize] = useElementSize<HTMLDivElement>();
     const drawingSurfaceRef = useRef<SVGSVGElement | null>(null);
@@ -304,67 +300,30 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         dragVisitedCellsRef.current.clear();
     }, [isSnapMode]);
 
+    const shortcutCallbacksRef = useRef<ShortcutCallbacks | null>(null);
+
     useEffect(() => {
-        const isEditableTarget = (target: EventTarget | null) => {
-            if (!(target instanceof HTMLElement)) {
-                return false;
-            }
-            const tag = target.tagName.toLowerCase();
-            return (
-                target.isContentEditable ||
-                tag === 'input' ||
-                tag === 'textarea' ||
-                tag === 'select'
-            );
+        shortcutCallbacksRef.current = {
+            place: () => setActiveTool('place'),
+            remove: () => setActiveTool('remove'),
+            toggleSnap: () => setIsSnapMode((prev) => !prev),
+            undo: undoTiles,
+            redo: redoTiles,
         };
+    }, [redoTiles, setActiveTool, setIsSnapMode, undoTiles]);
 
+    useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (isEditableTarget(event.target)) {
+            if (!shortcutCallbacksRef.current) {
                 return;
             }
-            const key = event.key.toLowerCase();
-            const hasMeta = event.metaKey || event.ctrlKey;
-
-            if (hasMeta && !event.altKey) {
-                if (key === 'z') {
-                    event.preventDefault();
-                    if (event.shiftKey) {
-                        redoTiles();
-                    } else {
-                        undoTiles();
-                    }
-                    return;
-                }
-                if (!event.shiftKey && key === 'y') {
-                    event.preventDefault();
-                    redoTiles();
-                    return;
-                }
-            }
-
-            if (hasMeta || event.altKey) {
-                return;
-            }
-
-            if (key === 'p') {
+            if (handlePatternShortcut(event, shortcutCallbacksRef.current)) {
                 event.preventDefault();
-                setActiveTool('place');
-                return;
-            }
-            if (key === 'r') {
-                event.preventDefault();
-                setActiveTool('remove');
-                return;
-            }
-            if (key === 's') {
-                event.preventDefault();
-                setIsSnapMode((prev) => !prev);
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [redoTiles, setActiveTool, setIsSnapMode, undoTiles]);
+    }, []);
 
     const triggerPointLimit = useCallback(() => {
         if (pixelErrorTimeoutRef.current !== null) {
@@ -432,43 +391,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         }
         return { centerX: hoveredTile.centerX, centerY: hoveredTile.centerY };
     }, [activeTool, hoveredTile]);
-
-    useEffect(() => {
-        const syncDebugFlag = () => {
-            setDebugEnabled((prev) => {
-                const next = isIntensityDebugEnabled();
-                return prev === next ? prev : next;
-            });
-        };
-        syncDebugFlag();
-        const interval = window.setInterval(syncDebugFlag, 1000);
-        return () => window.clearInterval(interval);
-    }, []);
-
-    useEffect(() => {
-        if (!debugEnabled || coverage.cells.length === 0) {
-            return;
-        }
-
-        console.groupCollapsed(
-            '[Intensity Debug]',
-            `mode=${isSnapMode ? 'snap' : 'free'}`,
-            `maxCell=${coverage.maxCount}`,
-            `litCells=${coverage.cells.length}`,
-        );
-        console.table(
-            [...coverage.cells]
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 20)
-                .map((cell) => ({
-                    row: cell.row,
-                    col: cell.col,
-                    count: cell.count,
-                    intensity: cell.intensity.toFixed(3),
-                })),
-        );
-        console.groupEnd();
-    }, [coverage, debugEnabled, isSnapMode]);
 
     const getPointerTarget = useCallback(
         (event: React.PointerEvent<SVGSVGElement>) => {
