@@ -23,6 +23,9 @@ import type { EditorTool, HoverState, TileDraft } from '../types/patternEditor';
 const TILE_HALF = TILE_PLACEMENT_UNIT / 2;
 const TILE_RADIUS = TILE_PLACEMENT_UNIT / 2;
 const HISTORY_LIMIT = 200;
+const FREE_DRAG_MIN_DISTANCE = TILE_PLACEMENT_UNIT * 0.1;
+const FREE_DRAG_MAX_DISTANCE = TILE_PLACEMENT_UNIT * 0.75;
+const SPEED_FOR_MAX_SPACING = TILE_PLACEMENT_UNIT * 8;
 
 const createTileId = (): string =>
     globalThis.crypto?.randomUUID?.() ??
@@ -132,6 +135,7 @@ export const usePatternEditorInteractions = (
     const [hoverState, setHoverState] = useState<HoverState | null>(null);
     const [isPointerDown, setIsPointerDown] = useState(false);
     const dragVisitedCellsRef = useRef<Set<string>>(new Set());
+    const lastFreePlacementRef = useRef<{ x: number; y: number; timestamp: number } | null>(null);
 
     const syncHistoryState = useCallback(() => {
         setHistoryState({
@@ -286,6 +290,24 @@ export const usePatternEditorInteractions = (
                 : `free-${target.centerX.toFixed(1)}-${target.centerY.toFixed(1)}`;
 
             if (activeTool === 'place') {
+                if (!targetIsSnapped) {
+                    const lastPlacement = lastFreePlacementRef.current;
+                    if (lastPlacement) {
+                        const dx = target.centerX - lastPlacement.x;
+                        const dy = target.centerY - lastPlacement.y;
+                        const distanceSq = dx * dx + dy * dy;
+                        const distance = Math.sqrt(distanceSq);
+                        const elapsedMs = performance.now() - lastPlacement.timestamp;
+                        const speed = elapsedMs > 0 ? (distance / elapsedMs) * 1000 : 0;
+                        const speedRatio = Math.min(Math.max(speed / SPEED_FOR_MAX_SPACING, 0), 1);
+                        const requiredSpacing =
+                            FREE_DRAG_MIN_DISTANCE +
+                            (FREE_DRAG_MAX_DISTANCE - FREE_DRAG_MIN_DISTANCE) * speedRatio;
+                        if (distance < requiredSpacing) {
+                            return;
+                        }
+                    }
+                }
                 if (visited.has(visitedKey)) {
                     return;
                 }
@@ -307,6 +329,15 @@ export const usePatternEditorInteractions = (
                         },
                     ];
                 });
+                if (targetIsSnapped) {
+                    lastFreePlacementRef.current = null;
+                } else {
+                    lastFreePlacementRef.current = {
+                        x: target.centerX,
+                        y: target.centerY,
+                        timestamp: performance.now(),
+                    };
+                }
             } else {
                 applyTileUpdate((prev) => {
                     if (prev.length === 0) {
@@ -324,6 +355,7 @@ export const usePatternEditorInteractions = (
                     visited.add(visitedKey);
                     return prev.filter((tile) => tile.id !== candidate.id);
                 });
+                lastFreePlacementRef.current = null;
             }
         },
         [activeTool, applyTileUpdate, isSnapMode, mirrorCount, triggerPointLimit],
@@ -346,6 +378,7 @@ export const usePatternEditorInteractions = (
             }
             event.preventDefault();
             dragVisitedCellsRef.current.clear();
+            lastFreePlacementRef.current = null;
             setIsPointerDown(true);
             handlePointerTarget(target);
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -377,6 +410,7 @@ export const usePatternEditorInteractions = (
         }
         setIsPointerDown(false);
         dragVisitedCellsRef.current.clear();
+        lastFreePlacementRef.current = null;
     }, []);
 
     const handlePointerUp = useCallback(
@@ -392,12 +426,14 @@ export const usePatternEditorInteractions = (
     const handlePointerLeave = useCallback(() => {
         setIsPointerDown(false);
         dragVisitedCellsRef.current.clear();
+        lastFreePlacementRef.current = null;
         setHoverState(null);
     }, []);
 
     const handlePointerCancel = useCallback(() => {
         setIsPointerDown(false);
         dragVisitedCellsRef.current.clear();
+        lastFreePlacementRef.current = null;
         setHoverState(null);
     }, []);
 
