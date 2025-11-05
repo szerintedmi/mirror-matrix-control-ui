@@ -467,7 +467,10 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         const unassignedCount = discoveredNodes.filter((node) => node.hasUnassigned).length;
 
         return [
-            { id: 'online' as const, label: onlineCount > 0 ? `Online (${onlineCount})` : 'Online' },
+            {
+                id: 'online' as const,
+                label: onlineCount > 0 ? `Online (${onlineCount})` : 'Online',
+            },
             { id: 'all' as const, label: 'All' },
             { id: 'new' as const, label: discoveryCount > 0 ? `New (${discoveryCount})` : 'New' },
             {
@@ -476,8 +479,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             },
             {
                 id: 'unassigned' as const,
-                label:
-                    unassignedCount > 0 ? `Unassigned (${unassignedCount})` : 'Unassigned',
+                label: unassignedCount > 0 ? `Unassigned (${unassignedCount})` : 'Unassigned',
             },
         ];
     }, [discoveredNodes, discoveryCount]);

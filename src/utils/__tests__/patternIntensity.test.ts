@@ -6,6 +6,7 @@ import {
     calculateNormalizedIntensity,
     computeCanvasCoverage,
     rasterizeTileCoverage,
+    mapTileIntensitiesFromCoverage,
     intensityToFill,
     intensityToStroke,
 } from '../patternIntensity';
@@ -140,5 +141,29 @@ describe('patternIntensity helpers', () => {
         expect(raster.intensities[overlapIndex]).toBeCloseTo(
             calculateDisplayIntensity(2, raster.maxCount),
         );
+    });
+
+    it('maps circle intensities back to individual tiles', () => {
+        const tiles = [
+            {
+                id: 'a',
+                centerX: TILE_PLACEMENT_UNIT * 0.5,
+                centerY: TILE_PLACEMENT_UNIT * 0.5,
+                width: TILE_PLACEMENT_UNIT,
+                height: TILE_PLACEMENT_UNIT,
+            },
+            {
+                id: 'b',
+                centerX: TILE_PLACEMENT_UNIT * 1.2,
+                centerY: TILE_PLACEMENT_UNIT * 1.2,
+                width: TILE_PLACEMENT_UNIT,
+                height: TILE_PLACEMENT_UNIT,
+            },
+        ];
+        const coverage = computeCanvasCoverage(tiles, 3, 3);
+        const mapped = mapTileIntensitiesFromCoverage(tiles, coverage, 3, 3);
+        expect(mapped).toHaveLength(2);
+        expect(mapped[0].count).toBeGreaterThan(0);
+        expect(mapped[0].intensity).toBeGreaterThan(0);
     });
 });

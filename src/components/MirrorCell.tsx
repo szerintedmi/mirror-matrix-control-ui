@@ -199,19 +199,19 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
     return (
         <div className="space-y-2">
             <div
-            data-testid={dataTestId}
-            draggable={!!motor}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            aria-disabled={!motor}
-            className={`flex h-10 items-center justify-center rounded transition-colors duration-200 border ${borderClasses} ${baseBg} ${draggableClasses}`}
-            title={slotTitle}
-        >
-            {motor ? (
-                <span className={`font-mono text-sm ${motorTextColor}`}>
-                    {motor.nodeMac.slice(-5)}:{motor.motorIndex}
+                data-testid={dataTestId}
+                draggable={!!motor}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                aria-disabled={!motor}
+                className={`flex h-10 items-center justify-center rounded transition-colors duration-200 border ${borderClasses} ${baseBg} ${draggableClasses}`}
+                title={slotTitle}
+            >
+                {motor ? (
+                    <span className={`font-mono text-sm ${motorTextColor}`}>
+                        {motor.nodeMac.slice(-5)}:{motor.motorIndex}
                     </span>
                 ) : (
                     <span className="font-mono text-sm text-gray-500">--</span>

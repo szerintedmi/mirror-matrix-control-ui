@@ -1,10 +1,6 @@
 import React from 'react';
 
-import {
-    MAX_CANVAS_CELLS,
-    MIN_CANVAS_CELLS,
-    TILE_PLACEMENT_UNIT,
-} from '../constants/pattern';
+import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS, TILE_PLACEMENT_UNIT } from '../constants/pattern';
 
 import type { EditorTool } from '../types/patternEditor';
 
@@ -91,8 +87,8 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
                     </button>
                 </div>
                 <p className="mt-2 text-xs text-gray-500 leading-snug">
-                    Place adds tiles (drag to draw). Remove deletes the highlighted tile, making it easy
-                    to tidy overlaps quickly.
+                    Place adds tiles (drag to draw). Remove deletes the highlighted tile, making it
+                    easy to tidy overlaps quickly.
                 </p>
                 <div className="mt-4 flex items-center justify-between">
                     <span className="text-sm text-gray-400">Snap to grid (S)</span>
@@ -266,7 +262,8 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
                     Clear Canvas
                 </button>
                 <p className="text-xs text-gray-500 leading-snug">
-                    Each tile is {TILE_PLACEMENT_UNIT} units square. Shifting respects current snap mode.
+                    Each tile is {TILE_PLACEMENT_UNIT} units in diameter. Shifting respects current
+                    snap mode.
                 </p>
             </div>
 

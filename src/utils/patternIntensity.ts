@@ -86,6 +86,25 @@ const clampIndex = (value: number, max: number): number => {
 
 const clampDimension = (value: number): number => Math.max(1, Math.round(value));
 
+const circleIntersectsRect = (
+    centerX: number,
+    centerY: number,
+    radius: number,
+    rectMinX: number,
+    rectMinY: number,
+    rectMaxX: number,
+    rectMaxY: number,
+): boolean => {
+    const nearestX = Math.max(rectMinX, Math.min(centerX, rectMaxX));
+    const nearestY = Math.max(rectMinY, Math.min(centerY, rectMaxY));
+    const dx = centerX - nearestX;
+    const dy = centerY - nearestY;
+    const radiusSq = radius * radius;
+    const distanceSq = dx * dx + dy * dy;
+    const threshold = Math.max(0, radiusSq - 1e-6);
+    return distanceSq <= threshold;
+};
+
 export const computeCanvasCoverage = (
     tiles: TileFootprint[],
     canvasRows: number,
@@ -96,15 +115,13 @@ export const computeCanvasCoverage = (
     }
 
     const counts = Array.from({ length: canvasRows }, () => new Array(canvasCols).fill(0));
-    const epsilon = 1e-6;
 
     tiles.forEach((tile) => {
-        const halfW = tile.width / 2;
-        const halfH = tile.height / 2;
-        const minX = tile.centerX - halfW;
-        const maxX = tile.centerX + halfW - epsilon;
-        const minY = tile.centerY - halfH;
-        const maxY = tile.centerY + halfH - epsilon;
+        const radius = Math.min(tile.width, tile.height) / 2;
+        const minX = tile.centerX - radius;
+        const maxX = tile.centerX + radius;
+        const minY = tile.centerY - radius;
+        const maxY = tile.centerY + radius;
 
         const startCol = clampIndex(Math.floor(minX / TILE_PLACEMENT_UNIT), canvasCols - 1);
         const endCol = clampIndex(Math.floor(maxX / TILE_PLACEMENT_UNIT), canvasCols - 1);
@@ -113,7 +130,23 @@ export const computeCanvasCoverage = (
 
         for (let row = startRow; row <= endRow; row += 1) {
             for (let col = startCol; col <= endCol; col += 1) {
-                counts[row][col] += 1;
+                const cellMinX = col * TILE_PLACEMENT_UNIT;
+                const cellMinY = row * TILE_PLACEMENT_UNIT;
+                const cellMaxX = cellMinX + TILE_PLACEMENT_UNIT;
+                const cellMaxY = cellMinY + TILE_PLACEMENT_UNIT;
+                if (
+                    circleIntersectsRect(
+                        tile.centerX,
+                        tile.centerY,
+                        radius,
+                        cellMinX,
+                        cellMinY,
+                        cellMaxX,
+                        cellMaxY,
+                    )
+                ) {
+                    counts[row][col] += 1;
+                }
             }
         }
     });
@@ -179,16 +212,33 @@ export const rasterizeTileCoverage = (
     let litPixels = 0;
 
     tiles.forEach((tile) => {
-        const halfW = tile.width / 2;
-        const halfH = tile.height / 2;
-        const minX = clampPixel(Math.floor(tile.centerX - halfW), width - 1);
-        const maxX = clampPixel(Math.ceil(tile.centerX + halfW) - 1, width - 1);
-        const minY = clampPixel(Math.floor(tile.centerY - halfH), height - 1);
-        const maxY = clampPixel(Math.ceil(tile.centerY + halfH) - 1, height - 1);
+        const radius = Math.min(tile.width, tile.height) / 2;
+        const minX = clampPixel(Math.floor(tile.centerX - radius), width - 1);
+        const maxX = clampPixel(Math.ceil(tile.centerX + radius) - 1, width - 1);
+        const minY = clampPixel(Math.floor(tile.centerY - radius), height - 1);
+        const maxY = clampPixel(Math.ceil(tile.centerY + radius) - 1, height - 1);
 
         for (let y = minY; y <= maxY; y += 1) {
             let offset = y * width + minX;
+            const rectMinY = y;
+            const rectMaxY = y + 1;
             for (let x = minX; x <= maxX; x += 1) {
+                const rectMinX = x;
+                const rectMaxX = x + 1;
+                if (
+                    !circleIntersectsRect(
+                        tile.centerX,
+                        tile.centerY,
+                        radius,
+                        rectMinX,
+                        rectMinY,
+                        rectMaxX,
+                        rectMaxY,
+                    )
+                ) {
+                    offset += 1;
+                    continue;
+                }
                 const next = counts[offset] + 1;
                 counts[offset] = next;
                 if (next === 1) {
@@ -226,4 +276,93 @@ export const rasterizeTileCoverage = (
         maxCount,
         litPixels,
     };
+};
+
+export interface TileHeatmapIntensity<TTile extends TileFootprint = TileFootprint> {
+    tile: TTile;
+    count: number;
+    intensity: number;
+}
+
+export const mapTileIntensitiesFromCoverage = <TTile extends TileFootprint>(
+    tiles: TTile[],
+    coverage: CanvasCoverageResult,
+    canvasRows: number,
+    canvasCols: number,
+): TileHeatmapIntensity<TTile>[] => {
+    if (tiles.length === 0) {
+        return [];
+    }
+
+    if (coverage.cells.length === 0) {
+        return tiles.map((tile) => ({
+            tile,
+            count: 0,
+            intensity: MIN_TILE_INTENSITY,
+        }));
+    }
+
+    const lookup = new Map<string, CanvasCellIntensity>();
+    coverage.cells.forEach((cell) => {
+        lookup.set(`${cell.row}-${cell.col}`, cell);
+    });
+
+    return tiles.map((tile) => {
+        const radius = Math.min(tile.width, tile.height) / 2;
+        const minCol = clampIndex(
+            Math.floor((tile.centerX - radius) / TILE_PLACEMENT_UNIT),
+            canvasCols - 1,
+        );
+        const maxCol = clampIndex(
+            Math.floor((tile.centerX + radius) / TILE_PLACEMENT_UNIT),
+            canvasCols - 1,
+        );
+        const minRow = clampIndex(
+            Math.floor((tile.centerY - radius) / TILE_PLACEMENT_UNIT),
+            canvasRows - 1,
+        );
+        const maxRow = clampIndex(
+            Math.floor((tile.centerY + radius) / TILE_PLACEMENT_UNIT),
+            canvasRows - 1,
+        );
+
+        let bestCount = 0;
+        let bestIntensity = MIN_TILE_INTENSITY;
+
+        for (let row = minRow; row <= maxRow; row += 1) {
+            for (let col = minCol; col <= maxCol; col += 1) {
+                const cell = lookup.get(`${row}-${col}`);
+                if (!cell) {
+                    continue;
+                }
+                const cellMinX = col * TILE_PLACEMENT_UNIT;
+                const cellMinY = row * TILE_PLACEMENT_UNIT;
+                const cellMaxX = cellMinX + TILE_PLACEMENT_UNIT;
+                const cellMaxY = cellMinY + TILE_PLACEMENT_UNIT;
+                if (
+                    !circleIntersectsRect(
+                        tile.centerX,
+                        tile.centerY,
+                        radius,
+                        cellMinX,
+                        cellMinY,
+                        cellMaxX,
+                        cellMaxY,
+                    )
+                ) {
+                    continue;
+                }
+                if (cell.count > bestCount) {
+                    bestCount = cell.count;
+                    bestIntensity = cell.intensity;
+                }
+            }
+        }
+
+        return {
+            tile,
+            count: bestCount,
+            intensity: bestIntensity,
+        };
+    });
 };

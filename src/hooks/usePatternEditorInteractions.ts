@@ -21,7 +21,12 @@ import { handlePatternShortcut, type ShortcutCallbacks } from '../utils/patternS
 import type { EditorTool, HoverState, TileDraft } from '../types/patternEditor';
 
 const TILE_HALF = TILE_PLACEMENT_UNIT / 2;
+const TILE_RADIUS = TILE_PLACEMENT_UNIT / 2;
 const HISTORY_LIMIT = 200;
+
+const createTileId = (): string =>
+    globalThis.crypto?.randomUUID?.() ??
+    `tile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const findNearestTileWithinThreshold = (
     tiles: TileDraft[],
@@ -50,12 +55,10 @@ const selectTileUnderPointer = (
     centerY: number,
     threshold: number,
 ): TileDraft | null => {
-    const half = TILE_PLACEMENT_UNIT / 2;
     let coveringTile: TileDraft | null = null;
     for (const tile of tiles) {
-        const withinX = Math.abs(tile.centerX - centerX) <= half;
-        const withinY = Math.abs(tile.centerY - centerY) <= half;
-        if (withinX && withinY) {
+        const distance = Math.hypot(tile.centerX - centerX, tile.centerY - centerY);
+        if (distance <= TILE_RADIUS) {
             if (!coveringTile || tile.createdAt >= coveringTile.createdAt) {
                 coveringTile = tile;
             }
@@ -90,7 +93,6 @@ interface UsePatternEditorInteractionsOptions {
 export interface PatternEditorInteractions {
     tiles: TileDraft[];
     hoverState: HoverState | null;
-    hoveredTile: TileDraft | null;
     removeHighlight: { centerX: number; centerY: number } | null;
     historyState: { canUndo: boolean; canRedo: boolean };
     applyTileUpdate: (
@@ -167,7 +169,11 @@ export const usePatternEditorInteractions = (
                     return next;
                 }
                 if (recordHistory && next !== prev) {
-                    historyRef.current = pushHistorySnapshot(historyRef.current, prev, HISTORY_LIMIT);
+                    historyRef.current = pushHistorySnapshot(
+                        historyRef.current,
+                        prev,
+                        HISTORY_LIMIT,
+                    );
                     syncHistoryState();
                 }
                 return next;
@@ -204,7 +210,9 @@ export const usePatternEditorInteractions = (
         (centerX: number, centerY: number) => {
             const maxX = canvasSize.cols * TILE_PLACEMENT_UNIT - TILE_HALF;
             const maxY = canvasSize.rows * TILE_PLACEMENT_UNIT - TILE_HALF;
-            return centerX >= TILE_HALF && centerX <= maxX && centerY >= TILE_HALF && centerY <= maxY;
+            return (
+                centerX >= TILE_HALF && centerX <= maxX && centerY >= TILE_HALF && centerY <= maxY
+            );
         },
         [canvasSize.cols, canvasSize.rows],
     );
@@ -265,12 +273,9 @@ export const usePatternEditorInteractions = (
         ],
     );
 
-    const handlePointerTarget = useCallback(
-        (target: HoverState) => {
-            setHoverState(target);
-        },
-        [],
-    );
+    const handlePointerTarget = useCallback((target: HoverState) => {
+        setHoverState(target);
+    }, []);
 
     const applyToolToTarget = useCallback(
         (target: HoverState) => {
@@ -293,11 +298,12 @@ export const usePatternEditorInteractions = (
                     return [
                         ...prev,
                         {
-                            id: globalThis.crypto?.randomUUID?.() ??
-                                `tile-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                            id: createTileId(),
                             centerX: target.centerX,
                             centerY: target.centerY,
                             createdAt: Date.now(),
+                            width: TILE_PLACEMENT_UNIT,
+                            height: TILE_PLACEMENT_UNIT,
                         },
                     ];
                 });
@@ -389,22 +395,21 @@ export const usePatternEditorInteractions = (
         setHoverState(null);
     }, []);
 
-    const hoveredTile = useMemo(() => {
+    const removeHighlight = useMemo(() => {
         if (activeTool !== 'remove' || !hoverState) {
             return null;
         }
-        return (
-            selectTileUnderPointer(tiles, hoverState.centerX, hoverState.centerY, FREE_OVERLAP_DISTANCE) ??
-            null
+        const hovered = selectTileUnderPointer(
+            tiles,
+            hoverState.centerX,
+            hoverState.centerY,
+            FREE_OVERLAP_DISTANCE,
         );
-    }, [activeTool, hoverState, tiles]);
-
-    const removeHighlight = useMemo(() => {
-        if (activeTool !== 'remove' || !hoveredTile) {
+        if (!hovered) {
             return null;
         }
-        return { centerX: hoveredTile.centerX, centerY: hoveredTile.centerY };
-    }, [activeTool, hoveredTile]);
+        return { centerX: hovered.centerX, centerY: hovered.centerY };
+    }, [activeTool, hoverState, tiles]);
 
     const shortcutCallbacksRef = useRef<ShortcutCallbacks | null>(null);
 
@@ -436,7 +441,6 @@ export const usePatternEditorInteractions = (
     return {
         tiles,
         hoverState,
-        hoveredTile,
         removeHighlight,
         historyState,
         applyTileUpdate,

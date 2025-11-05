@@ -1,17 +1,16 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 
 import type { HoverState, TileDraft, EditorTool } from '../types/patternEditor';
-import type { CanvasCoverageResult } from '../utils/patternIntensity';
 
 interface PatternCanvasProps {
     canvasSize: { rows: number; cols: number };
     canvasWidth: number;
     canvasHeight: number;
     tiles: TileDraft[];
-    coverage: CanvasCoverageResult;
-    heatmapTexture: string | null;
+    overlapCounts: Map<string, number>;
+    maxOverlapCount: number;
     hoverState: HoverState | null;
     removeHighlight: { centerX: number; centerY: number } | null;
     activeTool: EditorTool;
@@ -30,8 +29,8 @@ const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
         canvasWidth,
         canvasHeight,
         tiles,
-        coverage,
-        heatmapTexture,
+        overlapCounts,
+        maxOverlapCount,
         hoverState,
         removeHighlight,
         activeTool,
@@ -43,6 +42,14 @@ const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
         onPointerLeave,
         onPointerCancel,
     } = props;
+
+    const overlapFilterId = useId();
+    const baseFillOpacity = maxOverlapCount > 0 ? 1 / maxOverlapCount : 1;
+    const maxCompositeAlpha =
+        maxOverlapCount > 0 ? 1 - Math.pow(1 - baseFillOpacity, maxOverlapCount) : 1;
+    const alphaSlope = maxCompositeAlpha > 0 ? 1 / maxCompositeAlpha : 1;
+    const normalizedAlphaSlope = Number.isFinite(alphaSlope) ? alphaSlope : 1;
+    const cursorStrokeWidth = 0.5;
 
     return (
         <div className="relative max-h-full w-full">
@@ -60,18 +67,43 @@ const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
                 onPointerCancel={onPointerCancel}
                 onContextMenu={(event) => event.preventDefault()}
             >
-                <rect x={0} y={0} width={canvasWidth} height={canvasHeight} fill="rgba(17, 24, 39, 0.85)" />
-                {heatmapTexture && (
-                    <image
-                        x={0}
-                        y={0}
-                        width={canvasWidth}
-                        height={canvasHeight}
-                        preserveAspectRatio="none"
-                        xlinkHref={heatmapTexture}
-                        style={{ imageRendering: 'pixelated' }}
-                    />
-                )}
+                <defs>
+                    <filter
+                        id={overlapFilterId}
+                        x="0"
+                        y="0"
+                        width="100%"
+                        height="100%"
+                        filterUnits="objectBoundingBox"
+                        colorInterpolationFilters="sRGB"
+                    >
+                        <feComponentTransfer>
+                            <feFuncR type="identity" />
+                            <feFuncG type="identity" />
+                            <feFuncB type="identity" />
+                            <feFuncA type="linear" slope={normalizedAlphaSlope} intercept={0} />
+                        </feComponentTransfer>
+                    </filter>
+                </defs>
+                <rect
+                    x={0}
+                    y={0}
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    fill="rgba(17, 24, 39, 0.85)"
+                />
+                <g filter={`url(#${overlapFilterId})`}>
+                    {tiles.map((tile) => (
+                        <circle
+                            key={`fill-${tile.id}`}
+                            cx={tile.centerX}
+                            cy={tile.centerY}
+                            r={TILE_PLACEMENT_UNIT / 2}
+                            fill="#f8fafc"
+                            fillOpacity={baseFillOpacity}
+                        />
+                    ))}
+                </g>
                 {Array.from({ length: canvasSize.cols + 1 }).map((_, index) => {
                     const position = index * TILE_PLACEMENT_UNIT;
                     return (
@@ -102,55 +134,58 @@ const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
                         />
                     );
                 })}
+                {tiles.map((tile) => (
+                    <circle
+                        key={`outline-${tile.id}`}
+                        cx={tile.centerX}
+                        cy={tile.centerY}
+                        r={TILE_PLACEMENT_UNIT / 2}
+                        fill="none"
+                        stroke="rgba(148, 163, 184, 0.35)"
+                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.02, 0.4)}
+                    />
+                ))}
                 {isSnapMode &&
-                    coverage.cells.map((cell) => {
-                        if (cell.count <= 1) {
+                    tiles.map((tile) => {
+                        const count = overlapCounts.get(tile.id) ?? 1;
+                        if (count <= 1) {
                             return null;
                         }
-                        const x = cell.col * TILE_PLACEMENT_UNIT;
-                        const y = cell.row * TILE_PLACEMENT_UNIT;
                         return (
                             <text
-                                key={`count-${cell.row}-${cell.col}`}
-                                x={x + TILE_PLACEMENT_UNIT / 2}
-                                y={y + TILE_PLACEMENT_UNIT / 2 + TILE_PLACEMENT_UNIT * 0.1}
+                                key={`count-${tile.id}`}
+                                x={tile.centerX}
+                                y={tile.centerY + TILE_PLACEMENT_UNIT * 0.1}
                                 textAnchor="middle"
                                 fontSize={Math.max(TILE_PLACEMENT_UNIT * 0.32, 4)}
                                 fill="rgba(15, 23, 42, 0.55)"
-                                pointerEvents="none"
                                 fontWeight={500}
                             >
-                                {cell.count}
+                                {count}
                             </text>
                         );
                     })}
                 {activeTool === 'place' && hoverState && (
-                    <rect
-                        x={hoverState.centerX - TILE_PLACEMENT_UNIT / 2}
-                        y={hoverState.centerY - TILE_PLACEMENT_UNIT / 2}
-                        width={TILE_PLACEMENT_UNIT}
-                        height={TILE_PLACEMENT_UNIT}
+                    <circle
+                        cx={hoverState.centerX}
+                        cy={hoverState.centerY}
+                        r={TILE_PLACEMENT_UNIT / 2}
                         fill="rgba(34, 211, 238, 0.12)"
                         stroke="rgba(34, 211, 238, 0.55)"
-                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.14, 0.6)}
+                        strokeWidth={cursorStrokeWidth}
                         strokeDasharray={`${TILE_PLACEMENT_UNIT * 0.3} ${TILE_PLACEMENT_UNIT * 0.2}`}
                         pointerEvents="none"
-                        rx={TILE_PLACEMENT_UNIT * 0.18}
-                        ry={TILE_PLACEMENT_UNIT * 0.18}
                     />
                 )}
                 {removeHighlight && (
-                    <rect
-                        x={removeHighlight.centerX - TILE_PLACEMENT_UNIT / 2}
-                        y={removeHighlight.centerY - TILE_PLACEMENT_UNIT / 2}
-                        width={TILE_PLACEMENT_UNIT}
-                        height={TILE_PLACEMENT_UNIT}
+                    <circle
+                        cx={removeHighlight.centerX}
+                        cy={removeHighlight.centerY}
+                        r={TILE_PLACEMENT_UNIT / 2}
                         fill="rgba(248, 113, 113, 0.08)"
                         stroke="rgba(248, 113, 113, 0.65)"
-                        strokeWidth={Math.max(TILE_PLACEMENT_UNIT * 0.14, 0.6)}
+                        strokeWidth={cursorStrokeWidth}
                         pointerEvents="none"
-                        rx={TILE_PLACEMENT_UNIT * 0.18}
-                        ry={TILE_PLACEMENT_UNIT * 0.18}
                     />
                 )}
                 {tiles.length === 0 && (

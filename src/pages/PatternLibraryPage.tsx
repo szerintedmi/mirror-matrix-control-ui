@@ -3,8 +3,7 @@ import React, { useMemo } from 'react';
 import MotorStatusOverview from '../components/MotorStatusOverview';
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { useStatusStore } from '../context/StatusContext';
-import { useHeatmapImage } from '../hooks/useHeatmapImage';
-import { computeCanvasCoverage, rasterizeTileCoverage } from '../utils/patternIntensity';
+import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type { NavigationControls } from '../App';
 import type { MirrorConfig, Pattern, PatternCanvas } from '../types';
@@ -30,9 +29,6 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
         paddingBottom: `${(1 / aspectRatio) * 100}%`,
         position: 'relative',
     };
-    const rows = Math.max(1, Math.round(canvasHeight / TILE_PLACEMENT_UNIT));
-    const cols = Math.max(1, Math.round(canvasWidth / TILE_PLACEMENT_UNIT));
-
     const footprints = useMemo(() => {
         return pattern.tiles.map((tile) => ({
             id: tile.id,
@@ -43,17 +39,9 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
         }));
     }, [pattern.tiles]);
 
-    const coverage = useMemo(
-        () => computeCanvasCoverage(footprints, rows, cols),
-        [cols, footprints, rows],
-    );
-
-    const rasterizedHeatmap = useMemo(
-        () => rasterizeTileCoverage(footprints, canvasWidth, canvasHeight),
-        [canvasHeight, canvasWidth, footprints],
-    );
-
-    const heatmapTexture = useHeatmapImage(rasterizedHeatmap);
+    const overlaps = useMemo(() => computeDirectOverlaps(footprints), [footprints]);
+    const tileMap = useMemo(() => new Map(footprints.map((tile) => [tile.id, tile])), [footprints]);
+    const maxCount = overlaps.reduce((max, record) => Math.max(max, record.count), 1);
 
     return (
         <div style={containerStyle}>
@@ -69,35 +57,34 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
                     height={canvasHeight}
                     fill="rgba(17, 24, 39, 0.65)"
                 />
-                {heatmapTexture && (
-                    <image
-                        x={0}
-                        y={0}
-                        width={canvasWidth}
-                        height={canvasHeight}
-                        preserveAspectRatio="none"
-                        xlinkHref={heatmapTexture}
-                        style={{ imageRendering: 'pixelated' }}
-                    />
-                )}
-                {coverage.cells.map((cell) => {
-                    if (cell.count <= 1) {
+                {overlaps.map((entry) => {
+                    const tile = tileMap.get(entry.id);
+                    if (!tile) {
                         return null;
                     }
-                    const x = cell.col * TILE_PLACEMENT_UNIT;
-                    const y = cell.row * TILE_PLACEMENT_UNIT;
+                    const opacity = maxCount > 0 ? 1 / maxCount : 1;
                     return (
-                        <text
-                            key={`cell-${pattern.id}-${cell.row}-${cell.col}`}
-                            x={x + TILE_PLACEMENT_UNIT / 2}
-                            y={y + TILE_PLACEMENT_UNIT / 2 + TILE_PLACEMENT_UNIT * 0.1}
-                            textAnchor="middle"
-                            fontSize={Math.max(TILE_PLACEMENT_UNIT * 0.32, 4)}
-                            fill="rgba(15, 23, 42, 0.55)"
-                            fontWeight={500}
-                        >
-                            {cell.count}
-                        </text>
+                        <g key={`preview-${entry.id}`} pointerEvents="none">
+                            <circle
+                                cx={tile.centerX}
+                                cy={tile.centerY}
+                                r={TILE_PLACEMENT_UNIT / 2}
+                                fill="#f8fafc"
+                                fillOpacity={opacity}
+                            />
+                            {entry.count > 1 && (
+                                <text
+                                    x={tile.centerX}
+                                    y={tile.centerY + TILE_PLACEMENT_UNIT * 0.1}
+                                    textAnchor="middle"
+                                    fontSize={Math.max(TILE_PLACEMENT_UNIT * 0.32, 4)}
+                                    fill="rgba(15, 23, 42, 0.55)"
+                                    fontWeight={500}
+                                >
+                                    {entry.count}
+                                </text>
+                            )}
+                        </g>
                     );
                 })}
             </svg>

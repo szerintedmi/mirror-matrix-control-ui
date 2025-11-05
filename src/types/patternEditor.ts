@@ -5,6 +5,8 @@ export interface TileDraft {
     centerX: number;
     centerY: number;
     createdAt: number;
+    width: number;
+    height: number;
 }
 
 export interface HoverState {
