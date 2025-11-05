@@ -334,6 +334,12 @@ export const usePatternEditorInteractions = (
             if (event.button !== 0 && event.pointerType !== 'touch') {
                 return;
             }
+            if (typeof document !== 'undefined') {
+                const activeElement = document.activeElement;
+                if (activeElement instanceof HTMLElement && activeElement !== document.body) {
+                    activeElement.blur();
+                }
+            }
             const target = getPointerTarget(event);
             if (!target) {
                 return;
