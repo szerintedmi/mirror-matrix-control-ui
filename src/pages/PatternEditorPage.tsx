@@ -4,7 +4,6 @@ import PatternCanvas from '../components/PatternCanvas';
 import PatternEditorSidebar from '../components/PatternEditorSidebar';
 import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS, TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { usePatternEditorInteractions } from '../hooks/usePatternEditorInteractions';
-import { calculateDisplayIntensity } from '../utils/patternIntensity';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type { NavigationControls } from '../App';
@@ -20,9 +19,6 @@ const generatePatternId = (): string => {
     }
     return `pattern-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
-
-const isOverlapDebugEnabled = (): boolean =>
-    typeof window !== 'undefined' && window.localStorage?.getItem('debugCircleOpacity') === 'true';
 
 const useElementSize = <T extends HTMLElement>(): [
     React.MutableRefObject<T | null>,
@@ -73,9 +69,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     const [isSnapMode, setIsSnapMode] = useState(true);
     const [hasHydrated, setHasHydrated] = useState(false);
     const [baseline, setBaseline] = useState({ name: 'New Pattern', tileSignature: '' });
-    const [overlapDebugEnabled, setOverlapDebugEnabled] = useState<boolean>(() =>
-        isOverlapDebugEnabled(),
-    );
 
     const [containerRef, containerSize] = useElementSize<HTMLDivElement>();
     const drawingSurfaceRef = useRef<SVGSVGElement | null>(null);
@@ -95,18 +88,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 window.clearTimeout(pixelErrorTimeoutRef.current);
             }
         };
-    }, []);
-
-    useEffect(() => {
-        const sync = () => {
-            setOverlapDebugEnabled((prev) => {
-                const next = isOverlapDebugEnabled();
-                return prev === next ? prev : next;
-            });
-        };
-        sync();
-        const interval = window.setInterval(sync, 1000);
-        return () => window.clearInterval(interval);
     }, []);
 
     const canvasWidth = canvasSize.cols * TILE_PLACEMENT_UNIT;
@@ -225,17 +206,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         () => overlappingTiles.reduce((max, record) => Math.max(max, record.count), 1),
         [overlappingTiles],
     );
-    const overlapDebugRows = useMemo(() => {
-        if (!overlapDebugEnabled) {
-            return [] as { id: string; count: number; opacity: number }[];
-        }
-        return tiles.map((tile) => {
-            const count = overlapCounts.get(tile.id) ?? 1;
-            const opacity = calculateDisplayIntensity(count, maxOverlapCount);
-            return { id: tile.id, count, opacity };
-        });
-    }, [maxOverlapCount, overlapCounts, overlapDebugEnabled, tiles]);
-
     const [containerWidth, containerHeight] = [containerSize.width, containerSize.height];
     const surfaceStyle: React.CSSProperties = {
         visibility: containerWidth > 0 ? 'visible' : 'hidden',
@@ -392,11 +362,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     };
 
     const handleClear = () => {
-        if (
-            window.confirm(
-                'Are you sure you want to clear all tiles? This action cannot be undone.',
-            )
-        ) {
+        if (window.confirm('Are you sure you want to clear all tiles?')) {
             applyTileUpdate(() => []);
             clearHover();
         }
@@ -473,25 +439,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                     </div>
                 </main>
             </div>
-            {overlapDebugEnabled && overlapDebugRows.length > 0 && (
-                <div className="mt-4 text-xs text-gray-400 bg-gray-900/70 border border-gray-700 rounded p-3 max-h-40 overflow-auto">
-                    <p className="font-semibold text-gray-200 mb-2">Overlap Debug</p>
-                    <div className="grid grid-cols-3 gap-2 font-mono">
-                        <span>ID</span>
-                        <span>Count</span>
-                        <span>Opacity</span>
-                        {overlapDebugRows.map((row) => (
-                            <React.Fragment key={`debug-${row.id}`}>
-                                <span className="truncate" title={row.id}>
-                                    {row.id.slice(-4)}
-                                </span>
-                                <span>{row.count}</span>
-                                <span>{row.opacity.toFixed(3)}</span>
-                            </React.Fragment>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

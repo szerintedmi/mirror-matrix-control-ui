@@ -188,19 +188,6 @@ const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
                         pointerEvents="none"
                     />
                 )}
-                {tiles.length === 0 && (
-                    <text
-                        x={canvasWidth / 2}
-                        y={canvasHeight / 2}
-                        textAnchor="middle"
-                        fill="rgba(148, 163, 184, 0.55)"
-                        fontSize={Math.max(TILE_PLACEMENT_UNIT * 1.4, 12)}
-                        pointerEvents="none"
-                        fontWeight={500}
-                    >
-                        Click or drag to place tiles
-                    </text>
-                )}
             </svg>
         </div>
     );

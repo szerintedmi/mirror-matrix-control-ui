@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS, TILE_PLACEMENT_UNIT } from '../constants/pattern';
+import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS } from '../constants/pattern';
 
 import type { EditorTool } from '../types/patternEditor';
 
@@ -58,8 +58,19 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
                 />
             </div>
 
+            <div className="text-center bg-gray-800/50 ring-1 ring-white/10 p-3 rounded-lg shadow-md">
+                <p className="text-gray-400 text-sm">Active Tiles</p>
+                <p
+                    data-testid="active-tile-count"
+                    className={`font-mono text-2xl font-bold mt-1 transition-colors ${
+                        pixelCountError ? 'text-red-500' : 'text-cyan-300'
+                    }`}
+                >
+                    {usedTiles} / {mirrorCount}
+                </p>
+            </div>
+
             <div>
-                <h3 className="text-sm font-medium text-gray-300">Tool</h3>
                 <div className="mt-2 inline-flex gap-2">
                     <button
                         type="button"
@@ -86,10 +97,6 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
                         Remove (R)
                     </button>
                 </div>
-                <p className="mt-2 text-xs text-gray-500 leading-snug">
-                    Place adds tiles (drag to draw). Remove deletes the highlighted tile, making it
-                    easy to tidy overlaps quickly.
-                </p>
                 <div className="mt-4 flex items-center justify-between">
                     <span className="text-sm text-gray-400">Snap to grid (S)</span>
                     <button
@@ -106,42 +113,6 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
                     >
                         {isSnapMode ? 'On' : 'Off'}
                     </button>
-                </div>
-                <p className="mt-2 text-xs text-gray-500 leading-snug">
-                    Turn snap off to position tiles freely and explore overlap intensity.
-                </p>
-                <div className="mt-4 flex flex-col gap-2">
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={onUndo}
-                            disabled={!historyState.canUndo}
-                            data-testid="undo-button"
-                            className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
-                                historyState.canUndo
-                                    ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
-                                    : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
-                            }`}
-                        >
-                            Undo (⌘Z / Ctrl+Z)
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onRedo}
-                            disabled={!historyState.canRedo}
-                            data-testid="redo-button"
-                            className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
-                                historyState.canRedo
-                                    ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
-                                    : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
-                            }`}
-                        >
-                            Redo (⇧⌘Z / Ctrl+Shift+Z)
-                        </button>
-                    </div>
-                    <p className="text-xs text-gray-500 leading-snug">
-                        Shortcuts: P place, R remove, S snap, ⌘/Ctrl+Z undo, ⇧⌘/Ctrl+Shift+Z redo.
-                    </p>
                 </div>
             </div>
 
@@ -178,7 +149,7 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
             </div>
 
             <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-300">Quick Actions</h3>
+                <h3 className="text-sm font-medium text-gray-300">Shift Tiles</h3>
                 <div className="grid grid-cols-3 gap-2">
                     <div />
                     <button
@@ -261,22 +232,34 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
                 >
                     Clear Canvas
                 </button>
-                <p className="text-xs text-gray-500 leading-snug">
-                    Each tile is {TILE_PLACEMENT_UNIT} units in diameter. Shifting respects current
-                    snap mode.
-                </p>
-            </div>
-
-            <div className="text-center bg-gray-800/50 ring-1 ring-white/10 p-3 rounded-lg shadow-md">
-                <p className="text-gray-400 text-sm">Active Tiles</p>
-                <p
-                    data-testid="active-tile-count"
-                    className={`font-mono text-2xl font-bold mt-1 transition-colors ${
-                        pixelCountError ? 'text-red-500' : 'text-cyan-300'
-                    }`}
-                >
-                    {usedTiles} / {mirrorCount}
-                </p>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={onUndo}
+                        disabled={!historyState.canUndo}
+                        data-testid="undo-button"
+                        className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                            historyState.canUndo
+                                ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
+                                : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
+                    >
+                        Undo (⌘Z / Ctrl+Z)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onRedo}
+                        disabled={!historyState.canRedo}
+                        data-testid="redo-button"
+                        className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                            historyState.canRedo
+                                ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
+                                : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
+                    >
+                        Redo (⇧⌘Z / Ctrl+Shift+Z)
+                    </button>
+                </div>
             </div>
         </aside>
     );
