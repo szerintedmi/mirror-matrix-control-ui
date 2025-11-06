@@ -40,6 +40,46 @@
 
 - Do not install new dependencies without explicit approval
 
+### Process for significant new features/epics
+
+#### 1. Gather requirements, understand as-is
+
+The user might provided you requirements or pointed you to a relevant document or a section in a document. First read these documents, understand the as-is checking relevant code. If needed use web search to research further. Y
+
+Check if a relevant document already exist agent_notes for the feature. If it does ask user for instructions how to treat it.
+
+ou proceed to next step without user input unless you miss information to proceed.
+
+#### 2. Clarify scope and confirm assumptions
+
+Based on your input and research you create a document for the feature in agent_notes: `yyyy-mm-dd-short-feature-name.md`.
+
+Add all clarifiying questions required for implementation. Include reasonalble suggestions or assumptions for confirmation for each question.
+
+Include technical questions with proposals. If there are multiple questions always present it as numbered list.
+
+Use a format where the user can I add their answers inline.
+
+#### 3. Create a high level plan
+
+Once the user has confirmed they answered your questions inline feel free to ask follow up questions if required.
+
+If the scope and requirements are clear then proced to create a short step-by-step plan in the same document. Keep it concise. Make each task group end user testable - include a cleare acceptance criteria.
+
+Make sure you are explicit about automated tests: both unit tests and e2e tests for each task must be implemented too
+
+Make both the acceptance criteria and the tasks readable by using bullet points
+
+use [ ] format so we can track progres
+
+#### 4. Implement and validate
+
+Once the user has reviewed the plan follow their instructions to start the implementation. Unless otherwise instructed try to implement as many steps as possible in one go but always make sure you also run all build/test commands, including e2e tests after a bigger task. Ask for elevated privileges if a command execution fails.
+
+#### 5. Report your progress
+
+After each task finished mark the relevant task if complete and add instructions on how user can test the acceptence criteria if it's not obvious.
+
 ## Coding Style & Naming Conventions
 
 - Use strict TypeScript with React function components.
