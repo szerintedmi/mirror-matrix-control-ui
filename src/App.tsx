@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import ConnectionSettingsPanel from './components/ConnectionSettingsPanel';
+import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
 import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
 import ConfiguratorPage from './pages/ConfiguratorPage';
@@ -9,8 +10,12 @@ import PatternLibraryPage from './pages/PatternLibraryPage';
 import SimulationPage from './pages/SimulationPage';
 import { loadGridState, persistGridState } from './services/gridStorage';
 import { loadPatterns, persistPatterns } from './services/patternStorage';
+import {
+    getInitialProjectionSettings,
+    persistProjectionSettings,
+} from './services/projectionStorage';
 
-import type { MirrorConfig, Pattern } from './types';
+import type { MirrorConfig, Pattern, ProjectionSettings } from './types';
 
 // Simple router state
 export type Page = 'library' | 'editor' | 'configurator' | 'simulation';
@@ -41,11 +46,15 @@ const App: React.FC = () => {
     const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(
         () => new Map(persistedState?.mirrorConfig ?? []),
     );
-    const [wallDistance, setWallDistance] = useState(5);
-    const [horizontalAngle, setHorizontalAngle] = useState(0); // Wall angle
-    const [verticalAngle, setVerticalAngle] = useState(0); // Wall angle
-    const [lightAngleHorizontal, setLightAngleHorizontal] = useState(0);
-    const [lightAngleVertical, setLightAngleVertical] = useState(0);
+    const initialProjectionSettings = useMemo(() => {
+        const hydrated = getInitialProjectionSettings(resolvedStorage);
+        return hydrated ?? DEFAULT_PROJECTION_SETTINGS;
+    }, [resolvedStorage]);
+    const [projectionSettings, setProjectionSettings] =
+        useState<ProjectionSettings>(initialProjectionSettings);
+    const [activePatternId, setActivePatternId] = useState<string | null>(
+        persistedPatterns[0]?.id ?? null,
+    );
 
     const navigateTo = (targetPage: Page) => {
         setPage(targetPage);
@@ -61,6 +70,17 @@ const App: React.FC = () => {
     useEffect(() => {
         persistPatterns(resolvedStorage, patterns);
     }, [patterns, resolvedStorage]);
+
+    useEffect(() => {
+        persistProjectionSettings(resolvedStorage, projectionSettings);
+    }, [projectionSettings, resolvedStorage]);
+
+    const handleProjectionChange = (patch: Partial<ProjectionSettings>) => {
+        setProjectionSettings((prev) => ({
+            ...prev,
+            ...patch,
+        }));
+    };
 
     const editPattern = (patternId: string | null) => {
         setEditingPatternId(patternId);
@@ -79,11 +99,21 @@ const App: React.FC = () => {
             }
             return [...prev, pattern];
         });
+        setActivePatternId((current) => current ?? pattern.id);
         setPage('library');
     };
 
     const handleDeletePattern = (patternId: string) => {
-        setPatterns((prev) => prev.filter((p) => p.id !== patternId));
+        setPatterns((prev) => {
+            const next = prev.filter((p) => p.id !== patternId);
+            const fallback = next[0]?.id ?? null;
+            setActivePatternId((current) => (current === patternId ? fallback : current));
+            return next;
+        });
+    };
+
+    const handleSelectPattern = (patternId: string | null) => {
+        setActivePatternId(patternId);
     };
 
     const renderPage = () => {
@@ -113,16 +143,11 @@ const App: React.FC = () => {
                     <SimulationPage
                         navigation={navigationControls}
                         gridSize={gridSize}
-                        wallDistance={wallDistance}
-                        onWallDistanceChange={setWallDistance}
-                        horizontalAngle={horizontalAngle}
-                        onHorizontalAngleChange={setHorizontalAngle}
-                        verticalAngle={verticalAngle}
-                        onVerticalAngleChange={setVerticalAngle}
-                        lightAngleHorizontal={lightAngleHorizontal}
-                        onLightAngleHorizontalChange={setLightAngleHorizontal}
-                        lightAngleVertical={lightAngleVertical}
-                        onLightAngleVerticalChange={setLightAngleVertical}
+                        projectionSettings={projectionSettings}
+                        onUpdateProjection={handleProjectionChange}
+                        patterns={patterns}
+                        activePatternId={activePatternId}
+                        onSelectPattern={handleSelectPattern}
                     />
                 );
             case 'library':
@@ -134,11 +159,9 @@ const App: React.FC = () => {
                         mirrorConfig={mirrorConfig}
                         patterns={patterns}
                         onDeletePattern={handleDeletePattern}
-                        wallDistance={wallDistance}
-                        horizontalAngle={horizontalAngle}
-                        verticalAngle={verticalAngle}
-                        lightAngleHorizontal={lightAngleHorizontal}
-                        lightAngleVertical={lightAngleVertical}
+                        projectionSettings={projectionSettings}
+                        activePatternId={activePatternId}
+                        onSelectActivePattern={(patternId) => handleSelectPattern(patternId)}
                     />
                 );
         }

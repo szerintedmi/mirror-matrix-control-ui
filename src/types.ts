@@ -77,3 +77,32 @@ export interface DriverStatusSnapshot {
     brokerDisconnected: boolean;
     motors: Record<number, MotorTelemetry>;
 }
+
+export interface ProjectionSettings {
+    wallDistance: number;
+    wallAngleHorizontal: number;
+    wallAngleVertical: number;
+    lightAngleHorizontal: number;
+    lightAngleVertical: number;
+}
+
+export interface ProjectedSpot {
+    id: string;
+    normalizedX: number;
+    normalizedY: number;
+    wallX: number | null;
+    wallY: number | null;
+    world: {
+        x: number;
+        y: number;
+        z: number;
+    };
+}
+
+export interface ProjectionFootprint {
+    projectedWidth: number | null;
+    projectedHeight: number | null;
+    spots: ProjectedSpot[];
+    arrayWidth: number;
+    arrayHeight: number;
+}

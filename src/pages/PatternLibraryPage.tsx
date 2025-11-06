@@ -3,10 +3,11 @@ import React, { useMemo } from 'react';
 import MotorStatusOverview from '../components/MotorStatusOverview';
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { useStatusStore } from '../context/StatusContext';
+import { calculateProjectionSpan, inferGridFromCanvas } from '../utils/projectionGeometry';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type { NavigationControls } from '../App';
-import type { MirrorConfig, Pattern, PatternCanvas } from '../types';
+import type { MirrorConfig, Pattern, PatternCanvas, ProjectionSettings } from '../types';
 
 interface PatternLibraryPageProps {
     navigation: NavigationControls;
@@ -14,11 +15,9 @@ interface PatternLibraryPageProps {
     mirrorConfig: MirrorConfig;
     patterns: Pattern[];
     onDeletePattern: (patternId: string) => void;
-    wallDistance: number;
-    horizontalAngle: number;
-    verticalAngle: number;
-    lightAngleHorizontal: number;
-    lightAngleVertical: number;
+    projectionSettings: ProjectionSettings;
+    activePatternId: string | null;
+    onSelectActivePattern: (patternId: string) => void;
 }
 
 const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
@@ -99,54 +98,19 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
         mirrorConfig,
         patterns,
         onDeletePattern,
-        wallDistance,
-        horizontalAngle,
-        verticalAngle,
-        lightAngleHorizontal,
-        lightAngleVertical,
+        projectionSettings,
+        activePatternId,
+        onSelectActivePattern,
     } = props;
 
     const { drivers } = useStatusStore();
 
-    const calculateProjectedSize = (canvas: PatternCanvas) => {
-        const MIRROR_DIMENSION_M = 0.05; // 50mm
-        const degToRad = (deg: number) => deg * (Math.PI / 180);
-
-        const cols = Math.max(1, Math.round(canvas.width / TILE_PLACEMENT_UNIT));
-        const rows = Math.max(1, Math.round(canvas.height / TILE_PLACEMENT_UNIT));
-
-        const arrayWidth = cols * MIRROR_DIMENSION_M;
-        const arrayHeight = rows * MIRROR_DIMENSION_M;
-
-        const wallH = horizontalAngle;
-        const wallV = verticalAngle;
-        const lightH = lightAngleHorizontal;
-        const lightV = lightAngleVertical;
-
-        // Start with a base projection that scales linearly with distance.
-        // This assumes a divergence that makes projected size = array size at 1m.
-        const baseWidth = arrayWidth * wallDistance;
-        const baseHeight = arrayHeight * wallDistance;
-
-        let projectedWidth: number | null = null;
-        const lightHRad = degToRad(lightH);
-        const totalHAngleRad = degToRad(wallH + lightH);
-        if (Math.abs(totalHAngleRad) < Math.PI / 2) {
-            // Apply keystone correction based on light and wall angles.
-            projectedWidth = (baseWidth * Math.cos(lightHRad)) / Math.cos(totalHAngleRad);
-        }
-
-        let projectedHeight: number | null = null;
-        const lightVRad = degToRad(lightV);
-        const totalVAngleRad = degToRad(wallV + lightV);
-        if (Math.abs(totalVAngleRad) < Math.PI / 2) {
-            // Apply keystone correction based on light and wall angles.
-            projectedHeight = (baseHeight * Math.cos(lightVRad)) / Math.cos(totalVAngleRad);
-        }
-
-        const widthStr = projectedWidth !== null ? `${projectedWidth.toFixed(2)}m` : 'Infinite';
-        const heightStr = projectedHeight !== null ? `${projectedHeight.toFixed(2)}m` : 'Infinite';
-        const distanceStr = `${wallDistance.toFixed(1)}m`;
+    const formatProjectedSize = (canvas: PatternCanvas) => {
+        const derivedGrid = inferGridFromCanvas(canvas);
+        const span = calculateProjectionSpan(derivedGrid, projectionSettings);
+        const widthStr = span.width !== null ? `${span.width.toFixed(2)}m` : 'Infinite';
+        const heightStr = span.height !== null ? `${span.height.toFixed(2)}m` : 'Infinite';
+        const distanceStr = `${projectionSettings.wallDistance.toFixed(1)}m`;
         return { width: widthStr, height: heightStr, distance: distanceStr };
     };
 
@@ -221,7 +185,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                             {patterns.map((pattern) => {
-                                const projectedSize = calculateProjectedSize(pattern.canvas);
+                                const projectedSize = formatProjectedSize(pattern.canvas);
                                 const inferredRows = Math.max(
                                     1,
                                     Math.round(pattern.canvas.height / TILE_PLACEMENT_UNIT),
@@ -230,6 +194,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                     1,
                                     Math.round(pattern.canvas.width / TILE_PLACEMENT_UNIT),
                                 );
+                                const isActive = pattern.id === activePatternId;
                                 return (
                                     <div
                                         key={pattern.id}
@@ -238,7 +203,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                         <div className="p-1">
                                             <PatternPreview pattern={pattern} />
                                         </div>
-                                        <div className="p-3 flex flex-col flex-grow">
+                                        <div className="p-3 flex flex-col flex-grow gap-2">
                                             <h3 className="font-semibold text-gray-200 truncate">
                                                 {pattern.name}
                                             </h3>
@@ -246,6 +211,12 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                 {inferredRows}x{inferredCols} -{' '}
                                                 {pattern.tiles.length} tiles
                                             </p>
+                                            {isActive && (
+                                                <span className="inline-flex items-center gap-1 text-xs text-cyan-300 font-semibold uppercase tracking-wide">
+                                                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                                                    Active in Simulation
+                                                </span>
+                                            )}
 
                                             <div className="mt-2 pt-2 border-t border-gray-700/50 text-xs">
                                                 <p className="text-gray-400 mb-1">
@@ -258,7 +229,20 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                 </p>
                                             </div>
 
-                                            <div className="mt-3 flex justify-end gap-2 mt-auto">
+                                            <div className="mt-auto flex justify-end gap-2">
+                                                <button
+                                                    onClick={() =>
+                                                        onSelectActivePattern(pattern.id)
+                                                    }
+                                                    disabled={isActive}
+                                                    className={`text-sm px-3 py-1 rounded-md border transition-colors ${
+                                                        isActive
+                                                            ? 'bg-cyan-900/40 border-cyan-500/30 text-cyan-100 cursor-default'
+                                                            : 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700'
+                                                    }`}
+                                                >
+                                                    {isActive ? 'Active' : 'Set Active'}
+                                                </button>
                                                 <button
                                                     onClick={() =>
                                                         navigation.editPattern(pattern.id)

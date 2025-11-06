@@ -256,6 +256,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@babylonjs/core@npm:8.34.1":
+  version: 8.34.1
+  resolution: "@babylonjs/core@npm:8.34.1"
+  checksum: 10c0/64cb244375646623c2ec915bddb3362386a9abd0bc466a2f0d0ff5dfc51de52c473ec2ecfa262ff0e17d5173427f3ec6d7fec87d3efcef722c4cea156a76bedb
+  languageName: node
+  linkType: hard
+
 "@csstools/color-helpers@npm:^5.1.0":
   version: 5.1.0
   resolution: "@csstools/color-helpers@npm:5.1.0"
@@ -4111,6 +4118,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "mirror-array-control-and-config@workspace:."
   dependencies:
+    "@babylonjs/core": "npm:8.34.1"
     "@playwright/test": "npm:1.56.1"
     "@types/eslint-plugin-jsx-a11y": "npm:6"
     "@types/jsdom": "npm:27"
