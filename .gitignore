@@ -1,7 +1,9 @@
 agent_notes
 
 .corepack
-.yarn
+.yarn/*
+!.yarn/releases
+!.yarn/releases/*
 
 .tmp/
 
