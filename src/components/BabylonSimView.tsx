@@ -45,6 +45,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({ gridSize, settings, pat
     const lightHitMaterialRef = useRef<StandardMaterial | null>(null);
 
     const clearColor = useMemo(() => new Color4(0.06, 0.07, 0.09, 1), []);
+    const emitterLayout = useMemo(() => buildGridEmitters(gridSize), [gridSize]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -140,20 +141,12 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({ gridSize, settings, pat
         }
 
         const footprint = computeProjectionFootprint({ gridSize, pattern, settings });
-        const emitterLayout = buildGridEmitters(gridSize);
         const emitters = emitterLayout.emitters.map(
             (emitter) => new Vector3(emitter.x, emitter.y, 0),
         );
         const width = emitterLayout.width;
         const height = emitterLayout.height;
         const wallDistance = settings.wallDistance;
-
-        const camera = scene.activeCamera as ArcRotateCamera | null;
-        if (camera) {
-            const span = Math.max(width, height, wallDistance) + 1.5;
-            camera.radius = span * 1.6;
-            camera.target = new Vector3(0, 0, wallDistance * 0.5);
-        }
 
         spotMeshesRef.current.forEach((mesh) => mesh.dispose());
         spotMeshesRef.current = [];
@@ -299,7 +292,27 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({ gridSize, settings, pat
         lightHit.position = new Vector3(0, 0, 0.002);
         lightHitMaterialRef.current = lightHitMaterial;
         lightHitRef.current = lightHit;
-    }, [gridSize, pattern, settings]);
+    }, [emitterLayout, pattern, settings]);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene) {
+            return;
+        }
+
+        const camera = scene.activeCamera as ArcRotateCamera | null;
+        if (!camera) {
+            return;
+        }
+
+        const { width, height } = emitterLayout;
+        const wallDistance = settings.wallDistance;
+        const span = Math.max(width, height, wallDistance) + 1.5;
+        const nextTarget = new Vector3(0, 0, wallDistance * 0.5);
+
+        camera.radius = span * 1.6;
+        camera.target = nextTarget;
+    }, [emitterLayout, settings.wallDistance]);
 
     return (
         <div
