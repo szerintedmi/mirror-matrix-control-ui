@@ -4,14 +4,11 @@ import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNo
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
 import UnassignedMotorTray from '../components/UnassignedMotorTray';
-import { useMqtt } from '../context/MqttContext';
 import { useStatusStore } from '../context/StatusContext';
 import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import { normalizeCommandError } from '../utils/commandErrors';
-import { formatRelativeTime } from '../utils/time';
 
-import type { NavigationControls } from '../App';
 import type {
     Motor,
     MotorTelemetry,
@@ -36,7 +33,6 @@ interface ModalState {
 }
 
 interface ConfiguratorPageProps {
-    navigation: NavigationControls;
     gridSize: { rows: number; cols: number };
     onGridSizeChange: (rows: number, cols: number) => void;
     mirrorConfig: MirrorConfig;
@@ -44,13 +40,11 @@ interface ConfiguratorPageProps {
 }
 
 const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
-    navigation,
     gridSize,
     onGridSizeChange,
     mirrorConfig,
     setMirrorConfig,
 }) => {
-    const { state: connectionState, connectionUrl } = useMqtt();
     const { homeAll } = useMotorCommands();
     const globalHomeFeedback = useCommandFeedback();
     const {
@@ -60,7 +54,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         acknowledgeDriver,
         schemaError,
         brokerConnected,
-        latestActivityAt,
         staleThresholdMs,
     } = useStatusStore();
 
@@ -523,34 +516,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         return map;
     }, [drivers]);
 
-    const connectionPhaseLabel = useMemo(() => {
-        switch (connectionState.status) {
-            case 'connected':
-                return 'Connected';
-            case 'connecting':
-                return 'Connecting';
-            case 'reconnecting':
-                return 'Reconnecting';
-            default:
-                return 'Disconnected';
-        }
-    }, [connectionState.status]);
-
-    const connectionIndicatorClass = useMemo(() => {
-        if (brokerConnected) {
-            return 'bg-emerald-400';
-        }
-        if (connectionState.status === 'connecting' || connectionState.status === 'reconnecting') {
-            return 'bg-amber-400';
-        }
-        return 'bg-red-500';
-    }, [brokerConnected, connectionState.status]);
-
-    const lastActivityLabel = useMemo(
-        () => formatRelativeTime(latestActivityAt),
-        [latestActivityAt],
-    );
-
     const selectedNodeMacEffective = useMemo(() => {
         if (!selectedNodeMac) {
             return null;
@@ -610,91 +575,63 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                     </div>
                 </div>
             )}
-            <div className="min-h-screen bg-gray-900 text-gray-200 flex flex-col p-4 sm:p-6 lg:p-8">
-                <header className="mb-6 flex flex-wrap justify-between items-start gap-4">
-                    <div>
-                        <h1 className="text-4xl font-bold text-cyan-400 tracking-tight">
-                            Mirror Array Configurator
-                        </h1>
-                        <p className="text-gray-400 mt-1">
-                            Visually assign motors to mirrors and test your configuration.
-                        </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-end gap-3">
-                            <span className="flex items-center gap-2 text-gray-300">
-                                <span
-                                    className={`h-2.5 w-2.5 rounded-full ${connectionIndicatorClass}`}
+            <div className="flex flex-col gap-6 p-4 text-gray-200 sm:p-6 lg:p-8">
+                <section className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                        <button
+                            onClick={handleHomeAllDrivers}
+                            className="flex items-center gap-2 rounded-md border border-emerald-600/70 bg-emerald-900/40 px-4 py-2 text-sm text-emerald-200 transition-colors hover:bg-emerald-700/40"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                            >
+                                <path d="M10 2a1 1 0 01.894.553l5 10A1 1 0 0115 14H5a1 1 0 01-.894-1.447l5-10A1 1 0 0110 2zM10 6.118L6.764 12h6.472L10 6.118z" />
+                            </svg>
+                            Home All
+                        </button>
+                        <button
+                            onClick={handleResetAll}
+                            className="flex items-center gap-2 rounded-md border border-red-600/80 bg-red-800/70 px-4 py-2 text-sm text-red-200 transition-colors hover:bg-red-700/80"
+                            title="Reset all assignments"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                            >
+                                <path
+                                    fillRule="evenodd"
+                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                    clipRule="evenodd"
                                 />
-                                {connectionPhaseLabel}
-                            </span>
-                            <span className="text-gray-500" title={connectionUrl}>
-                                {connectionUrl}
-                            </span>
-                            <span className="text-gray-400">Last activity {lastActivityLabel}</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => navigation.navigateTo('library')}
-                                className="px-4 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors border border-gray-600"
-                            >
-                                &larr; Back to Library
-                            </button>
-                            <button
-                                onClick={handleHomeAllDrivers}
-                                className="flex items-center gap-2 px-4 py-2 rounded-md border border-emerald-600/70 bg-emerald-900/40 text-emerald-200 transition-colors hover:bg-emerald-700/40"
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                >
-                                    <path d="M10 2a1 1 0 01.894.553l5 10A1 1 0 0115 14H5a1 1 0 01-.894-1.447l5-10A1 1 0 0110 2zM10 6.118L6.764 12h6.472L10 6.118z" />
-                                </svg>
-                                Home All
-                            </button>
-                            <button
-                                onClick={handleResetAll}
-                                className="flex items-center gap-2 px-4 py-2 rounded-md bg-red-800/70 text-red-200 hover:bg-red-700/80 transition-colors border border-red-600/80"
-                                title="Reset all assignments"
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                >
-                                    <path
-                                        fillRule="evenodd"
-                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                                        clipRule="evenodd"
-                                    />
-                                </svg>
-                                Reset All
-                            </button>
-                        </div>
-                        {globalHomeFeedback.feedback.state !== 'idle' &&
-                            globalHomeFeedback.feedback.message && (
-                                <p
-                                    className={`text-xs ${
-                                        globalHomeFeedback.feedback.state === 'error'
-                                            ? 'text-red-200'
-                                            : globalHomeFeedback.feedback.state === 'pending'
-                                              ? 'text-sky-200'
-                                              : 'text-emerald-200'
-                                    }`}
-                                >
-                                    {globalHomeFeedback.feedback.message}
-                                    {globalHomeFeedback.feedback.code && (
-                                        <span className="ml-1 text-[10px] text-gray-400">
-                                            ({globalHomeFeedback.feedback.code})
-                                        </span>
-                                    )}
-                                </p>
-                            )}
+                            </svg>
+                            Reset All
+                        </button>
                     </div>
-                </header>
+                    {globalHomeFeedback.feedback.state !== 'idle' &&
+                    globalHomeFeedback.feedback.message ? (
+                        <p
+                            className={`text-xs ${
+                                globalHomeFeedback.feedback.state === 'error'
+                                    ? 'text-red-200'
+                                    : globalHomeFeedback.feedback.state === 'pending'
+                                      ? 'text-sky-200'
+                                      : 'text-emerald-200'
+                            }`}
+                        >
+                            {globalHomeFeedback.feedback.message}
+                            {globalHomeFeedback.feedback.code && (
+                                <span className="ml-1 text-[10px] text-gray-400">
+                                    ({globalHomeFeedback.feedback.code})
+                                </span>
+                            )}
+                        </p>
+                    ) : null}
+                </section>
 
                 <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">

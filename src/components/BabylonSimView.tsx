@@ -141,7 +141,9 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({ gridSize, settings, pat
 
         const footprint = computeProjectionFootprint({ gridSize, pattern, settings });
         const emitterLayout = buildGridEmitters(gridSize);
-        const emitters = emitterLayout.emitters.map((emitter) => new Vector3(emitter.x, emitter.y, 0));
+        const emitters = emitterLayout.emitters.map(
+            (emitter) => new Vector3(emitter.x, emitter.y, 0),
+        );
         const width = emitterLayout.width;
         const height = emitterLayout.height;
         const wallDistance = settings.wallDistance;

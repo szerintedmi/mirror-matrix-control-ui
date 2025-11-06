@@ -6,7 +6,7 @@ import App from './App';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('App', () => {
-    it('renders the pattern library header by default', () => {
+    it('renders the playback header by default', () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = createRoot(container);
@@ -15,9 +15,9 @@ describe('App', () => {
             root.render(<App />);
         });
 
-        const heading = container.querySelector('h1');
+        const heading = container.querySelector('nav ol');
         expect(heading).not.toBeNull();
-        expect(heading?.textContent).toMatch(/pattern library/i);
+        expect(heading?.textContent).toMatch(/Mirror Matrix\s*\/\s*Playback/i);
 
         act(() => {
             root.unmount();

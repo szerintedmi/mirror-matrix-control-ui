@@ -1,18 +1,14 @@
 import React, { useMemo } from 'react';
 
-import MotorStatusOverview from '../components/MotorStatusOverview';
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
-import { useStatusStore } from '../context/StatusContext';
 import { calculateProjectionSpan, inferGridFromCanvas } from '../utils/projectionGeometry';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type { NavigationControls } from '../App';
-import type { MirrorConfig, Pattern, PatternCanvas, ProjectionSettings } from '../types';
+import type { Pattern, PatternCanvas, ProjectionSettings } from '../types';
 
 interface PatternLibraryPageProps {
     navigation: NavigationControls;
-    gridSize: { rows: number; cols: number };
-    mirrorConfig: MirrorConfig;
     patterns: Pattern[];
     onDeletePattern: (patternId: string) => void;
     projectionSettings: ProjectionSettings;
@@ -94,16 +90,12 @@ const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
 const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
     const {
         navigation,
-        gridSize,
-        mirrorConfig,
         patterns,
         onDeletePattern,
         projectionSettings,
         activePatternId,
         onSelectActivePattern,
     } = props;
-
-    const { drivers } = useStatusStore();
 
     const formatProjectedSize = (canvas: PatternCanvas) => {
         const derivedGrid = inferGridFromCanvas(canvas);
@@ -115,57 +107,24 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
     };
 
     return (
-        <div className="flex flex-col h-screen p-4 sm:p-6 lg:p-8">
-            <header className="mb-6 flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
-                <div>
-                    <h1 className="text-4xl font-bold text-cyan-400 tracking-tight">
-                        Pattern Library
-                    </h1>
-                    <p className="text-gray-400 mt-1">
-                        Manage your light patterns and configure the simulation.
-                    </p>
-                </div>
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => navigation.navigateTo('configurator')}
-                        className="px-4 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors border border-gray-600"
-                    >
-                        Configure Array
-                    </button>
-                    <button
-                        onClick={() => navigation.navigateTo('simulation')}
-                        className="px-4 py-2 rounded-md bg-indigo-600 text-white font-semibold hover:bg-indigo-500 transition-colors"
-                    >
-                        Go to Simulation
-                    </button>
-                    <button
-                        onClick={() => navigation.editPattern(null)}
-                        className="px-4 py-2 rounded-md bg-cyan-600 text-white font-semibold hover:bg-cyan-500 transition-colors"
-                    >
-                        Create New Pattern
-                    </button>
-                </div>
-            </header>
-
-            <section className="mb-6">
-                <MotorStatusOverview
-                    rows={gridSize.rows}
-                    cols={gridSize.cols}
-                    mirrorConfig={mirrorConfig}
-                    drivers={drivers}
-                />
+        <div className="flex flex-col gap-6">
+            <section className="flex justify-end">
+                <button
+                    onClick={() => navigation.editPattern(null)}
+                    className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-500"
+                >
+                    Create New Pattern
+                </button>
             </section>
 
-            <main className="flex-grow bg-gray-800/50 rounded-lg p-4 shadow-lg ring-1 ring-white/10 flex flex-col min-h-0">
-                <h2 className="text-2xl font-semibold text-gray-100 mb-4 flex-shrink-0">
-                    Saved Patterns
-                </h2>
+            <main className="flex flex-col gap-4 rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10">
+                <h2 className="text-lg font-semibold text-gray-100">Saved Patterns</h2>
                 <div className="flex-grow overflow-y-auto pr-2 -mr-2">
                     {patterns.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
+                        <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-gray-500">
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
-                                className="h-12 w-12 mb-2"
+                                className="h-12 w-12"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -183,7 +142,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                             </p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                             {patterns.map((pattern) => {
                                 const projectedSize = formatProjectedSize(pattern.canvas);
                                 const inferredRows = Math.max(

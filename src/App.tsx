@@ -1,12 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-import ConnectionSettingsPanel from './components/ConnectionSettingsPanel';
+import AppTopBar, { type AppTopBarBreadcrumb } from './components/AppTopBar';
+import ConnectionSettingsContent from './components/ConnectionSettingsContent';
+import MobileNavigationDrawer from './components/MobileNavigationDrawer';
+import Modal from './components/Modal';
+import {
+    ArrayConfigIcon,
+    ConnectionIcon,
+    PatternsIcon,
+    PlaybackIcon,
+    SimulationIcon,
+} from './components/NavIcons';
+import NavigationRail from './components/NavigationRail';
 import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
 import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
 import ConfiguratorPage from './pages/ConfiguratorPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
+import PlaybackPage from './pages/PlaybackPage';
 import SimulationPage from './pages/SimulationPage';
 import { loadGridState, persistGridState } from './services/gridStorage';
 import { loadPatterns, persistPatterns } from './services/patternStorage';
@@ -17,8 +29,7 @@ import {
 
 import type { MirrorConfig, Pattern, ProjectionSettings } from './types';
 
-// Simple router state
-export type Page = 'library' | 'editor' | 'configurator' | 'simulation';
+export type Page = 'library' | 'editor' | 'playback' | 'configurator' | 'simulation' | 'connection';
 
 export interface NavigationControls {
     navigateTo: (page: Page) => void;
@@ -26,8 +37,11 @@ export interface NavigationControls {
 }
 
 const App: React.FC = () => {
-    const [page, setPage] = useState<Page>('library');
+    const [page, setPage] = useState<Page>('playback');
     const [editingPatternId, setEditingPatternId] = useState<string | null>(null);
+    const [isRailCollapsed, setIsRailCollapsed] = useState(false);
+    const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+    const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
 
     // Global state
     const resolvedStorage = useMemo(
@@ -58,6 +72,7 @@ const App: React.FC = () => {
 
     const navigateTo = (targetPage: Page) => {
         setPage(targetPage);
+        setIsMobileNavOpen(false);
     };
 
     useEffect(() => {
@@ -88,6 +103,42 @@ const App: React.FC = () => {
     };
 
     const navigationControls: NavigationControls = { navigateTo, editPattern };
+    const effectiveNavPage: Page = page === 'editor' ? 'library' : page;
+    const editingPattern = useMemo(
+        () =>
+            editingPatternId
+                ? (patterns.find((pattern) => pattern.id === editingPatternId) ?? null)
+                : null,
+        [editingPatternId, patterns],
+    );
+
+    const navigationItems = [
+        {
+            page: 'playback' as const,
+            label: 'Playback',
+            icon: <PlaybackIcon />,
+        },
+        {
+            page: 'library' as const,
+            label: 'Patterns',
+            icon: <PatternsIcon />,
+        },
+        {
+            page: 'simulation' as const,
+            label: 'Simulation',
+            icon: <SimulationIcon />,
+        },
+        {
+            page: 'configurator' as const,
+            label: 'Array Config',
+            icon: <ArrayConfigIcon />,
+        },
+        {
+            page: 'connection' as const,
+            label: 'Connection',
+            icon: <ConnectionIcon />,
+        },
+    ];
 
     const handleSavePattern = (pattern: Pattern) => {
         setPatterns((prev) => {
@@ -118,20 +169,29 @@ const App: React.FC = () => {
 
     const renderPage = () => {
         switch (page) {
+            case 'connection':
+                return <ConnectionSettingsContent />;
+            case 'playback':
+                return (
+                    <PlaybackPage
+                        patterns={patterns}
+                        gridSize={gridSize}
+                        mirrorConfig={mirrorConfig}
+                    />
+                );
             case 'editor':
                 return (
                     <PatternEditorPage
-                        navigation={navigationControls}
                         onSave={handleSavePattern}
-                        existingPattern={patterns.find((p) => p.id === editingPatternId) || null}
+                        existingPattern={editingPattern}
                         mirrorCount={gridSize.rows * gridSize.cols}
                         defaultCanvasSize={gridSize}
+                        onBack={() => setPage('library')}
                     />
                 );
             case 'configurator':
                 return (
                     <ConfiguratorPage
-                        navigation={navigationControls}
                         gridSize={gridSize}
                         onGridSizeChange={(rows, cols) => setGridSize({ rows, cols })}
                         mirrorConfig={mirrorConfig}
@@ -141,7 +201,6 @@ const App: React.FC = () => {
             case 'simulation':
                 return (
                     <SimulationPage
-                        navigation={navigationControls}
                         gridSize={gridSize}
                         projectionSettings={projectionSettings}
                         onUpdateProjection={handleProjectionChange}
@@ -155,8 +214,6 @@ const App: React.FC = () => {
                 return (
                     <PatternLibraryPage
                         navigation={navigationControls}
-                        gridSize={gridSize}
-                        mirrorConfig={mirrorConfig}
                         patterns={patterns}
                         onDeletePattern={handleDeletePattern}
                         projectionSettings={projectionSettings}
@@ -167,14 +224,84 @@ const App: React.FC = () => {
         }
     };
 
+    const pageTitle = (() => {
+        switch (page) {
+            case 'library':
+                return 'Patterns';
+            case 'editor':
+                return 'Patterns';
+            case 'playback':
+                return 'Playback';
+            case 'configurator':
+                return 'Array Config';
+            case 'simulation':
+                return 'Simulation';
+            case 'connection':
+                return 'Connection';
+            default:
+                return 'Mirror Matrix';
+        }
+    })();
+
+    const breadcrumbs: AppTopBarBreadcrumb[] =
+        page === 'editor' && editingPattern
+            ? [
+                  {
+                      label: 'Patterns',
+                      onClick: () => navigateTo('library'),
+                  },
+                  {
+                      label: editingPattern.name,
+                  },
+              ]
+            : page === 'editor'
+              ? [
+                    {
+                        label: 'Patterns',
+                        onClick: () => navigateTo('library'),
+                    },
+                ]
+              : [];
+
     return (
         <MqttProvider>
             <StatusProvider>
-                <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
-                    <ConnectionSettingsPanel />
-                    <main data-testid="app-root" className="mx-auto max-w-5xl px-4 py-8">
-                        {renderPage()}
-                    </main>
+                <div className="flex h-screen min-h-screen overflow-hidden bg-gray-900 font-sans text-gray-200">
+                    <NavigationRail
+                        items={navigationItems}
+                        activePage={effectiveNavPage}
+                        collapsed={isRailCollapsed}
+                        onToggleCollapse={() => setIsRailCollapsed((prev) => !prev)}
+                        onNavigate={navigateTo}
+                    />
+                    <MobileNavigationDrawer
+                        open={isMobileNavOpen}
+                        onClose={() => setIsMobileNavOpen(false)}
+                        items={navigationItems}
+                        activePage={effectiveNavPage}
+                        onNavigate={navigateTo}
+                    />
+                    <div className="flex h-full flex-1 flex-col overflow-hidden">
+                        <AppTopBar
+                            onMenuClick={() => setIsMobileNavOpen(true)}
+                            onOpenSettings={() => setIsConnectionModalOpen(true)}
+                            pageTitle={pageTitle}
+                            breadcrumbs={breadcrumbs}
+                        />
+                        <main
+                            data-testid="app-root"
+                            className="flex-1 overflow-auto px-4 py-6 md:px-8"
+                        >
+                            <div className="w-full">{renderPage()}</div>
+                        </main>
+                    </div>
+                    <Modal
+                        open={isConnectionModalOpen}
+                        onClose={() => setIsConnectionModalOpen(false)}
+                        title="Connection Settings"
+                    >
+                        <ConnectionSettingsContent />
+                    </Modal>
                 </div>
             </StatusProvider>
         </MqttProvider>

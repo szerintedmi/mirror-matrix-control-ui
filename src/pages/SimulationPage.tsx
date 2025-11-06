@@ -5,11 +5,9 @@ import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { MAX_WALL_DISTANCE_M, MIN_WALL_DISTANCE_M } from '../constants/projection';
 import { computeProjectionFootprint } from '../utils/projectionGeometry';
 
-import type { NavigationControls } from '../App';
 import type { Pattern, ProjectionSettings } from '../types';
 
 interface SimulationPageProps {
-    navigation: NavigationControls;
     gridSize: { rows: number; cols: number };
     projectionSettings: ProjectionSettings;
     onUpdateProjection: (patch: Partial<ProjectionSettings>) => void;
@@ -48,7 +46,6 @@ const SliderControl: React.FC<{
 );
 
 const SimulationPage: React.FC<SimulationPageProps> = ({
-    navigation,
     gridSize,
     projectionSettings,
     onUpdateProjection,
@@ -102,30 +99,8 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
             : 'Infinite';
 
     return (
-        <div className="flex flex-col h-screen bg-gray-900 text-gray-200">
-            <div className="flex-shrink-0 p-4 sm:p-6 lg:p-8 pb-0">
-                <header className="flex flex-wrap justify-between items-center gap-4">
-                    <div>
-                        <h1 className="text-4xl font-bold text-cyan-400 tracking-tight">
-                            Simulation
-                        </h1>
-                        <p className="text-gray-400 mt-1">
-                            Adjust projection geometry and preview the wall footprint of your
-                            pattern.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => navigation.navigateTo('library')}
-                            className="px-4 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors border border-gray-600"
-                        >
-                            &larr; Back to Library
-                        </button>
-                    </div>
-                </header>
-            </div>
-
-            <main className="flex-grow flex md:flex-row flex-col gap-8 min-h-0 p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
+            <main className="flex flex-col gap-8 min-h-0 md:flex-row">
                 <aside className="w-full md:w-80 lg:w-96 bg-gray-800/50 rounded-lg p-6 shadow-lg ring-1 ring-white/10 flex flex-col gap-4 overflow-y-auto flex-shrink-0">
                     <h2 className="text-xl font-semibold text-gray-100">Controls</h2>
 

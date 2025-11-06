@@ -44,7 +44,7 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
     } = props;
 
     return (
-        <aside className="w-full md:w-72 lg:w-80 bg-gray-800/50 rounded-lg p-4 ring-1 ring-white/10 flex-shrink-0 flex flex-col gap-6 overflow-y-auto">
+        <aside className="w-full md:w-72 lg:w-80 bg-gray-800/50 rounded-lg p-4 ring-1 ring-white/10 flex-shrink-0 flex flex-col gap-6">
             <div>
                 <label htmlFor="patternName" className="block text-sm font-medium text-gray-300">
                     Pattern Name

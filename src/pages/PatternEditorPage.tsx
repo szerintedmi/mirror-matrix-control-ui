@@ -6,7 +6,6 @@ import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS, TILE_PLACEMENT_UNIT } from '../cons
 import { usePatternEditorInteractions } from '../hooks/usePatternEditorInteractions';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
-import type { NavigationControls } from '../App';
 import type { Pattern } from '../types';
 import type { EditorTool, TileDraft } from '../types/patternEditor';
 
@@ -48,19 +47,19 @@ const useElementSize = <T extends HTMLElement>(): [
 };
 
 interface PatternEditorPageProps {
-    navigation: NavigationControls;
     onSave: (pattern: Pattern) => void;
     existingPattern: Pattern | null;
     mirrorCount: number;
     defaultCanvasSize: { rows: number; cols: number };
+    onBack?: () => void;
 }
 
 const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
-    navigation,
     onSave,
     existingPattern,
     mirrorCount,
     defaultCanvasSize,
+    onBack,
 }) => {
     const [name, setName] = useState('');
     const [canvasSize, setCanvasSize] = useState(defaultCanvasSize);
@@ -255,19 +254,6 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [isDirty]);
 
-    const confirmNavigateAway = useCallback(() => {
-        if (!isDirty) {
-            return true;
-        }
-        return window.confirm('You have unsaved changes. Leave the pattern editor?');
-    }, [isDirty]);
-
-    const handleNavigateBack = useCallback(() => {
-        if (confirmNavigateAway()) {
-            navigation.navigateTo('library');
-        }
-    }, [confirmNavigateAway, navigation]);
-
     const handleSave = () => {
         const trimmed = trimmedName;
         if (!trimmed) {
@@ -388,28 +374,26 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-screen p-4 sm:p-6 lg:p-8">
-            <header className="mb-2 flex-shrink-0">
-                <div className="flex flex-wrap justify-between items-center gap-4">
+        <div className="flex min-h-0 flex-col gap-4 p-4 sm:p-6 lg:p-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                {onBack && (
                     <button
-                        onClick={handleNavigateBack}
-                        className="px-4 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors border border-gray-600"
+                        type="button"
+                        onClick={onBack}
+                        className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-white/40 hover:bg-white/10"
                     >
-                        &larr; Back to Library
+                        Back to Library
                     </button>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-cyan-400 order-first sm:order-none w-full sm:w-auto text-center sm:text-left">
-                        {existingPattern ? 'Edit Pattern' : 'Create New Pattern'}
-                    </h1>
-                    <button
-                        onClick={handleSave}
-                        className="px-6 py-2 rounded-md bg-cyan-600 text-white font-semibold hover:bg-cyan-500 transition-colors"
-                    >
-                        Save Pattern
-                    </button>
-                </div>
-            </header>
-
-            <div className="flex-grow flex flex-col md:flex-row gap-6 min-h-0">
+                )}
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    className="rounded-md bg-cyan-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-500 sm:ml-auto"
+                >
+                    Save Pattern
+                </button>
+            </div>
+            <div className="flex flex-grow flex-col gap-6 min-h-0 md:flex-row">
                 <PatternEditorSidebar {...sidebarProps} />
                 <main className="flex-grow bg-gray-800/50 rounded-lg ring-1 ring-white/10 p-4 flex items-center justify-center min-h-[320px]">
                     <div
