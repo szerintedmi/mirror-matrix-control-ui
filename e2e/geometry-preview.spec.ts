@@ -10,8 +10,6 @@ test.describe('Geometry preview', () => {
         await page.getByRole('button', { name: 'Simulation' }).click();
 
         await page.getByTestId('array-plan').waitFor();
-        const yawDisplay = page.getByTestId('debug-yaw');
-        const initialYaw = await yawDisplay.textContent();
 
         const arrayPoints = page.locator("[data-testid^='array-point-']");
         const pointCount = await arrayPoints.count();

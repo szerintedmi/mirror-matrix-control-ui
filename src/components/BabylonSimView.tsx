@@ -363,6 +363,8 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         const mirrorRoot = new TransformNode('mirrors-root', scene);
         mirrorRootRef.current = mirrorRoot;
 
+        const pivotLocal = new Vector3(-MIRROR_DIMENSION_M / 2, MIRROR_DIMENSION_M / 2, 0);
+
         solverResult.mirrors.forEach((mirror) => {
             const panel = MeshBuilder.CreatePlane(
                 `mirror-${mirror.mirrorId}`,
@@ -370,14 +372,27 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
                 scene,
             );
             panel.parent = mirrorRoot;
-            panel.position = toVector3(mirror.center);
-            const desiredNormal = (mirror.normal ? toVector3(mirror.normal) : new Vector3(0, 0, 1)).normalize();
+            const mirrorCenter = toVector3(mirror.center);
+            panel.position = mirrorCenter.clone();
+            panel.setPivotPoint(pivotLocal);
+            const desiredNormal = (
+                mirror.normal ? toVector3(mirror.normal) : new Vector3(0, 0, 1)
+            ).normalize();
             panel.setDirection(desiredNormal);
             panel.computeWorldMatrix(true);
             const forward = panel.forward.clone().normalize();
             if (Vector3.Dot(forward, desiredNormal) < 0.99) {
                 panel.setDirection(desiredNormal.scale(-1));
             }
+            panel.computeWorldMatrix(true);
+            const right = panel.right.clone().normalize();
+            const up = panel.up.clone().normalize();
+            const adjustedOffset = right
+                .scale(pivotLocal.x)
+                .addInPlace(up.scale(pivotLocal.y))
+                .addInPlace(panel.forward.clone().normalize().scale(pivotLocal.z));
+            panel.position = mirrorCenter.add(adjustedOffset);
+            panel.computeWorldMatrix(true);
             const hasError = errorMirrorIds.has(mirror.mirrorId);
             panel.material =
                 selectedMirrorId === mirror.mirrorId
