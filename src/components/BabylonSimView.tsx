@@ -371,8 +371,13 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             );
             panel.parent = mirrorRoot;
             panel.position = toVector3(mirror.center);
-            const normal = mirror.normal ? toVector3(mirror.normal) : new Vector3(0, 0, 1);
-            panel.setDirection(normal);
+            const desiredNormal = (mirror.normal ? toVector3(mirror.normal) : new Vector3(0, 0, 1)).normalize();
+            panel.setDirection(desiredNormal);
+            panel.computeWorldMatrix(true);
+            const forward = panel.forward.clone().normalize();
+            if (Vector3.Dot(forward, desiredNormal) < 0.99) {
+                panel.setDirection(desiredNormal.scale(-1));
+            }
             const hasError = errorMirrorIds.has(mirror.mirrorId);
             panel.material =
                 selectedMirrorId === mirror.mirrorId
@@ -453,12 +458,19 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             incomingMaterial.backFaceCulling = false;
             incomingRayMaterialRef.current = incomingMaterial;
 
+            const normalizedIncoming = incomingDir.normalize();
             solverResult.mirrors.forEach((mirror) => {
                 if (activePatternId && mirror.patternId === null) {
                     return;
                 }
                 const end = toVector3(mirror.center);
-                const path = [sunPosition, end];
+                const delta = end.subtract(sunPosition);
+                const parallelComponent = normalizedIncoming.scale(
+                    Vector3.Dot(delta, normalizedIncoming),
+                );
+                const perpendicularComponent = delta.subtract(parallelComponent);
+                const startPoint = sunPosition.add(perpendicularComponent);
+                const path: Vector3[] = [sunPosition, startPoint, end];
                 const tube = MeshBuilder.CreateTube(
                     `incoming-ray-${mirror.mirrorId}`,
                     { path, radius: 0.0015, tessellation: 8 },
@@ -557,6 +569,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             lightHitMaterialRef.current = null;
         }
     }, [
+        activePatternId,
         debugOptions,
         emitterLayout.height,
         emitterLayout.width,

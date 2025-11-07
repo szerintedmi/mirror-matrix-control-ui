@@ -1,6 +1,6 @@
 import { MIRROR_PITCH_M } from '../constants/projection';
 
-import { degToRad, dotVec3, normalizeVec3 } from './orientation';
+import { degToRad, dotVec3, normalizeVec3, radToDeg } from './orientation';
 
 import type {
     MirrorReflectionSolution,
@@ -68,6 +68,9 @@ const crossVec = (a: Vec3, b: Vec3): Vec3 => ({
 
 const normalize = (v: Vec3): Vec3 => normalizeVec3(v);
 
+const projectPointOntoPlane = (point: Vec3, planePoint: Vec3, planeNormal: Vec3): Vec3 =>
+    addVec(point, scaleVec(planeNormal, dotVec3(subVec(planePoint, point), planeNormal)));
+
 const createMirrorId = (row: number, col: number): string => `mirror-${row}-${col}`;
 
 const createFallbackPatternTiles = (gridSize: { rows: number; cols: number }): PatternTarget[] => {
@@ -132,6 +135,30 @@ const buildPatternTargets = ({
         };
     });
 };
+
+const buildAlignedFallbackTargets = ({
+    mirrors,
+    wallPoint,
+    wallNormal,
+    vWall,
+    projectionOffset,
+}: {
+    mirrors: MirrorMeta[];
+    wallPoint: Vec3;
+    wallNormal: Vec3;
+    vWall: Vec3;
+    projectionOffset: number;
+}): PatternTarget[] =>
+    mirrors.map((mirror) => {
+        const projected = projectPointOntoPlane(mirror.center, wallPoint, wallNormal);
+        const targetPoint = addVec(projected, scaleVec(vWall, projectionOffset));
+        return {
+            id: `fallback-${mirror.row}-${mirror.col}`,
+            normalizedX: mirror.normalizedX,
+            normalizedY: mirror.normalizedY,
+            targetPoint,
+        };
+    });
 
 const buildMirrorMeta = (gridSize: { rows: number; cols: number }, origin: Vec3): MirrorMeta[] => {
     const mirrors: MirrorMeta[] = [];
@@ -313,7 +340,7 @@ const solveMirrorReflection = ({
     }
     const rHat = scaleVec(direction, 1 / dirLength);
     const incoming = normalize(sunDirection);
-    const bisector = normalize(subVec(rHat, incoming));
+    const bisector = normalize(addVec(rHat, incoming));
     if (lengthVec(bisector) < EPSILON) {
         errors.push({
             code: 'degenerate_bisector',
@@ -329,6 +356,8 @@ const solveMirrorReflection = ({
     const nW = dotVec3(bisector, wallNormal);
     const yaw = Math.atan2(nU, Math.sqrt(Math.max(0, nV * nV + nW * nW)));
     const pitch = Math.atan2(-nV, nW);
+    const yawDeg = radToDeg(yaw);
+    const pitchDeg = radToDeg(pitch);
 
     const den = dotVec3(rHat, wallNormal);
     if (Math.abs(den) < EPSILON) {
@@ -366,8 +395,8 @@ const solveMirrorReflection = ({
     const dMajor = incidenceCosine > EPSILON ? dMinor / incidenceCosine : Number.POSITIVE_INFINITY;
 
     return {
-        yaw,
-        pitch,
+        yaw: yawDeg,
+        pitch: pitchDeg,
         normal: bisector,
         wallHit,
         ellipse: {
@@ -436,23 +465,31 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
         params.wallAnchor ?? addVec(arrayOrigin, scaleVec(wallNormal, projection.wallDistance));
 
     const mirror00 = mirrorMeta[0];
-    const projectedOrigin = addVec(
-        mirror00.center,
-        scaleVec(wallNormal, dotVec3(subVec(wallPoint, mirror00.center), wallNormal)),
-    );
+    const projectedOrigin = projectPointOntoPlane(mirror00.center, wallPoint, wallNormal);
     const patternOrigin = addVec(projectedOrigin, scaleVec(vWall, projection.projectionOffset));
 
-    const patternTargets = buildPatternTargets({
-        pattern,
-        gridSize,
-        uWall,
-        vWall,
-        patternOrigin,
-        spacing: {
-            x: projection.pixelSpacing.x,
-            y: projection.pixelSpacing.y,
-        },
-    });
+    let patternTargets: PatternTarget[];
+    if (!pattern || pattern.tiles.length === 0) {
+        patternTargets = buildAlignedFallbackTargets({
+            mirrors: mirrorMeta,
+            wallPoint,
+            wallNormal,
+            vWall,
+            projectionOffset: projection.projectionOffset,
+        });
+    } else {
+        patternTargets = buildPatternTargets({
+            pattern,
+            gridSize,
+            uWall,
+            vWall,
+            patternOrigin,
+            spacing: {
+                x: projection.pixelSpacing.x,
+                y: projection.pixelSpacing.y,
+            },
+        });
+    }
 
     const assignmentResult = assignTargetsToMirrors(mirrorMeta, patternTargets);
     const thetaSun = degToRad(projection.sunAngularDiameterDeg);

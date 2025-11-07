@@ -17,8 +17,8 @@ test.describe('Geometry preview', () => {
         const pointCount = await arrayPoints.count();
         const targetPoint = pointCount > 1 ? arrayPoints.nth(1) : arrayPoints.first();
         await targetPoint.click();
-        if (pointCount > 1 && initialYaw) {
-            await expect(yawDisplay).not.toHaveText(initialYaw);
+        if (pointCount > 1) {
+            await expect(targetPoint).toHaveAttribute('stroke-width', '1.8');
         }
 
         const raysToggle = page.getByTestId('toggle-rays');

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_PROJECTION_SETTINGS } from '../../constants/projection';
+import { anglesToVector } from '../orientation';
 import { solveReflection } from '../reflectionSolver';
 
 import type { Pattern, ProjectionSettings } from '../../types';
@@ -32,13 +33,13 @@ describe('reflectionSolver', () => {
             mode: 'angles',
             yaw: 0,
             pitch: 0,
-            vector: { x: 0, y: 0, z: -1 },
+            vector: anglesToVector(0, 0, 'forward'),
         };
         projection.wallOrientation = {
             mode: 'vector',
             yaw: 0,
             pitch: 0,
-            vector: { x: 0, y: 0, z: 1 },
+            vector: anglesToVector(0, 0, 'forward'),
         };
         const result = solveReflection({
             gridSize: { rows: 1, cols: 1 },
@@ -53,8 +54,68 @@ describe('reflectionSolver', () => {
             expect(Math.abs(mirror.yaw ?? 0)).toBeLessThan(5e-2);
             expect(Math.abs(mirror.pitch ?? 0)).toBeLessThan(5e-2);
             expect(mirror.errors).toHaveLength(0);
-            expect(mirror.wallHit?.z ?? projection.wallDistance).toBeGreaterThan(0);
+            expect(mirror.wallHit?.z ?? 0).toBeCloseTo(-projection.wallDistance, 3);
         });
+    });
+
+    it('keeps fallback mirrors neutral when wall and sun orientations are zeroed', () => {
+        const projection = cloneProjection();
+        projection.sunOrientation = {
+            mode: 'angles',
+            yaw: 0,
+            pitch: 0,
+            vector: anglesToVector(0, 0, 'forward'),
+        };
+        projection.wallOrientation = {
+            mode: 'vector',
+            yaw: 0,
+            pitch: 0,
+            vector: anglesToVector(0, 0, 'forward'),
+        };
+
+        const result = solveReflection({
+            gridSize: { rows: 3, cols: 4 },
+            projection,
+            pattern: null,
+        });
+
+        expect(result.errors).toHaveLength(0);
+        const solvedMirrors = result.mirrors.filter((mirror) => mirror.patternId !== null);
+        expect(solvedMirrors).toHaveLength(12);
+        solvedMirrors.forEach((mirror) => {
+            expect(Math.abs(mirror.yaw ?? 0)).toBeLessThan(5e-2);
+            expect(Math.abs(mirror.pitch ?? 0)).toBeLessThan(5e-2);
+            expect(mirror.errors).toHaveLength(0);
+        });
+    });
+
+    it('tilts mirrors by half the horizontal sun offset when reflecting straight ahead', () => {
+        const projection = cloneProjection();
+        projection.sunOrientation = {
+            mode: 'angles',
+            yaw: -10,
+            pitch: 0,
+            vector: anglesToVector(-10, 0, 'forward'),
+        };
+        projection.wallOrientation = {
+            mode: 'vector',
+            yaw: 0,
+            pitch: 0,
+            vector: anglesToVector(0, 0, 'forward'),
+        };
+
+        const result = solveReflection({
+            gridSize: { rows: 1, cols: 1 },
+            projection,
+            pattern: null,
+        });
+
+        expect(result.errors).toHaveLength(0);
+        const mirror = result.mirrors[0];
+        expect(mirror.patternId).not.toBeNull();
+        expect(mirror.errors).toHaveLength(0);
+        expect(mirror.yaw ?? 999).toBeCloseTo(-5, 1);
+        expect(Math.abs(mirror.pitch ?? 0)).toBeLessThan(1e-2);
     });
 
     it('returns invalid_wall_basis when wall normal is parallel to world up', () => {
