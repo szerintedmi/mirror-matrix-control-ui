@@ -244,7 +244,60 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         const wallNormalVec = toVector3(wallNormal);
         const uWallVec = toVector3(uWall);
         const vWallVec = toVector3(vWall);
-        const wallOrigin = wallNormalVec.scale(wallDistance);
+        const defaultArrayOrigin: Vec3 = {
+            x: -emitterLayout.width / 2 + MIRROR_PITCH_M / 2,
+            y: emitterLayout.height / 2 - MIRROR_PITCH_M / 2,
+            z: 0,
+        };
+        const solverArrayOrigin = solverResult.mirrors.find(
+            (mirror) => mirror.row === 0 && mirror.col === 0,
+        )?.center;
+        const arrayOrigin = toVector3(solverArrayOrigin ?? defaultArrayOrigin);
+        const baseWallOrigin = arrayOrigin.add(wallNormalVec.scale(wallDistance));
+
+        let minU = Number.POSITIVE_INFINITY;
+        let maxU = Number.NEGATIVE_INFINITY;
+        let minV = Number.POSITIVE_INFINITY;
+        let maxV = Number.NEGATIVE_INFINITY;
+
+        const collectExtents = (point: Vec3 | undefined) => {
+            if (!point) {
+                return;
+            }
+            const worldPoint = toVector3(point);
+            const delta = worldPoint.subtract(baseWallOrigin);
+            const localU = Vector3.Dot(delta, uWallVec);
+            const localV = Vector3.Dot(delta, vWallVec);
+            minU = Math.min(minU, localU);
+            maxU = Math.max(maxU, localU);
+            minV = Math.min(minV, localV);
+            maxV = Math.max(maxV, localV);
+        };
+
+        solverResult.mirrors.forEach((mirror) => {
+            collectExtents(mirror.wallHit);
+        });
+
+        if (!Number.isFinite(minU) || !Number.isFinite(minV) || !Number.isFinite(maxU) || !Number.isFinite(maxV)) {
+            minU = -emitterLayout.width / 2;
+            maxU = emitterLayout.width / 2;
+            minV = -emitterLayout.height / 2;
+            maxV = emitterLayout.height / 2;
+        }
+
+        const padding = MIRROR_PITCH_M;
+        minU -= padding;
+        maxU += padding;
+        minV -= padding;
+        maxV += padding;
+
+        const wallCenter = baseWallOrigin
+            .clone()
+            .addInPlace(uWallVec.clone().scale((minU + maxU) / 2))
+            .addInPlace(vWallVec.clone().scale((minV + maxV) / 2));
+
+        const wallWidth = Math.max(maxU - minU, MIRROR_PITCH_M);
+        const wallHeight = Math.max(maxV - minV, MIRROR_PITCH_M);
 
         const lightYaw = (settings.sunOrientation.yaw * Math.PI) / 180;
         const lightPitch = (settings.sunOrientation.pitch * Math.PI) / 180;
@@ -258,7 +311,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
 
         const toWallLocal = (point: Vec3): Vector3 => {
             const worldPoint = toVector3(point);
-            const delta = worldPoint.subtract(wallOrigin);
+            const delta = worldPoint.subtract(wallCenter);
             return new Vector3(
                 Vector3.Dot(delta, uWallVec),
                 Vector3.Dot(delta, vWallVec),
@@ -277,8 +330,8 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         const wall = MeshBuilder.CreatePlane(
             'wall-plane',
             {
-                width: emitterLayout.width * 1.2,
-                height: Math.max(emitterLayout.height * 1.2, MIRROR_PITCH_M * 2),
+                width: wallWidth,
+                height: wallHeight,
             },
             scene,
         );
@@ -289,7 +342,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         });
         wallMat.backFaceCulling = false;
         wall.material = wallMat;
-        wall.position = wallOrigin;
+        wall.position = wallCenter;
         wall.rotationQuaternion = buildQuaternionFromAxes(uWall, vWall, wallNormal);
         wallRef.current = wall;
 
