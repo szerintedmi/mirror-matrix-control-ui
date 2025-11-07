@@ -329,6 +329,11 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
                 diffuse: '#B91C1C',
                 emissive: '#F87171',
             }),
+            inactive: createMaterial(scene, 'mirror-inactive', {
+                diffuse: '#0F172A',
+                emissive: '#0EA5E9',
+                alpha: 0.25,
+            }),
         };
         mirrorMaterials.base.backFaceCulling = false;
         mirrorMaterials.base.disableLighting = true;
@@ -336,6 +341,8 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         mirrorMaterials.selected.disableLighting = true;
         mirrorMaterials.error.backFaceCulling = false;
         mirrorMaterials.error.disableLighting = true;
+        mirrorMaterials.inactive.backFaceCulling = false;
+        mirrorMaterials.inactive.disableLighting = true;
         mirrorMaterialsRef.current = mirrorMaterials;
 
         const ellipseMaterials = {
@@ -394,12 +401,17 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             panel.position = mirrorCenter.add(adjustedOffset);
             panel.computeWorldMatrix(true);
             const hasError = errorMirrorIds.has(mirror.mirrorId);
-            panel.material =
-                selectedMirrorId === mirror.mirrorId
-                    ? mirrorMaterials.selected
-                    : hasError
-                      ? mirrorMaterials.error
-                      : mirrorMaterials.base;
+            const isInactive = !mirror.patternId;
+            let material = mirrorMaterials.base;
+            if (selectedMirrorId === mirror.mirrorId) {
+                material = mirrorMaterials.selected;
+            } else if (hasError) {
+                material = mirrorMaterials.error;
+            } else if (isInactive) {
+                material = mirrorMaterials.inactive;
+            }
+            panel.material = material;
+            panel.visibility = isInactive ? 0.45 : 1;
         });
 
         disposeEntity(normalLinesRef.current);

@@ -18,6 +18,7 @@ interface PlanPoint {
     x: number;
     y: number;
     label: string;
+    isActive: boolean;
 }
 
 const buildArrayPlan = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
@@ -41,6 +42,7 @@ const buildArrayPlan = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
             x: normalizedX * VIEW_BOX,
             y: VIEW_BOX - normalizedY * VIEW_BOX,
             label: `${mirror.row + 1}:${mirror.col + 1}`,
+            isActive: Boolean(mirror.patternId),
         } satisfies PlanPoint;
     });
 };
@@ -68,6 +70,7 @@ const buildWallHits = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
             x: normalizedX * VIEW_BOX,
             y: VIEW_BOX - normalizedY * VIEW_BOX,
             label: mirror.patternId ?? mirror.mirrorId,
+            isActive: Boolean(mirror.patternId),
         } satisfies PlanPoint;
     });
 };
@@ -84,8 +87,12 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
     const renderSvgPoint = (point: PlanPoint, dataset: 'array' | 'wall') => {
         const isSelected = point.id === selectedMirrorId;
         const hasError = errorMirrorIds.has(point.id);
+        const isInactive = !point.isActive;
         const baseColor = hasError ? '#f87171' : '#38bdf8';
         const fill = isSelected ? '#f97316' : '#1f2937';
+        const fillOpacity = isInactive && !isSelected ? 0.25 : 1;
+        const strokeOpacity = isInactive && !isSelected ? 0.35 : 1;
+        const strokeDasharray = isInactive && !isSelected ? '2 2' : undefined;
         return (
             <g key={`${dataset}-${point.id}`}>
                 <circle
@@ -93,8 +100,11 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                     cy={point.y}
                     r={isSelected ? 3 : 2.3}
                     fill={fill}
+                    fillOpacity={fillOpacity}
                     stroke={baseColor}
                     strokeWidth={isSelected ? 1.8 : hasError ? 1.4 : 1}
+                    strokeOpacity={strokeOpacity}
+                    strokeDasharray={strokeDasharray}
                     className="cursor-pointer transition-all duration-150"
                     onClick={() => onSelectMirror(point.id)}
                     data-testid={`${dataset}-point-${point.id}`}
