@@ -30,6 +30,7 @@ interface BabylonSimViewProps {
     };
     isPreviewStale: boolean;
     showIncomingPerMirror: boolean;
+    activePatternId: string | null;
 }
 
 const EPSILON = 1e-4;
@@ -107,6 +108,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     debugOptions,
     isPreviewStale,
     showIncomingPerMirror,
+    activePatternId,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -452,6 +454,9 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             incomingRayMaterialRef.current = incomingMaterial;
 
             solverResult.mirrors.forEach((mirror) => {
+                if (activePatternId && mirror.patternId === null) {
+                    return;
+                }
                 const end = toVector3(mirror.center);
                 const path = [sunPosition, end];
                 const tube = MeshBuilder.CreateTube(

@@ -694,6 +694,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                         debugOptions={visualizationToggles}
                         isPreviewStale={previewIsStale}
                         showIncomingPerMirror={visualizationToggles.showIncomingRays}
+                        activePatternId={activePatternId}
                     />
 
                     <div className="flex flex-wrap gap-4 text-xs font-medium text-gray-300 sm:text-sm">
