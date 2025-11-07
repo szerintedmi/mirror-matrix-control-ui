@@ -15,9 +15,9 @@ A single-page, browser-based controller for a modular kinetic mirror array. The 
 - Designing and selecting simple patterns.
 - Converting patterns into absolute motor positions.
 - Issuing commands over MQTT and tracking status.
-- Providing a minimal 2D geometry preview for projection parameters.
+- Providing a physically accurate BabylonJS 3D preview plus 2D overlays based on the shared reflection solver.
 
-Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cloud backend, calibration workflows, advanced visualizations.
+Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cloud backend, calibration workflows, photorealistic rendering modes beyond the BabylonJS preview.
 
 ### Ownership & Precedence
 
@@ -33,7 +33,7 @@ Out of scope for MVP: pattern sequencing, multiple saved grid configurations, cl
 - Configurator: tile driver discovery, drag-and-drop motor assignment, selective clearing/reset with confirmations.
 - Pattern Editor: grid-based paint/erase with canvas resize and guardrails not to exceed available mirrors.
 - Pattern Library: list, preview, select active, delete; show projected footprint estimates based on simulation parameters.
-- Simulation: dual-view preview (top and side) of incident/reflected rays with wall/light angle controls and distance.
+- Simulation: shared geometry solver feeding a BabylonJS 3D preview (array, wall, sun vector, ellipses) plus derived 2D projections and numeric readouts.
 - Operational Insights: surface homing state, awake/asleep, thermal budgets, and motion timing from MQTT status.
 
 ---
@@ -251,8 +251,15 @@ Target users are technical; keep the interface clean and efficient.
 
 ### 8.6 Projection Parameters & Preview
 
-- Inputs: wall distance (meters), wall angles (vertical/horizontal), incoming light angles (vertical/horizontal).
-- 2D preview (top view and side view): mirror plane, wall plane, incoming and reflected rays, derived projected canvas size.
+- Capture every input required by [docs/reflection-calculations.md](docs/reflection-calculations.md):
+  - wall distance (meters) and anchor point `p_w0`,
+  - wall normal orientation (vertical + horizontal angles or direct vector entry),
+  - incoming light (Sun → mirror) orientation (vertical + horizontal angles),
+  - projection height offset `H` and optional pixel spacing overrides (`P_x`, `P_y`),
+  - optional world-up override for non-level installs.
+- Run the shared reflection solver in real time to derive per-mirror yaw/pitch, wall hit points, and ellipse descriptors; surface validation errors (grazing incidence, wall behind mirrors, bisector degeneracy).
+- Render an interactive BabylonJS 3D preview that shows the mirror array, wall plane, Sun vector, outgoing rays, and ellipse footprints; provide orbit/zoom, selection highlighting, and toggles for normals/ellipses.
+- Provide derived 2D overlays (top and side) plus numeric readouts (projected footprint bounds, incidence cosines, ellipse diameters) sourced from the same solver so operators can cross-check values quickly.
 
 ### 8.7 Playback Controls
 
@@ -294,33 +301,50 @@ Target users are technical; keep the interface clean and efficient.
 
 ---
 
-## 10. Pattern → Motion Conversion
+## 10. Geometry Solver & Pattern → Motion Conversion
+
+**Reference**
+
+- [docs/reflection-calculations.md](docs/reflection-calculations.md) is the canonical math; the UI must implement the same equations so preview and playback stay in lockstep.
 
 **Inputs**
 
-- Pattern points `(x, y)` on the canvas (count limited to available tiles).
-- Grid geometry (pitch 53 mm; grid dimensions; tile locations).
-- Projection settings (wall distance, wall and light angles).
+- Mirror array geometry:
+  - center-to-center spacing `s_x`, `s_y` (default 53 mm but configurable per install),
+  - origin `p0` (3D) and array basis vectors `û_arr`, `v̂_arr`,
+  - derived per-mirror center `p_m[i,j] = p0 + i·s_x·û_arr + j·s_y·v̂_arr`.
+- Wall plane:
+  - anchor point `p_w0`,
+  - unit normal `ŵ`.
+- Incoming light: unit vector `î` (Sun → mirror).
+- Frame helpers: world up `ẑ`; wall basis vectors `v̂_wall = normalize(ẑ − (ẑ·ŵ) ŵ)` and `û_wall = normalize(v̂_wall × ŵ)` with fallback logic when `ẑ` aligns with `ŵ`.
+- Projection parameters:
+  - vertical offset `H`,
+  - desired wall pixel spacing `P_x`, `P_y`,
+  - optional overrides for Sun angular diameter and slope blur RMS `σ`.
+- Pattern definition: canvas pixels `(i, j)` (still capped to available tiles) that inherit the desired wall spacing.
 
-**Outputs**
+**Outputs (per mirror/tile)**
 
-- Absolute step targets for each assigned axis (range -1200 to +1200, integers).
+- Mirror yaw and pitch (in radians) where zero means mirror normal aligns with the wall normal (`n̂ = ŵ`).
+- Wall hit point `p_hit`, ellipse axes (`â`, `b̂`), diameters (`D_major`, `D_minor`), and incidence cosine `c`.
+- Degeneracy flags (grazing incidence, wall behind mirror, `r̂ ≈ î`).
+- Derived motor step targets after mapping yaw/pitch through the MVP linear `steps_per_degree` constant (clamped to [-1200, +1200]).
 
-**Assumptions**
+**Procedure**
 
-- Linear mapping angle-to-steps via a global constant `steps_per_degree` per axis. No per-motor calibration in MVP.
-- Zero steps represents centered position.
-
-**Algorithm (MVP sketch)**
-
-1. Map canvas points to physical wall coordinates using canvas size, wall distance, and wall angles.
-2. Assign each canvas point to a tile (nearest-neighbor/Hungarian-style mapping) so clustered points cause neighboring tiles to target nearby wall coordinates, yielding overlap where desired.
-3. Convert required mirror tilt angles (horizontal/vertical) to motor absolute steps using the linear constant; clamp to [-1200, +1200].
-4. Emit per-motor MOVE commands with `cmd_id`; rely on status to track completion.
+1. **Lock the pattern on the wall** by projecting the `(0,0)` mirror onto the wall along `ŵ`, applying the offset `H·v̂_wall`, then stepping along `{û_wall, v̂_wall}` by `i·P_x` and `j·P_y` to get desired wall points `p_t[i,j]`.
+2. **Aim each mirror**: compute `r̂ = normalize(p_t − p_m)` (mirror → wall), then the specular bisector normal `n̂ = normalize(r̂ − î)`; guard `||r̂ − î|| < ε`.
+3. **Convert to yaw/pitch** relative to `{û_wall, v̂_wall, ŵ}` using the exact inverse: `yaw = atan2(n_u, √(n_v² + n_w²))` and `pitch = atan2(−n_v, n_w)` where `n_u = n̂·û_wall`, etc.
+4. **Compute wall intersection & ellipse** using `ray_plane` to get `p_hit`, then derive `â`, `b̂`, and diameters with the Sun angular diameter (`Θ☉ ≈ 0.53°`, or the `Θ_eff` blur-adjusted variant). Reject `|r̂·ŵ| < ε` or `t ≤ 0`.
+5. **Map to motor steps** by translating yaw/pitch into degrees and multiplying by `steps_per_degree` (per axis constants, still shared globally in MVP). Document zero offsets so hardware calibration can inject per-motor corrections later.
+6. **Assignment pipeline**: run a deterministic mapping (Hungarian/nearest) from pattern pixels to mirrors before invoking the solver so clustered points intentionally cause overlapping wall hits. Persist the assignment per playback to guarantee repeatability.
+7. **Command emission**: package the resulting per-axis step targets into MOVE commands with `cmd_id` and reuse solver outputs for preview telemetry (no re-computation with looser math).
 
 **Point limit enforcement**
 
 - The editor enforces `activePoints <= availableTiles`; if future workflows need over-subscription, define a redistribution policy before implementation.
+- Solver errors (degeneracy, out-of-bounds steps) block playback and surface inline so operators can adjust parameters before commands are sent.
 
 ---
 
@@ -356,7 +380,7 @@ Target users are technical; keep the interface clean and efficient.
 - Multiple grid configurations (single active only).
 - Cloud/backend persistence.
 - Per-motor calibration; nonlinear geometric correction beyond linear mapping.
-- Full 3D simulation or advanced renderings.
+- Photorealistic/ray-traced renderings or volumetric lighting beyond the BabylonJS preview.
 - Aliases for tile drivers/motors; instead, show grid position if assigned, otherwise last four characters of MAC.
 
 ---
@@ -380,7 +404,7 @@ Target users are technical; keep the interface clean and efficient.
 - **Assignment visibility:** Tile drivers or tiles with unassigned motors are clearly highlighted with quick links back to the discovery list.
 - **Nudge:** Clicking Nudge ± on a motor axis sends a ±500-step move and motion is visible in status.
 - **Home All:** Triggers homing concurrently; homed flags update; `steps_since_home` resets.
-- **Projection params:** User sets wall distance/angles and incoming light; preview updates (top and side views) and shows derived size.
+- **Geometry solver & preview:** Adjusting wall/light inputs (distance, normals, `H`, `P_x`, `P_y`) re-runs the shared solver; BabylonJS 3D view and 2D overlays update in sync and surface yaw/pitch + ellipse metrics for a selected mirror within ±1 mm / ±0.1° of the reference calculations.
 - **Pattern design:** User places active points (capped at tile count); denser clusters lead to brighter projected regions.
 - **Play:** Pre-flight warning lists offline/unassigned axes; user can continue. UI issues per-axis moves, shows progress, and marks completion via status (or timeout).
 - **Logging:** Command errors/denials appear with time, MAC, `cmd_id`, code, message.
@@ -423,16 +447,17 @@ Target users are technical; keep the interface clean and efficient.
 - E2: Optional snap-to-grid toggle that rounds placement to tile centers; save/load single pattern.
 - E3: Pattern Library view (list, preview, select active, delete), leveraging localStorage.
 
-**Epic F — Geometry Panel & 2D Preview**
+**Epic F — Geometry Panel & 3D Preview**
 
-- F1: Inputs for wall and light angles plus distance.
-- F2: Top and side 2D preview; derived projected size display.
+- F1: Parameter panel that captures wall anchor/normal, Sun vector, projection offset `H`, spacing overrides, and world-up selection with persistence and inline validation.
+- F2: Reflection solver module implementing [docs/reflection-calculations.md](docs/reflection-calculations.md) with typed outputs (yaw/pitch, hits, ellipses) and surfaced error states shared by preview and conversion.
+- F3: BabylonJS preview plus synchronized 2D overlays that visualize mirrors, normals, rays, wall plane, and ellipses with orbit/zoom controls, selection highlighting, and degeneracy warnings.
 
 **Epic G — Conversion & Playback**
 
-- G1: Shared conversion utility (pattern → angles → steps, linear mapping).
-- G2: Mapping policy (assign tiles to canvas points with deterministic tie-breaks for clustered regions).
-- G3: Per-motor MOVE dispatch; `cmd/resp` tracking; status-based completion with global timeout.
+- G1: Deterministic pattern-to-mirror assignment leveraging the solver’s locked wall targets (Hungarian/nearest with documented tie-breaks).
+- G2: Mirror yaw/pitch → motor step translation with clamp handling, zero-reference configuration, and diagnostics when physical limits block playback.
+- G3: MOVE command pipeline that reuses solver outputs, emits per-axis commands with `cmd_id`, validates acknowledgements/timeouts, and logs solver validation failures before dispatch.
 
 **Epic H — Logging & Diagnostics**
 

@@ -1,4 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+const goToConnectionPage = async (page: Page) => {
+    await page.getByRole('button', { name: /^Connection$/i }).click();
+};
+
+const selectMockTransport = async (page: Page) => {
+    await goToConnectionPage(page);
+    await page.getByRole('button', { name: 'Mock Transport' }).click();
+};
 
 test.describe('MQTT connection panel', () => {
     test('connects using mock transport', async ({ page }) => {
@@ -6,12 +15,8 @@ test.describe('MQTT connection panel', () => {
         await page.evaluate(() => localStorage.clear());
         await page.reload();
 
-        await page.getByRole('button', { name: 'Show Settings' }).click();
-        await page.getByLabel('Scheme').selectOption('mock');
-
+        await selectMockTransport(page);
         await page.getByRole('button', { name: 'Connect', exact: true }).click();
-
-        await expect(page.getByText('Status:')).toBeVisible();
 
         await expect(page.getByText('Connected', { exact: true })).toBeVisible();
 
@@ -25,8 +30,8 @@ test.describe('MQTT connection panel', () => {
         await page.evaluate(() => localStorage.clear());
         await page.reload();
 
-        await page.getByRole('button', { name: 'Show Settings' }).click();
-        await page.getByLabel('Scheme').selectOption('mock');
+        await goToConnectionPage(page);
+        await page.getByRole('button', { name: 'MQTT Broker' }).click();
         await page.getByLabel('Host').fill('broker.local');
         await page.getByLabel('Port').fill('1884');
         await page.getByLabel('Path').fill('control');
@@ -35,9 +40,13 @@ test.describe('MQTT connection panel', () => {
 
         await page.reload();
 
-        await page.getByRole('button', { name: 'Show Settings' }).click();
+        await goToConnectionPage(page);
 
-        await expect(page.getByLabel('Scheme')).toHaveValue('mock');
+        const persisted = await page.evaluate(() => {
+            const raw = window.localStorage.getItem('mirror:mqtt:settings');
+            return raw ? JSON.parse(raw) : null;
+        });
+        expect(persisted?.scheme).toBe('ws');
         await expect(page.getByLabel('Host')).toHaveValue('broker.local');
         await expect(page.getByLabel('Port')).toHaveValue('1884');
         await expect(page.getByLabel('Path')).toHaveValue('/control');
@@ -50,15 +59,12 @@ test.describe('MQTT connection panel', () => {
         await page.evaluate(() => localStorage.clear());
         await page.reload();
 
-        await page.getByRole('button', { name: 'Show Settings' }).click();
-        await page.getByLabel('Scheme').selectOption('mock');
+        await selectMockTransport(page);
         await page.getByRole('button', { name: 'Connect', exact: true }).click();
 
-        await page.getByRole('button', { name: 'Configure Array' }).click();
+        await page.getByRole('button', { name: /array config/i }).click();
 
-        await expect(
-            page.getByRole('heading', { name: 'Mirror Array Configurator' }),
-        ).toBeVisible();
+        await expect(page.getByLabel('Rows:')).toBeVisible();
         await expect(
             page.getByRole('heading', { name: 'AA:11:BB:22:CC:33', exact: true }),
         ).toBeVisible();

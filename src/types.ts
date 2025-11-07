@@ -78,12 +78,33 @@ export interface DriverStatusSnapshot {
     motors: Record<number, MotorTelemetry>;
 }
 
+export type OrientationInputMode = 'angles' | 'vector';
+
+export interface Vec3 {
+    x: number;
+    y: number;
+    z: number;
+}
+
+export interface OrientationState {
+    mode: OrientationInputMode;
+    yaw: number;
+    pitch: number;
+    vector: Vec3;
+}
+
 export interface ProjectionSettings {
     wallDistance: number;
-    wallAngleHorizontal: number;
-    wallAngleVertical: number;
-    lightAngleHorizontal: number;
-    lightAngleVertical: number;
+    wallOrientation: OrientationState;
+    sunOrientation: OrientationState;
+    worldUpOrientation: OrientationState;
+    projectionOffset: number;
+    pixelSpacing: {
+        x: number;
+        y: number;
+    };
+    sunAngularDiameterDeg: number;
+    slopeBlurSigmaDeg: number;
 }
 
 export interface ProjectedSpot {
@@ -92,11 +113,7 @@ export interface ProjectedSpot {
     normalizedY: number;
     wallX: number | null;
     wallY: number | null;
-    world: {
-        x: number;
-        y: number;
-        z: number;
-    };
+    world: Vec3;
 }
 
 export interface ProjectionFootprint {
@@ -105,4 +122,55 @@ export interface ProjectionFootprint {
     spots: ProjectedSpot[];
     arrayWidth: number;
     arrayHeight: number;
+}
+
+export type ReflectionSolverErrorCode =
+    | 'pattern_exceeds_mirrors'
+    | 'invalid_wall_basis'
+    | 'degenerate_assignment'
+    | 'degenerate_bisector'
+    | 'incoming_alignment'
+    | 'grazing_incidence'
+    | 'wall_behind_mirror'
+    | 'invalid_target';
+
+export interface ReflectionSolverError {
+    code: ReflectionSolverErrorCode;
+    message: string;
+    mirrorId?: string;
+    patternId?: string;
+}
+
+export interface ReflectionEllipse {
+    majorDiameter: number;
+    minorDiameter: number;
+    majorAxis: Vec3;
+    minorAxis: Vec3;
+    incidenceCosine: number;
+}
+
+export interface MirrorReflectionSolution {
+    mirrorId: string;
+    row: number;
+    col: number;
+    center: Vec3;
+    patternId: string | null;
+    targetPoint?: Vec3;
+    yaw?: number;
+    pitch?: number;
+    normal?: Vec3;
+    wallHit?: Vec3;
+    ellipse?: ReflectionEllipse;
+    errors: ReflectionSolverError[];
+}
+
+export interface ReflectionAssignment {
+    mirrorId: string;
+    patternId: string;
+}
+
+export interface ReflectionSolverResult {
+    mirrors: MirrorReflectionSolution[];
+    assignments: ReflectionAssignment[];
+    errors: ReflectionSolverError[];
 }

@@ -93,9 +93,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                                 {showPageTitle ? (
                                     <>
                                         <li className="text-gray-600">/</li>
-                                        <li className="font-semibold text-gray-100">
-                                            {pageTitle}
-                                        </li>
+                                        <li className="font-semibold text-gray-100">{pageTitle}</li>
                                     </>
                                 ) : null}
                                 {breadcrumbs.map((crumb, index) => (

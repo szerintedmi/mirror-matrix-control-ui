@@ -1,4 +1,10 @@
-import { test, expect, type Locator } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+
+const connectMockTransport = async (page: Page) => {
+    await page.getByRole('button', { name: /^Connection$/i }).click();
+    await page.getByRole('button', { name: 'Mock Transport' }).click();
+    await page.getByRole('button', { name: /^Connect$/i }).click();
+};
 
 const getAxisCount = async (locator: Locator): Promise<number> => {
     const text = await locator.textContent();
@@ -12,11 +18,8 @@ test.describe('Grid configurator interactions', () => {
         await page.evaluate(() => localStorage.clear());
         await page.reload();
 
-        await page.getByRole('button', { name: 'Show Settings' }).click();
-        await page.getByLabel('Scheme').selectOption('mock');
-        await page.getByRole('button', { name: 'Connect', exact: true }).click();
-
-        await page.getByRole('button', { name: 'Configure Array' }).click();
+        await connectMockTransport(page);
+        await page.getByRole('button', { name: /array config/i }).click();
 
         const unassignedTray = page.getByRole('region', { name: /unassigned motors tray/i });
         await expect(unassignedTray).toBeVisible();

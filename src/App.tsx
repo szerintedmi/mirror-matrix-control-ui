@@ -26,6 +26,7 @@ import {
     getInitialProjectionSettings,
     persistProjectionSettings,
 } from './services/projectionStorage';
+import { validateProjectionSettings } from './utils/geometryValidation';
 
 import type { MirrorConfig, Pattern, ProjectionSettings } from './types';
 
@@ -66,6 +67,7 @@ const App: React.FC = () => {
     }, [resolvedStorage]);
     const [projectionSettings, setProjectionSettings] =
         useState<ProjectionSettings>(initialProjectionSettings);
+    const [projectionError, setProjectionError] = useState<string | null>(null);
     const [activePatternId, setActivePatternId] = useState<string | null>(
         persistedPatterns[0]?.id ?? null,
     );
@@ -91,11 +93,20 @@ const App: React.FC = () => {
     }, [projectionSettings, resolvedStorage]);
 
     const handleProjectionChange = (patch: Partial<ProjectionSettings>) => {
-        setProjectionSettings((prev) => ({
-            ...prev,
-            ...patch,
-        }));
+        setProjectionSettings((prev) => {
+            const next = { ...prev, ...patch };
+            const validationError = validateProjectionSettings(next);
+            if (validationError) {
+                setProjectionError(validationError);
+                return prev;
+            }
+            setProjectionError(null);
+            persistProjectionSettings(resolvedStorage, next);
+            return next;
+        });
     };
+
+    const clearProjectionError = () => setProjectionError(null);
 
     const editPattern = (patternId: string | null) => {
         setEditingPatternId(patternId);
@@ -204,6 +215,8 @@ const App: React.FC = () => {
                         gridSize={gridSize}
                         projectionSettings={projectionSettings}
                         onUpdateProjection={handleProjectionChange}
+                        projectionError={projectionError}
+                        onClearProjectionError={clearProjectionError}
                         patterns={patterns}
                         activePatternId={activePatternId}
                         onSelectPattern={handleSelectPattern}

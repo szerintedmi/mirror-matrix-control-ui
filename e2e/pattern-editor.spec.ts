@@ -13,6 +13,7 @@ test.describe('Pattern editor interactions', () => {
     test('place/remove tiles with keyboard shortcuts and undo/redo history', async ({ page }) => {
         await page.goto('/');
 
+        await page.getByRole('button', { name: /^Patterns$/i }).click();
         await page.getByRole('button', { name: 'Create New Pattern' }).click();
 
         const canvas = page.getByTestId('pattern-editor-canvas');

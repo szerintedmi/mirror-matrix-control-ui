@@ -5,6 +5,8 @@ const devPort = process.env.PLAYWRIGHT_DEV_PORT ?? '5173';
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://${devHost}:${devPort}`;
 
 export default defineConfig({
+    timeout: 15_000, // per test
+
     testDir: './e2e',
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
@@ -14,6 +16,8 @@ export default defineConfig({
         ? [['github'], ['html', { open: 'never' }]]
         : [['list'], ['html', { open: 'never' }]],
     use: {
+        actionTimeout: 2_000,
+        navigationTimeout: 6_000,
         baseURL,
         trace: 'retain-on-failure',
         video: 'retain-on-failure',

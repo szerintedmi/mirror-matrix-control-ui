@@ -7,12 +7,10 @@ test.describe('Mirror Matrix Control', () => {
         await page.waitForLoadState('networkidle');
 
         await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 15000 });
-        await expect(page.getByRole('button', { name: 'Configure Array' })).toBeVisible();
+        const arrayConfigNav = page.getByRole('button', { name: /array config/i });
+        await expect(arrayConfigNav).toBeVisible();
+        await arrayConfigNav.click();
 
-        await page.getByRole('button', { name: 'Configure Array' }).click();
-
-        await expect(
-            page.getByRole('heading', { name: 'Mirror Array Configurator' }),
-        ).toBeVisible();
+        await expect(page.getByLabel('Rows:')).toBeVisible();
     });
 });

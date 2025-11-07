@@ -18,5 +18,7 @@
         },
         "allowImportingTsExtensions": true,
         "noEmit": true
-    }
+    },
+    "include": ["src", "e2e", "vite-env.d.ts", "vite.config.ts"],
+    "exclude": ["dist", "node_modules", "playwright.config.ts"]
 }

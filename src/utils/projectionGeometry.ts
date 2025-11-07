@@ -29,21 +29,15 @@ export const calculateProjectionSpan = (
     const arrayWidth = Math.max(cols * MIRROR_PITCH_M, MIRROR_DIMENSION_M);
     const arrayHeight = Math.max(rows * MIRROR_PITCH_M, MIRROR_DIMENSION_M);
 
-    const {
-        wallDistance,
-        wallAngleHorizontal,
-        wallAngleVertical,
-        lightAngleHorizontal,
-        lightAngleVertical,
-    } = settings;
+    const { wallDistance, wallOrientation, sunOrientation } = settings;
 
     const baseWidth = arrayWidth * wallDistance;
     const baseHeight = arrayHeight * wallDistance;
 
-    const lightHRad = degToRad(lightAngleHorizontal);
-    const lightVRad = degToRad(lightAngleVertical);
-    const totalHAngleRad = degToRad(wallAngleHorizontal + lightAngleHorizontal);
-    const totalVAngleRad = degToRad(wallAngleVertical + lightAngleVertical);
+    const lightHRad = degToRad(sunOrientation.yaw);
+    const lightVRad = degToRad(sunOrientation.pitch);
+    const totalHAngleRad = degToRad(wallOrientation.yaw + sunOrientation.yaw);
+    const totalVAngleRad = degToRad(wallOrientation.pitch + sunOrientation.pitch);
 
     const projectedWidth =
         Math.abs(Math.cos(totalHAngleRad)) < 1e-3
@@ -164,8 +158,8 @@ export const computeProjectionFootprint = ({
     const sourceTiles =
         pattern && pattern.tiles.length > 0 ? pattern.tiles : buildFallbackTiles(gridSize);
 
-    const yawRad = degToRad(settings.wallAngleHorizontal);
-    const pitchRad = degToRad(settings.wallAngleVertical);
+    const yawRad = degToRad(settings.wallOrientation.yaw);
+    const pitchRad = degToRad(settings.wallOrientation.pitch);
     const wallNormal = rotateYawPitch({ x: 0, y: 0, z: -1 }, yawRad, pitchRad);
     const wallCenter: Vec3 = { x: 0, y: 0, z: settings.wallDistance };
     const inverseYaw = -yawRad;
