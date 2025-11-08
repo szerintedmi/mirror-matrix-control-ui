@@ -751,6 +751,8 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             selectedMirrorId={resolvedSelectedMirrorId}
                             onSelectMirror={handleSelectMirror}
                             errorMirrorIds={errorMirrorIds}
+                            projectionSettings={effectiveSettings}
+                            gridSize={gridSize}
                         />
                         <GeometryDebugPanel mirror={selectedMirror} isStale={previewIsStale} />
                     </div>

@@ -1,6 +1,8 @@
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 import { MIRROR_DIMENSION_M, MIRROR_PITCH_M } from '../constants/projection';
 
+import { deriveWallBasis } from './orientation';
+
 import type {
     Pattern,
     PatternCanvas,
@@ -8,8 +10,6 @@ import type {
     ProjectionSettings,
     ProjectedSpot,
 } from '../types';
-
-const degToRad = (value: number): number => (value * Math.PI) / 180;
 
 const safeRows = (rows: number): number => Math.max(1, Math.round(rows));
 const safeCols = (cols: number): number => Math.max(1, Math.round(cols));
@@ -22,32 +22,18 @@ export const inferGridFromCanvas = (canvas: PatternCanvas): { rows: number; cols
 export const calculateProjectionSpan = (
     gridSize: { rows: number; cols: number },
     settings: ProjectionSettings,
-): { width: number | null; height: number | null; arrayWidth: number; arrayHeight: number } => {
+): { width: number; height: number; arrayWidth: number; arrayHeight: number } => {
     const rows = safeRows(gridSize.rows);
     const cols = safeCols(gridSize.cols);
 
     const arrayWidth = Math.max(cols * MIRROR_PITCH_M, MIRROR_DIMENSION_M);
     const arrayHeight = Math.max(rows * MIRROR_PITCH_M, MIRROR_DIMENSION_M);
 
-    const { wallDistance, wallOrientation, sunOrientation } = settings;
+    const stepX = settings.pixelSpacing.x;
+    const stepY = settings.pixelSpacing.y;
 
-    const baseWidth = arrayWidth * wallDistance;
-    const baseHeight = arrayHeight * wallDistance;
-
-    const lightHRad = degToRad(sunOrientation.yaw);
-    const lightVRad = degToRad(sunOrientation.pitch);
-    const totalHAngleRad = degToRad(wallOrientation.yaw + sunOrientation.yaw);
-    const totalVAngleRad = degToRad(wallOrientation.pitch + sunOrientation.pitch);
-
-    const projectedWidth =
-        Math.abs(Math.cos(totalHAngleRad)) < 1e-3
-            ? null
-            : (baseWidth * Math.cos(lightHRad)) / Math.cos(totalHAngleRad);
-
-    const projectedHeight =
-        Math.abs(Math.cos(totalVAngleRad)) < 1e-3
-            ? null
-            : (baseHeight * Math.cos(lightVRad)) / Math.cos(totalVAngleRad);
+    const projectedWidth = cols <= 1 ? MIRROR_DIMENSION_M : Math.max((cols - 1) * stepX, MIRROR_DIMENSION_M);
+    const projectedHeight = rows <= 1 ? MIRROR_DIMENSION_M : Math.max((rows - 1) * stepY, MIRROR_DIMENSION_M);
 
     return {
         width: projectedWidth,
@@ -111,31 +97,18 @@ interface Vec3 {
     z: number;
 }
 
-const rotateYawPitch = (vector: Vec3, yaw: number, pitch: number): Vec3 => {
-    const cosY = Math.cos(yaw);
-    const sinY = Math.sin(yaw);
-    const x1 = vector.x * cosY + vector.z * sinY;
-    const z1 = -vector.x * sinY + vector.z * cosY;
-    const y1 = vector.y;
-
-    const cosX = Math.cos(pitch);
-    const sinX = Math.sin(pitch);
-    const y2 = y1 * cosX - z1 * sinX;
-    const z2 = y1 * sinX + z1 * cosX;
-
-    return { x: x1, y: y2, z: z2 };
-};
-
 const subtractVec = (a: Vec3, b: Vec3): Vec3 => ({
     x: a.x - b.x,
     y: a.y - b.y,
     z: a.z - b.z,
 });
 
-const addScaledVec = (start: Vec3, direction: Vec3, scale: number): Vec3 => ({
-    x: start.x + direction.x * scale,
-    y: start.y + direction.y * scale,
-    z: start.z + direction.z * scale,
+const addVec = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+
+const scaleVec = (v: Vec3, scalar: number): Vec3 => ({
+    x: v.x * scalar,
+    y: v.y * scalar,
+    z: v.z * scalar,
 });
 
 const dotVec = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
@@ -150,65 +123,76 @@ export const computeProjectionFootprint = ({
     settings: ProjectionSettings;
 }): ProjectionFootprint => {
     const span = calculateProjectionSpan(gridSize, settings);
-    const { emitters } = buildGridEmitters(gridSize);
-
     const canvasWidth = pattern?.canvas.width ?? gridSize.cols * TILE_PLACEMENT_UNIT;
     const canvasHeight = pattern?.canvas.height ?? gridSize.rows * TILE_PLACEMENT_UNIT;
 
     const sourceTiles =
         pattern && pattern.tiles.length > 0 ? pattern.tiles : buildFallbackTiles(gridSize);
 
-    const yawRad = degToRad(settings.wallOrientation.yaw);
-    const pitchRad = degToRad(settings.wallOrientation.pitch);
-    const wallNormal = rotateYawPitch({ x: 0, y: 0, z: -1 }, yawRad, pitchRad);
-    const wallCenter: Vec3 = { x: 0, y: 0, z: settings.wallDistance };
-    const inverseYaw = -yawRad;
-    const inversePitch = -pitchRad;
+    const normalizedTargets = sourceTiles.map((tile) => ({
+        id: tile.id,
+        normalizedX: clamp01(canvasWidth > 0 ? tile.center.x / canvasWidth : 0.5),
+        normalizedY: clamp01(canvasHeight > 0 ? tile.center.y / canvasHeight : 0.5),
+    }));
 
-    const baseWidth = span.arrayWidth;
-    const baseHeight = span.arrayHeight;
+    const cols = safeCols(gridSize.cols);
+    const rows = safeRows(gridSize.rows);
+    const stepX = settings.pixelSpacing.x;
+    const stepY = settings.pixelSpacing.y;
 
-    const spots: ProjectedSpot[] = sourceTiles.map((tile, index) => {
-        const normalizedX = clamp01(canvasWidth > 0 ? tile.center.x / canvasWidth : 0.5);
-        const normalizedY = clamp01(canvasHeight > 0 ? tile.center.y / canvasHeight : 0.5);
-        const signedX = normalizedX - 0.5;
-        const signedY = 0.5 - normalizedY; // invert so positive is up
+    const { wallNormal, uWall, vWall } = deriveWallBasis(
+        settings.wallOrientation,
+        settings.worldUpOrientation,
+    );
 
-        const clampedIndex = Math.min(index, emitters.length - 1);
-        const emitter = emitters[clampedIndex] ?? { x: 0, y: 0 };
-        const emitterPos: Vec3 = { x: emitter.x, y: emitter.y, z: 0 };
+    const arrayWidth = gridSize.cols * MIRROR_PITCH_M;
+    const arrayHeight = gridSize.rows * MIRROR_PITCH_M;
+    const arrayOrigin: Vec3 = {
+        x: -arrayWidth / 2 + MIRROR_PITCH_M / 2,
+        y: arrayHeight / 2 - MIRROR_PITCH_M / 2,
+        z: 0,
+    };
+    const wallPoint = addVec(arrayOrigin, scaleVec(wallNormal, settings.wallDistance));
+    const projectedOrigin = addVec(
+        arrayOrigin,
+        scaleVec(wallNormal, dotVec(subtractVec(wallPoint, arrayOrigin), wallNormal)),
+    );
+    const patternOrigin = addVec(projectedOrigin, scaleVec(vWall, settings.projectionOffset));
 
-        const nominalTarget: Vec3 = {
-            x: signedX * baseWidth,
-            y: signedY * baseHeight,
-            z: settings.wallDistance,
-        };
+    let minWallX = Number.POSITIVE_INFINITY;
+    let maxWallX = Number.NEGATIVE_INFINITY;
+    let minWallY = Number.POSITIVE_INFINITY;
+    let maxWallY = Number.NEGATIVE_INFINITY;
 
-        const direction = subtractVec(nominalTarget, emitterPos);
-        const denom = dotVec(direction, wallNormal);
-        let worldPoint: Vec3;
-        if (Math.abs(denom) < 1e-6) {
-            worldPoint = { ...nominalTarget };
-        } else {
-            const t = dotVec(subtractVec(wallCenter, emitterPos), wallNormal) / denom;
-            worldPoint = addScaledVec(emitterPos, direction, t);
-        }
+    const spots: ProjectedSpot[] = normalizedTargets.map((target) => {
+        const offsetU = (target.normalizedX - 0.5) * cols * stepX;
+        const offsetV = (0.5 - target.normalizedY) * rows * stepY;
+        const worldPoint = addVec(
+            patternOrigin,
+            addVec(scaleVec(uWall, offsetU), scaleVec(vWall, offsetV)),
+        );
 
-        const local = rotateYawPitch(subtractVec(worldPoint, wallCenter), inverseYaw, inversePitch);
+        minWallX = Math.min(minWallX, offsetU);
+        maxWallX = Math.max(maxWallX, offsetU);
+        minWallY = Math.min(minWallY, offsetV);
+        maxWallY = Math.max(maxWallY, offsetV);
 
         return {
-            id: tile.id,
-            normalizedX,
-            normalizedY,
-            wallX: local.x,
-            wallY: local.y,
+            id: target.id,
+            normalizedX: target.normalizedX,
+            normalizedY: target.normalizedY,
+            wallX: offsetU,
+            wallY: offsetV,
             world: worldPoint,
         };
     });
 
+    const projectedWidth = spots.length > 0 ? Math.max(maxWallX - minWallX, MIRROR_DIMENSION_M) : span.width;
+    const projectedHeight = spots.length > 0 ? Math.max(maxWallY - minWallY, MIRROR_DIMENSION_M) : span.height;
+
     return {
-        projectedWidth: span.width,
-        projectedHeight: span.height,
+        projectedWidth,
+        projectedHeight,
         spots,
         arrayWidth: span.arrayWidth,
         arrayHeight: span.arrayHeight,

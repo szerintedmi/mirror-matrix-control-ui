@@ -1,4 +1,5 @@
 import { MIRROR_PITCH_M } from '../constants/projection';
+import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 
 import { degToRad, dotVec3, normalizeVec3, radToDeg } from './orientation';
 
@@ -73,85 +74,81 @@ const projectPointOntoPlane = (point: Vec3, planePoint: Vec3, planeNormal: Vec3)
 
 const createMirrorId = (row: number, col: number): string => `mirror-${row}-${col}`;
 
-const createFallbackPatternTiles = (gridSize: { rows: number; cols: number }): PatternTarget[] => {
-    const { rows, cols } = gridSize;
-    const targets: PatternTarget[] = [];
-    for (let row = 0; row < rows; row += 1) {
-        for (let col = 0; col < cols; col += 1) {
-            const normalizedX = cols > 0 ? (col + 0.5) / cols : 0.5;
-            const normalizedY = rows > 0 ? (row + 0.5) / rows : 0.5;
-            targets.push({
-                id: `fallback-${row}-${col}`,
-                normalizedX,
-                normalizedY,
-                targetPoint: { x: 0, y: 0, z: 0 }, // placeholder, overwritten later
-            });
-        }
-    }
-    return targets;
+const translatePatternOffset = (
+    origin: Vec3,
+    uWall: Vec3,
+    vWall: Vec3,
+    offset: { cols: number; rows: number },
+    spacing: { x: number; y: number },
+): Vec3 => {
+    const offsetU = scaleVec(uWall, -offset.cols * spacing.x);
+    const offsetV = scaleVec(vWall, -offset.rows * spacing.y);
+    return addVec(addVec(origin, offsetU), offsetV);
 };
 
 const buildPatternTargets = ({
     pattern,
-    gridSize,
     uWall,
     vWall,
     patternOrigin,
     spacing,
 }: {
     pattern: Pattern | null;
-    gridSize: { rows: number; cols: number };
     uWall: Vec3;
     vWall: Vec3;
     patternOrigin: Vec3;
     spacing: { x: number; y: number };
 }): PatternTarget[] => {
-    const baseTargets =
-        pattern && pattern.tiles.length > 0
-            ? pattern.tiles.map((tile) => ({
-                  id: tile.id,
-                  normalizedX: clamp01(
-                      pattern.canvas.width > 0 ? tile.center.x / pattern.canvas.width : 0.5,
-                  ),
-                  normalizedY: clamp01(
-                      pattern.canvas.height > 0 ? tile.center.y / pattern.canvas.height : 0.5,
-                  ),
-                  targetPoint: patternOrigin,
-              }))
-            : createFallbackPatternTiles(gridSize);
+    if (!pattern || pattern.tiles.length === 0) {
+        return [];
+    }
 
-    const cols = Math.max(1, gridSize.cols);
-    const rows = Math.max(1, gridSize.rows);
-    return baseTargets.map((target) => {
-        const offsetU = (target.normalizedX - 0.5) * cols * spacing.x;
-        const offsetV = (0.5 - target.normalizedY) * rows * spacing.y;
-        const wallPoint = addVec(
-            addVec(patternOrigin, scaleVec(uWall, offsetU)),
-            scaleVec(vWall, offsetV),
+    return pattern.tiles.map((tile) => {
+        const normalizedX = clamp01(
+            pattern.canvas.width > 0 ? tile.center.x / pattern.canvas.width : 0.5,
+        );
+        const normalizedY = clamp01(
+            pattern.canvas.height > 0 ? tile.center.y / pattern.canvas.height : 0.5,
+        );
+        const offsetCols = tile.center.x / TILE_PLACEMENT_UNIT - 0.5;
+        const offsetRows = tile.center.y / TILE_PLACEMENT_UNIT - 0.5;
+        const targetPoint = translatePatternOffset(
+            patternOrigin,
+            uWall,
+            vWall,
+            { cols: offsetCols, rows: offsetRows },
+            spacing,
         );
         return {
-            ...target,
-            targetPoint: wallPoint,
+            id: tile.id,
+            normalizedX,
+            normalizedY,
+            targetPoint,
         };
     });
 };
 
 const buildAlignedFallbackTargets = ({
     mirrors,
-    wallPoint,
-    wallNormal,
+    patternOrigin,
+    uWall,
     vWall,
-    projectionOffset,
+    spacing,
 }: {
     mirrors: MirrorMeta[];
-    wallPoint: Vec3;
-    wallNormal: Vec3;
+    patternOrigin: Vec3;
+    uWall: Vec3;
     vWall: Vec3;
-    projectionOffset: number;
+    spacing: { x: number; y: number };
 }): PatternTarget[] =>
     mirrors.map((mirror) => {
-        const projected = projectPointOntoPlane(mirror.center, wallPoint, wallNormal);
-        const targetPoint = addVec(projected, scaleVec(vWall, projectionOffset));
+        const targetPoint = translatePatternOffset(
+            patternOrigin,
+            uWall,
+            vWall,
+            { cols: mirror.col, rows: mirror.row },
+            spacing,
+        );
         return {
             id: `fallback-${mirror.row}-${mirror.col}`,
             normalizedX: mirror.normalizedX,
@@ -468,26 +465,26 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
     const projectedOrigin = projectPointOntoPlane(mirror00.center, wallPoint, wallNormal);
     const patternOrigin = addVec(projectedOrigin, scaleVec(vWall, projection.projectionOffset));
 
+    const spacing = {
+        x: projection.pixelSpacing.x,
+        y: projection.pixelSpacing.y,
+    };
     let patternTargets: PatternTarget[];
     if (!pattern || pattern.tiles.length === 0) {
         patternTargets = buildAlignedFallbackTargets({
             mirrors: mirrorMeta,
-            wallPoint,
-            wallNormal,
+            patternOrigin,
+            uWall,
             vWall,
-            projectionOffset: projection.projectionOffset,
+            spacing,
         });
     } else {
         patternTargets = buildPatternTargets({
             pattern,
-            gridSize,
             uWall,
             vWall,
             patternOrigin,
-            spacing: {
-                x: projection.pixelSpacing.x,
-                y: projection.pixelSpacing.y,
-            },
+            spacing,
         });
     }
 

@@ -18,6 +18,35 @@ export const normalizeVec3 = (value: Vec3): Vec3 => {
 
 export const dotVec3 = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
 
+export const crossVec3 = (a: Vec3, b: Vec3): Vec3 => ({
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+});
+
+export const deriveWallBasis = (
+    wallOrientation: OrientationState,
+    worldUpOrientation: OrientationState,
+): { wallNormal: Vec3; uWall: Vec3; vWall: Vec3 } => {
+    const wall = normalizeVec3(wallOrientation.vector);
+    const up = normalizeVec3(worldUpOrientation.vector);
+    const projection = dotVec3(up, wall);
+    const vCandidate = {
+        x: up.x - wall.x * projection,
+        y: up.y - wall.y * projection,
+        z: up.z - wall.z * projection,
+    };
+    const vLength = Math.hypot(vCandidate.x, vCandidate.y, vCandidate.z);
+    const vWall = vLength < 1e-6 ? { x: 0, y: 1, z: 0 } : normalizeVec3(vCandidate);
+    const uCandidate = crossVec3(vWall, wall);
+    const uLength = Math.hypot(uCandidate.x, uCandidate.y, uCandidate.z);
+    const uWall =
+        uLength < 1e-6
+            ? { x: 1, y: 0, z: 0 }
+            : { x: uCandidate.x / uLength, y: uCandidate.y / uLength, z: uCandidate.z / uLength };
+    return { wallNormal: wall, uWall, vWall };
+};
+
 const anglesToVectorForward = (yawDeg: number, pitchDeg: number): Vec3 => {
     const yaw = degToRad(yawDeg);
     const pitch = degToRad(pitchDeg);

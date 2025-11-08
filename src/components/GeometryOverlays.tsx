@@ -1,14 +1,17 @@
 import React, { useMemo } from 'react';
 
 import { MIRROR_PITCH_M } from '../constants/projection';
+import { deriveWallBasis, dotVec3 } from '../utils/orientation';
 
-import type { MirrorReflectionSolution } from '../types';
+import type { MirrorReflectionSolution, ProjectionSettings, Vec3 } from '../types';
 
 interface GeometryOverlaysProps {
     mirrors: MirrorReflectionSolution[];
     selectedMirrorId: string | null;
     onSelectMirror: (mirrorId: string) => void;
     errorMirrorIds: Set<string>;
+    projectionSettings: ProjectionSettings;
+    gridSize: { rows: number; cols: number };
 }
 
 const VIEW_BOX = 120;
@@ -47,24 +50,51 @@ const buildArrayPlan = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
     });
 };
 
-const buildWallHits = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
+const addVec = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+const scaleVec = (v: Vec3, scalar: number): Vec3 => ({ x: v.x * scalar, y: v.y * scalar, z: v.z * scalar });
+const subtractVec = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+
+const buildWallHits = (
+    mirrors: MirrorReflectionSolution[],
+    projectionSettings: ProjectionSettings,
+    gridSize: { rows: number; cols: number },
+): PlanPoint[] => {
     const hits = mirrors.filter((mirror) => mirror.wallHit);
     if (hits.length === 0) {
         return [];
     }
-    const xs = hits.map((mirror) => mirror.wallHit?.x ?? 0);
-    const ys = hits.map((mirror) => mirror.wallHit?.y ?? 0);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-    const spanX = Math.max(maxX - minX, MIRROR_PITCH_M * 2);
-    const spanY = Math.max(maxY - minY, MIRROR_PITCH_M * 2);
+    const { wallNormal, uWall, vWall } = deriveWallBasis(
+        projectionSettings.wallOrientation,
+        projectionSettings.worldUpOrientation,
+    );
+    const arrayWidth = gridSize.cols * MIRROR_PITCH_M;
+    const arrayHeight = gridSize.rows * MIRROR_PITCH_M;
+    const defaultOrigin: Vec3 = {
+        x: -arrayWidth / 2 + MIRROR_PITCH_M / 2,
+        y: arrayHeight / 2 - MIRROR_PITCH_M / 2,
+        z: 0,
+    };
+    const solverOrigin = mirrors.find((mirror) => mirror.row === 0 && mirror.col === 0)?.center;
+    const arrayOrigin = solverOrigin ?? defaultOrigin;
+    const wallOrigin = addVec(arrayOrigin, scaleVec(wallNormal, projectionSettings.wallDistance));
 
-    return hits.map((mirror) => {
-        const hit = mirror.wallHit ?? { x: 0, y: 0 };
-        const normalizedX = (hit.x - minX) / spanX;
-        const normalizedY = (hit.y - minY) / spanY;
+    const localHits = hits.map((mirror) => {
+        const hit = mirror.wallHit ?? { x: 0, y: 0, z: 0 };
+        const delta = subtractVec(hit, wallOrigin);
+        const u = dotVec3(delta, uWall);
+        const v = dotVec3(delta, vWall);
+        return { mirror, u, v };
+    });
+    const minU = Math.min(...localHits.map((entry) => entry.u));
+    const maxU = Math.max(...localHits.map((entry) => entry.u));
+    const minV = Math.min(...localHits.map((entry) => entry.v));
+    const maxV = Math.max(...localHits.map((entry) => entry.v));
+    const spanU = Math.max(maxU - minU, MIRROR_PITCH_M * 2);
+    const spanV = Math.max(maxV - minV, MIRROR_PITCH_M * 2);
+
+    return localHits.map(({ mirror, u, v }) => {
+        const normalizedX = (u - minU) / spanU;
+        const normalizedY = (v - minV) / spanV;
         return {
             id: mirror.mirrorId,
             x: normalizedX * VIEW_BOX,
@@ -80,9 +110,14 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
     selectedMirrorId,
     onSelectMirror,
     errorMirrorIds,
+    projectionSettings,
+    gridSize,
 }) => {
     const arrayPlan = useMemo(() => buildArrayPlan(mirrors), [mirrors]);
-    const wallHits = useMemo(() => buildWallHits(mirrors), [mirrors]);
+    const wallHits = useMemo(
+        () => buildWallHits(mirrors, projectionSettings, gridSize),
+        [mirrors, projectionSettings, gridSize],
+    );
 
     const renderSvgPoint = (point: PlanPoint, dataset: 'array' | 'wall') => {
         const isSelected = point.id === selectedMirrorId;

@@ -12,7 +12,7 @@ import { Scene } from '@babylonjs/core/scene';
 import React, { useEffect, useMemo, useRef } from 'react';
 
 import { MIRROR_DIMENSION_M, MIRROR_PITCH_M } from '../constants/projection';
-import { dotVec3, normalizeVec3 } from '../utils/orientation';
+import { deriveWallBasis } from '../utils/orientation';
 import { buildGridEmitters } from '../utils/projectionGeometry';
 
 import type { ProjectionSettings, ReflectionSolverResult, Vec3 } from '../types';
@@ -33,48 +33,12 @@ interface BabylonSimViewProps {
     activePatternId: string | null;
 }
 
-const EPSILON = 1e-4;
-
 const toVector3 = (value: Vec3): Vector3 => new Vector3(value.x, value.y, value.z);
-
-const crossVec = (a: Vec3, b: Vec3): Vec3 => ({
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-});
-
-const lengthVec = (value: Vec3): number => Math.hypot(value.x, value.y, value.z);
 
 const disposeEntity = <T extends { dispose: () => void }>(entity: T | null | undefined): void => {
     if (entity) {
         entity.dispose();
     }
-};
-
-const deriveWallBasis = (
-    settings: ProjectionSettings,
-): {
-    wallNormal: Vec3;
-    uWall: Vec3;
-    vWall: Vec3;
-} => {
-    const wall = normalizeVec3(settings.wallOrientation.vector);
-    const up = normalizeVec3(settings.worldUpOrientation.vector);
-    const projection = dotVec3(up, wall);
-    const vCandidate = normalizeVec3({
-        x: up.x - wall.x * projection,
-        y: up.y - wall.y * projection,
-        z: up.z - wall.z * projection,
-    });
-    const vLength = lengthVec(vCandidate);
-    const vWall = vLength < EPSILON ? { x: 0, y: 1, z: 0 } : vCandidate;
-    const uCandidate = crossVec(vWall, wall);
-    const uLength = lengthVec(uCandidate);
-    const uWall =
-        uLength < EPSILON
-            ? { x: 1, y: 0, z: 0 }
-            : { x: uCandidate.x / uLength, y: uCandidate.y / uLength, z: uCandidate.z / uLength };
-    return { wallNormal: wall, uWall, vWall };
 };
 
 const buildQuaternionFromAxes = (xAxis: Vec3, yAxis: Vec3, zAxis: Vec3): Quaternion => {
@@ -138,7 +102,10 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     const lightHitMaterialRef = useRef<StandardMaterial | null>(null);
     const rayMaterialRef = useRef<StandardMaterial | null>(null);
     const incomingRayMaterialRef = useRef<StandardMaterial | null>(null);
-    const wallBasis = useMemo(() => deriveWallBasis(settings), [settings]);
+    const wallBasis = useMemo(
+        () => deriveWallBasis(settings.wallOrientation, settings.worldUpOrientation),
+        [settings],
+    );
 
     const clearColor = useMemo(() => new Color4(0.06, 0.07, 0.09, 1), []);
     const emitterLayout = useMemo(() => buildGridEmitters(gridSize), [gridSize]);

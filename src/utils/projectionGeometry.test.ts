@@ -40,10 +40,10 @@ describe('projectionGeometry', () => {
         expect(grid.cols).toBeGreaterThan(0);
     });
 
-    it('calculates projection span for a grid', () => {
-        const span = calculateProjectionSpan({ rows: 8, cols: 8 }, DEFAULT_PROJECTION_SETTINGS);
-        expect(span.width).toBeGreaterThan(0);
-        expect(span.height).toBeGreaterThan(0);
+    it('calculates projection span without wall orientation distortion', () => {
+        const span = calculateProjectionSpan({ rows: 4, cols: 4 }, DEFAULT_PROJECTION_SETTINGS);
+        expect(span.width).toBeCloseTo((4 - 1) * DEFAULT_PROJECTION_SETTINGS.pixelSpacing.x, 5);
+        expect(span.height).toBeCloseTo((4 - 1) * DEFAULT_PROJECTION_SETTINGS.pixelSpacing.y, 5);
     });
 
     it('computes footprint spots for a pattern', () => {
@@ -56,6 +56,40 @@ describe('projectionGeometry', () => {
         const firstSpot = footprint.spots[0];
         expect(firstSpot.normalizedX).toBeGreaterThanOrEqual(0);
         expect(firstSpot.normalizedX).toBeLessThanOrEqual(1);
-        expect(firstSpot.world.z).toBeCloseTo(DEFAULT_PROJECTION_SETTINGS.wallDistance, 5);
+        expect(firstSpot.wallX).not.toBeNull();
+        expect(firstSpot.wallY).not.toBeNull();
+    });
+
+    it('keeps projected footprint consistent when wall yaw changes', () => {
+        const footprintA = computeProjectionFootprint({
+            gridSize: { rows: 6, cols: 6 },
+            pattern: null,
+            settings: DEFAULT_PROJECTION_SETTINGS,
+        });
+        const rotatedSettings = {
+            ...DEFAULT_PROJECTION_SETTINGS,
+            wallOrientation: {
+                ...DEFAULT_PROJECTION_SETTINGS.wallOrientation,
+                yaw: 25,
+            },
+        };
+        const footprintB = computeProjectionFootprint({
+            gridSize: { rows: 6, cols: 6 },
+            pattern: null,
+            settings: rotatedSettings,
+        });
+
+        expect(footprintA.projectedWidth).not.toBeNull();
+        expect(footprintB.projectedWidth).not.toBeNull();
+        expect(footprintA.projectedHeight).not.toBeNull();
+        expect(footprintB.projectedHeight).not.toBeNull();
+        expect(footprintB.projectedWidth ?? 0).toBeCloseTo(
+            footprintA.projectedWidth ?? 0,
+            5,
+        );
+        expect(footprintB.projectedHeight ?? 0).toBeCloseTo(
+            footprintA.projectedHeight ?? 0,
+            5,
+        );
     });
 });
