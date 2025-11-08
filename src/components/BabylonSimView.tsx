@@ -4,7 +4,6 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { LinesMesh } from '@babylonjs/core/Meshes/linesMesh';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
@@ -63,6 +62,9 @@ const createMaterial = (
     return material;
 };
 
+const NORMAL_VECTOR_LENGTH_M = 0.05;
+const NORMAL_VECTOR_RADIUS_M = 0.003;
+
 const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     gridSize,
     settings,
@@ -92,12 +94,13 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         selected: StandardMaterial;
         error: StandardMaterial;
     } | null>(null);
-    const normalLinesRef = useRef<LinesMesh | null>(null);
+    const normalLinesRef = useRef<TransformNode | null>(null);
     const wallRef = useRef<Mesh | null>(null);
     const sunRef = useRef<Mesh | null>(null);
     const sunRayRef = useRef<Mesh | null>(null);
     const sunMaterialRef = useRef<StandardMaterial | null>(null);
     const sunRayMaterialRef = useRef<StandardMaterial | null>(null);
+    const normalVectorMaterialRef = useRef<StandardMaterial | null>(null);
     const lightHitRef = useRef<Mesh | null>(null);
     const lightHitMaterialRef = useRef<StandardMaterial | null>(null);
     const rayMaterialRef = useRef<StandardMaterial | null>(null);
@@ -176,6 +179,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             disposeEntity(lightHitMaterialRef.current);
             disposeEntity(rayMaterialRef.current);
             disposeEntity(incomingRayMaterialRef.current);
+            disposeEntity(normalVectorMaterialRef.current);
             scene.dispose();
             engine.dispose();
             engineRef.current = null;
@@ -196,6 +200,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             lightHitMaterialRef.current = null;
             rayMaterialRef.current = null;
             incomingRayMaterialRef.current = null;
+            normalVectorMaterialRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -331,10 +336,12 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         disposeEntity(ellipseMaterialsRef.current?.error);
         disposeEntity(rayMaterialRef.current);
         disposeEntity(incomingRayMaterialRef.current);
+        disposeEntity(normalVectorMaterialRef.current);
         mirrorMaterialsRef.current = null;
         ellipseMaterialsRef.current = null;
         rayMaterialRef.current = null;
         incomingRayMaterialRef.current = null;
+        normalVectorMaterialRef.current = null;
 
         const mirrorMaterials = {
             base: createMaterial(scene, 'mirror-base', {
@@ -423,25 +430,38 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         });
 
         disposeEntity(normalLinesRef.current);
+        disposeEntity(normalVectorMaterialRef.current);
         normalLinesRef.current = null;
+        normalVectorMaterialRef.current = null;
         if (debugOptions.showNormals) {
-            const normalLines = solverResult.mirrors
-                .filter((mirror) => mirror.normal)
-                .map((mirror) => {
+            const mirrorsWithNormals = solverResult.mirrors.filter((mirror) => mirror.normal);
+            if (mirrorsWithNormals.length > 0) {
+                const normalRoot = new TransformNode('mirror-normals-root', scene);
+                normalLinesRef.current = normalRoot;
+                const normalMaterial = createMaterial(scene, 'mirror-normal-material', {
+                    diffuse: '#DC2626',
+                    emissive: '#F87171',
+                });
+                normalMaterial.disableLighting = true;
+                normalVectorMaterialRef.current = normalMaterial;
+
+                mirrorsWithNormals.forEach((mirror) => {
                     const start = toVector3(mirror.center);
                     const dir = toVector3(mirror.normal ?? wallNormal).normalize();
-                    return [start, start.add(dir.scale(0.3))];
+                    const end = start.add(dir.scale(NORMAL_VECTOR_LENGTH_M));
+                    const tube = MeshBuilder.CreateTube(
+                        `mirror-normal-${mirror.mirrorId}`,
+                        {
+                            path: [start, end],
+                            radius: NORMAL_VECTOR_RADIUS_M,
+                            tessellation: 8,
+                        },
+                        scene,
+                    );
+                    tube.parent = normalRoot;
+                    tube.material = normalMaterial;
+                    tube.isPickable = false;
                 });
-            if (normalLines.length > 0) {
-                const linesMesh = MeshBuilder.CreateLineSystem(
-                    'mirror-normals',
-                    { lines: normalLines },
-                    scene,
-                );
-                linesMesh.color = Color3.FromHexString('#FB923C');
-                linesMesh.alpha = 0.9;
-                linesMesh.isPickable = false;
-                normalLinesRef.current = linesMesh;
             }
         }
 

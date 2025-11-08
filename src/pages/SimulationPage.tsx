@@ -716,7 +716,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                                 onChange={handleToggleChange('showNormals')}
                                 data-testid="toggle-normals"
                             />
-                            Normals
+                            Normal vectors
                         </label>
                         <label className="inline-flex items-center gap-2">
                             <input
