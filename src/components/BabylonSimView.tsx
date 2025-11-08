@@ -107,7 +107,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     const incomingRayMaterialRef = useRef<StandardMaterial | null>(null);
     const wallBasis = useMemo(
         () => deriveWallBasis(settings.wallOrientation, settings.worldUpOrientation),
-        [settings],
+        [settings.wallOrientation, settings.worldUpOrientation],
     );
 
     const clearColor = useMemo(() => new Color4(0.06, 0.07, 0.09, 1), []);
