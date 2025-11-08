@@ -45,6 +45,7 @@ interface SimulationPageProps {
     projectionError: string | null;
     onClearProjectionError?: () => void;
     patterns: Pattern[];
+    hasUserPatterns: boolean;
     activePatternId: string | null;
     onSelectPattern: (patternId: string | null) => void;
 }
@@ -348,6 +349,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
     projectionError,
     onClearProjectionError,
     patterns,
+    hasUserPatterns,
     activePatternId,
     onSelectPattern,
 }) => {
@@ -417,8 +419,6 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
             tiles: gridSize.rows * gridSize.cols,
         };
     }, [activePattern, gridSize]);
-
-    const patternOptions = patterns.length === 0 ? [] : patterns;
 
     const resolvedSelectedMirrorId = useMemo(() => {
         if (
@@ -502,31 +502,29 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             <h3 className="text-lg font-semibold text-gray-200 mb-3">
                                 Pattern Source
                             </h3>
-                            {patterns.length === 0 ? (
-                                <p className="text-sm text-gray-400">
-                                    Create a pattern first to preview its wall projection. The grid
-                                    layout will be shown until then.
+                            {!hasUserPatterns && (
+                                <p className="mb-2 text-sm text-gray-400">
+                                    Using the built-in single pixel is a quick way to align mirrors.
+                                    Create and save a pattern in the library when you&rsquo;re ready
+                                    to preview custom footprints.
                                 </p>
-                            ) : (
-                                <select
-                                    className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
-                                    value={activePatternId ?? ''}
-                                    onChange={(event) =>
-                                        onSelectPattern(
-                                            event.target.value.length > 0
-                                                ? event.target.value
-                                                : null,
-                                        )
-                                    }
-                                >
-                                    <option value="">Full grid (no pattern)</option>
-                                    {patternOptions.map((pattern) => (
-                                        <option key={pattern.id} value={pattern.id}>
-                                            {pattern.name}
-                                        </option>
-                                    ))}
-                                </select>
                             )}
+                            <select
+                                className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
+                                value={activePatternId ?? ''}
+                                onChange={(event) =>
+                                    onSelectPattern(
+                                        event.target.value.length > 0 ? event.target.value : null,
+                                    )
+                                }
+                            >
+                                <option value="">Full grid (no pattern)</option>
+                                {patterns.map((pattern) => (
+                                    <option key={pattern.id} value={pattern.id}>
+                                        {pattern.name}
+                                    </option>
+                                ))}
+                            </select>
                             <div className="mt-3 text-xs text-gray-400 border border-gray-700/60 rounded-md p-2 bg-gray-900/60 space-y-1">
                                 <div className="flex justify-between">
                                     <span>Rows</span>

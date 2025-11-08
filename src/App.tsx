@@ -12,6 +12,7 @@ import {
     SimulationIcon,
 } from './components/NavIcons';
 import NavigationRail from './components/NavigationRail';
+import { BUILTIN_PATTERNS } from './constants/pattern';
 import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
 import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
@@ -71,6 +72,8 @@ const App: React.FC = () => {
     const [activePatternId, setActivePatternId] = useState<string | null>(
         persistedPatterns[0]?.id ?? null,
     );
+
+    const simulationPatterns = useMemo(() => [...BUILTIN_PATTERNS, ...patterns], [patterns]);
 
     const navigateTo = (targetPage: Page) => {
         setPage(targetPage);
@@ -217,7 +220,8 @@ const App: React.FC = () => {
                         onUpdateProjection={handleProjectionChange}
                         projectionError={projectionError}
                         onClearProjectionError={clearProjectionError}
-                        patterns={patterns}
+                        patterns={simulationPatterns}
+                        hasUserPatterns={patterns.length > 0}
                         activePatternId={activePatternId}
                         onSelectPattern={handleSelectPattern}
                     />
