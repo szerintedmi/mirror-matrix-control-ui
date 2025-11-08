@@ -250,7 +250,12 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             collectExtents(mirror.wallHit);
         });
 
-        if (!Number.isFinite(minU) || !Number.isFinite(minV) || !Number.isFinite(maxU) || !Number.isFinite(maxV)) {
+        if (
+            !Number.isFinite(minU) ||
+            !Number.isFinite(minV) ||
+            !Number.isFinite(maxU) ||
+            !Number.isFinite(maxV)
+        ) {
             minU = -emitterLayout.width / 2;
             maxU = emitterLayout.width / 2;
             minV = -emitterLayout.height / 2;

@@ -1,5 +1,5 @@
-import { MIRROR_PITCH_M } from '../constants/projection';
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
+import { MIRROR_PITCH_M } from '../constants/projection';
 
 import { degToRad, dotVec3, normalizeVec3, radToDeg } from './orientation';
 
@@ -68,6 +68,21 @@ const crossVec = (a: Vec3, b: Vec3): Vec3 => ({
 });
 
 const normalize = (v: Vec3): Vec3 => normalizeVec3(v);
+
+const resolveSunDirection = (orientation: ProjectionSettings['sunOrientation']): Vec3 => {
+    if (orientation.mode === 'vector') {
+        return normalize(orientation.vector);
+    }
+    const yaw = degToRad(orientation.yaw);
+    const pitch = degToRad(orientation.pitch);
+    const cosPitch = Math.cos(pitch);
+    const sunVector = {
+        x: -Math.sin(yaw) * cosPitch,
+        y: -Math.sin(pitch),
+        z: -Math.cos(yaw) * cosPitch,
+    } satisfies Vec3;
+    return normalize(sunVector);
+};
 
 const projectPointOntoPlane = (point: Vec3, planePoint: Vec3, planeNormal: Vec3): Vec3 =>
     addVec(point, scaleVec(planeNormal, dotVec3(subVec(planePoint, point), planeNormal)));
@@ -336,8 +351,7 @@ const solveMirrorReflection = ({
         return { errors };
     }
     const rHat = scaleVec(direction, 1 / dirLength);
-    const incoming = normalize(sunDirection);
-    const bisector = normalize(addVec(rHat, incoming));
+    const bisector = normalize(addVec(rHat, sunDirection));
     if (lengthVec(bisector) < EPSILON) {
         errors.push({
             code: 'degenerate_bisector',
@@ -418,7 +432,7 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
         z: 0,
     };
     const wallNormal = normalize(projection.wallOrientation.vector);
-    const sunDirection = normalize(projection.sunOrientation.vector);
+    const sunDirection = resolveSunDirection(projection.sunOrientation);
     const worldUp = normalize(projection.worldUpOrientation.vector);
     const alignment = Math.abs(dotVec3(worldUp, wallNormal));
 
@@ -426,7 +440,7 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
     const mirrorMetaMap = new Map(mirrorMeta.map((meta) => [meta.mirrorId, meta]));
     const baseSolutions = createMirrorSolutionsFromMeta(mirrorMeta);
 
-    if (lengthVec(projection.sunOrientation.vector) < EPSILON) {
+    if (lengthVec(sunDirection) < EPSILON) {
         return propagateErrorToAll(baseSolutions, {
             code: 'incoming_alignment',
             message: 'Sun direction vector cannot be zero.',

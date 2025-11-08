@@ -32,8 +32,10 @@ export const calculateProjectionSpan = (
     const stepX = settings.pixelSpacing.x;
     const stepY = settings.pixelSpacing.y;
 
-    const projectedWidth = cols <= 1 ? MIRROR_DIMENSION_M : Math.max((cols - 1) * stepX, MIRROR_DIMENSION_M);
-    const projectedHeight = rows <= 1 ? MIRROR_DIMENSION_M : Math.max((rows - 1) * stepY, MIRROR_DIMENSION_M);
+    const projectedWidth =
+        cols <= 1 ? MIRROR_DIMENSION_M : Math.max((cols - 1) * stepX, MIRROR_DIMENSION_M);
+    const projectedHeight =
+        rows <= 1 ? MIRROR_DIMENSION_M : Math.max((rows - 1) * stepY, MIRROR_DIMENSION_M);
 
     return {
         width: projectedWidth,
@@ -187,8 +189,10 @@ export const computeProjectionFootprint = ({
         };
     });
 
-    const projectedWidth = spots.length > 0 ? Math.max(maxWallX - minWallX, MIRROR_DIMENSION_M) : span.width;
-    const projectedHeight = spots.length > 0 ? Math.max(maxWallY - minWallY, MIRROR_DIMENSION_M) : span.height;
+    const projectedWidth =
+        spots.length > 0 ? Math.max(maxWallX - minWallX, MIRROR_DIMENSION_M) : span.width;
+    const projectedHeight =
+        spots.length > 0 ? Math.max(maxWallY - minWallY, MIRROR_DIMENSION_M) : span.height;
 
     return {
         projectedWidth,

@@ -83,13 +83,7 @@ describe('projectionGeometry', () => {
         expect(footprintB.projectedWidth).not.toBeNull();
         expect(footprintA.projectedHeight).not.toBeNull();
         expect(footprintB.projectedHeight).not.toBeNull();
-        expect(footprintB.projectedWidth ?? 0).toBeCloseTo(
-            footprintA.projectedWidth ?? 0,
-            5,
-        );
-        expect(footprintB.projectedHeight ?? 0).toBeCloseTo(
-            footprintA.projectedHeight ?? 0,
-            5,
-        );
+        expect(footprintB.projectedWidth ?? 0).toBeCloseTo(footprintA.projectedWidth ?? 0, 5);
+        expect(footprintB.projectedHeight ?? 0).toBeCloseTo(footprintA.projectedHeight ?? 0, 5);
     });
 });

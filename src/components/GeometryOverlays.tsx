@@ -51,7 +51,11 @@ const buildArrayPlan = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
 };
 
 const addVec = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
-const scaleVec = (v: Vec3, scalar: number): Vec3 => ({ x: v.x * scalar, y: v.y * scalar, z: v.z * scalar });
+const scaleVec = (v: Vec3, scalar: number): Vec3 => ({
+    x: v.x * scalar,
+    y: v.y * scalar,
+    z: v.z * scalar,
+});
 const subtractVec = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
 
 const buildWallHits = (
