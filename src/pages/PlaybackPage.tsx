@@ -19,7 +19,13 @@ import { normalizeCommandError } from '../utils/commandErrors';
 import { withOrientationAngles } from '../utils/orientation';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
-import type { MirrorConfig, Pattern, PlaybackPlanResult, ProjectionSettings } from '../types';
+import type {
+    MirrorAssignment,
+    MirrorConfig,
+    Pattern,
+    PlaybackPlanResult,
+    ProjectionSettings,
+} from '../types';
 
 interface PlaybackPageProps {
     patterns: Pattern[];
@@ -137,12 +143,14 @@ interface PlannerState {
     status: 'idle' | 'planning' | 'ready' | 'error';
     plan: PlaybackPlanResult | null;
     message: string | null;
+    signature: string | null;
 }
 
 const createInitialPlannerState = (): PlannerState => ({
     status: 'idle',
     plan: null,
     message: null,
+    signature: null,
 });
 
 interface PlaybackRunState {
@@ -153,6 +161,49 @@ interface PlaybackRunState {
 
 const formatTileLabel = (row: number, col: number): string => `Tile ${row + 1},${col + 1}`;
 const normalizeMac = (mac: string): string => mac.trim().toUpperCase();
+
+const axisAssignmentSignature = (
+    assignment: MirrorAssignment['x'] | MirrorAssignment['y'],
+): string => {
+    if (!assignment) {
+        return 'none';
+    }
+    return `${normalizeMac(assignment.nodeMac)}-${assignment.motorIndex}`;
+};
+
+const createPlannerInputSignature = ({
+    patternId,
+    gridSize,
+    mirrorConfig,
+    projectionSettings,
+}: {
+    patternId: string | null;
+    gridSize: { rows: number; cols: number };
+    mirrorConfig: MirrorConfig;
+    projectionSettings: ProjectionSettings;
+}): string => {
+    const assignmentFragments: string[] = [];
+    mirrorConfig.forEach((assignment, key) => {
+        assignmentFragments.push(
+            `${key}:${axisAssignmentSignature(assignment.x)}:${axisAssignmentSignature(assignment.y)}`,
+        );
+    });
+    assignmentFragments.sort();
+    const projectionFragment = [
+        projectionSettings.wallDistance.toFixed(3),
+        projectionSettings.projectionOffset.toFixed(3),
+        projectionSettings.wallOrientation.yaw.toFixed(3),
+        projectionSettings.wallOrientation.pitch.toFixed(3),
+        projectionSettings.sunOrientation.yaw.toFixed(3),
+        projectionSettings.sunOrientation.pitch.toFixed(3),
+    ].join('|');
+    return [
+        patternId ?? 'none',
+        `${gridSize.rows}x${gridSize.cols}`,
+        projectionFragment,
+        assignmentFragments.join(','),
+    ].join('::');
+};
 
 const PlaybackPage: React.FC<PlaybackPageProps> = ({
     patterns,
@@ -183,27 +234,67 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         return patterns.find((pattern) => pattern.id === activePatternId) ?? null;
     }, [activePatternId, patterns]);
 
+    const plannerInputsSignature = React.useMemo(
+        () =>
+            createPlannerInputSignature({
+                patternId: activePattern?.id ?? null,
+                gridSize,
+                mirrorConfig,
+                projectionSettings,
+            }),
+        [activePattern?.id, gridSize, mirrorConfig, projectionSettings],
+    );
+
     const isPlanning = plannerState.status === 'planning';
     const isRunning = runState.status === 'running';
 
-    const axisPlan = React.useMemo(() => {
+    const currentPlan = React.useMemo(() => {
         if (!plannerState.plan) {
             return null;
         }
-        return buildAxisTargets({ plan: plannerState.plan });
-    }, [plannerState.plan]);
+        if (plannerState.signature !== plannerInputsSignature) {
+            return null;
+        }
+        if (plannerState.status !== 'ready') {
+            return null;
+        }
+        return plannerState.plan;
+    }, [plannerInputsSignature, plannerState.plan, plannerState.signature, plannerState.status]);
+
+    const liveAxisPlan = React.useMemo(() => {
+        if (!currentPlan) {
+            return null;
+        }
+        return buildAxisTargets({ plan: currentPlan });
+    }, [currentPlan]);
+
+    const [displayPlan, setDisplayPlan] = React.useState<PlaybackPlanResult | null>(null);
+    React.useEffect(() => {
+        if (currentPlan) {
+            setDisplayPlan(currentPlan);
+        }
+    }, [currentPlan]);
+    const displayAxisPlan = React.useMemo(() => {
+        if (!displayPlan) {
+            return null;
+        }
+        if (displayPlan === currentPlan && liveAxisPlan) {
+            return liveAxisPlan;
+        }
+        return buildAxisTargets({ plan: displayPlan });
+    }, [currentPlan, displayPlan, liveAxisPlan]);
 
     React.useEffect(() => {
-        if (!axisPlan && isPreviewOpen && plannerState.status !== 'planning') {
+        if (!displayAxisPlan && isPreviewOpen && plannerState.status !== 'planning') {
             setIsPreviewOpen(false);
         }
-    }, [axisPlan, isPreviewOpen, plannerState.status]);
+    }, [displayAxisPlan, isPreviewOpen, plannerState.status]);
 
     const sortedAxisEntries = React.useMemo(() => {
-        if (!axisPlan) {
+        if (!displayAxisPlan) {
             return [];
         }
-        return [...axisPlan.axes].sort((a, b) => {
+        return [...displayAxisPlan.axes].sort((a, b) => {
             if (a.row !== b.row) {
                 return a.row - b.row;
             }
@@ -215,9 +306,9 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             }
             return a.motor.motorIndex - b.motor.motorIndex;
         });
-    }, [axisPlan]);
+    }, [displayAxisPlan]);
 
-    const previewSkipped = axisPlan?.skipped ?? [];
+    const previewSkipped = displayAxisPlan?.skipped ?? [];
 
     const clampValue = (value: number, min: number, max: number) =>
         Math.min(max, Math.max(min, value));
@@ -274,69 +365,132 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     }, [drivers]);
 
     const planSummary = React.useMemo(() => {
-        if (!plannerState.plan) {
+        if (!displayPlan) {
             return null;
         }
-        const targetedMirrors = plannerState.plan.mirrors.filter(
-            (mirror) => mirror.patternId !== null,
-        );
-        const clampedAxisCount = axisPlan ? axisPlan.axes.filter((axis) => axis.clamped).length : 0;
-        const skippedAxisCount = axisPlan ? axisPlan.skipped.length : 0;
+        const targetedMirrors = displayPlan.mirrors.filter((mirror) => mirror.patternId !== null);
+        const clampedAxisCount = displayAxisPlan
+            ? displayAxisPlan.axes.filter((axis) => axis.clamped).length
+            : 0;
+        const skippedAxisCount = displayAxisPlan ? displayAxisPlan.skipped.length : 0;
         return {
             targetedMirrorCount: targetedMirrors.length,
-            axisCommandCount: axisPlan ? axisPlan.axes.length : 0,
+            axisCommandCount: displayAxisPlan ? displayAxisPlan.axes.length : 0,
             clampedAxisCount,
             skippedAxisCount,
         };
-    }, [axisPlan, plannerState.plan]);
+    }, [displayAxisPlan, displayPlan]);
 
-    const computePlan = React.useCallback((): PlaybackPlanResult | null => {
+    const blockingIssues = React.useMemo(() => {
+        const issues: string[] = [];
+        if (!activePattern) {
+            issues.push('Select a pattern in the library to configure playback.');
+        }
+        if (
+            plannerState.status === 'error' &&
+            plannerState.message &&
+            plannerState.signature === plannerInputsSignature
+        ) {
+            issues.push(plannerState.message);
+        }
+        return issues;
+    }, [
+        activePattern,
+        plannerInputsSignature,
+        plannerState.message,
+        plannerState.signature,
+        plannerState.status,
+    ]);
+
+    const computePlan = React.useCallback(
+        (options?: { silentSuccess?: boolean }): PlaybackPlanResult | null => {
+            if (!activePattern) {
+                setPlannerState({
+                    status: 'error',
+                    plan: null,
+                    message: 'Select a pattern before running playback.',
+                    signature: null,
+                });
+                return null;
+            }
+            setPlannerState((prev) => ({
+                status: 'planning',
+                plan: prev.plan,
+                message: null,
+                signature: prev.signature === plannerInputsSignature ? prev.signature : null,
+            }));
+            try {
+                const plan = planPlayback({
+                    gridSize,
+                    mirrorConfig,
+                    projectionSettings,
+                    pattern: activePattern,
+                });
+                const hasErrors = plan.errors.length > 0;
+                setPlannerState({
+                    status: hasErrors ? 'error' : 'ready',
+                    plan,
+                    message: hasErrors
+                        ? `${plan.errors.length} solver error${plan.errors.length === 1 ? '' : 's'} detected.`
+                        : null,
+                    signature: plannerInputsSignature,
+                });
+                if (!hasErrors && options?.silentSuccess) {
+                    return plan;
+                }
+                return plan;
+            } catch (error) {
+                const message =
+                    error instanceof Error
+                        ? error.message
+                        : 'An unexpected error occurred while planning playback.';
+                setPlannerState({
+                    status: 'error',
+                    plan: null,
+                    message,
+                    signature: null,
+                });
+                return null;
+            }
+        },
+        [activePattern, gridSize, mirrorConfig, plannerInputsSignature, projectionSettings],
+    );
+
+    React.useEffect(() => {
         if (!activePattern) {
             setPlannerState({
                 status: 'error',
                 plan: null,
-                message: 'Select a pattern before planning playback.',
+                message: 'Select a pattern before running playback.',
+                signature: null,
             });
-            return null;
+            return;
         }
-        setPlannerState({
-            status: 'planning',
-            plan: null,
-            message: null,
-        });
-        try {
-            const plan = planPlayback({
-                gridSize,
-                mirrorConfig,
-                projectionSettings,
-                pattern: activePattern,
-            });
-            const hasErrors = plan.errors.length > 0;
-            setPlannerState({
-                status: hasErrors ? 'error' : 'ready',
-                plan,
-                message: hasErrors
-                    ? `${plan.errors.length} solver error${plan.errors.length === 1 ? '' : 's'} detected.`
-                    : 'Playback plan is ready.',
-            });
-            return plan;
-        } catch (error) {
-            const message =
-                error instanceof Error
-                    ? error.message
-                    : 'An unexpected error occurred while planning playback.';
-            setPlannerState({
-                status: 'error',
-                plan: null,
-                message,
-            });
-            return null;
-        }
-    }, [activePattern, gridSize, mirrorConfig, projectionSettings]);
+        const timer = window.setTimeout(() => {
+            computePlan({ silentSuccess: true });
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [activePattern, computePlan, plannerInputsSignature]);
 
-    const handlePlanPlayback = () => {
-        computePlan();
-    };
+    const requireFreshPlan = React.useCallback(
+        (options?: { silentSuccess?: boolean }) => {
+            if (
+                plannerState.plan &&
+                plannerState.signature === plannerInputsSignature &&
+                plannerState.status === 'ready'
+            ) {
+                return plannerState.plan;
+            }
+            return computePlan(options);
+        },
+        [
+            computePlan,
+            plannerInputsSignature,
+            plannerState.plan,
+            plannerState.signature,
+            plannerState.status,
+        ],
+    );
 
     const handleNavigateToSimulation = () => {
         setIsPreviewOpen(false);
@@ -349,10 +503,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         if (isPlanning || isRunning) {
             return;
         }
-        const plan =
-            plannerState.plan && plannerState.status !== 'planning'
-                ? plannerState.plan
-                : computePlan();
+        const plan = requireFreshPlan({ silentSuccess: true });
         if (!plan) {
             return;
         }
@@ -380,7 +531,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         if (isPlanning || runState.status === 'running') {
             return;
         }
-        const plan = computePlan();
+        const plan = requireFreshPlan();
         if (!plan) {
             return;
         }
@@ -495,43 +646,61 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             axisCount: runnableAxes.length,
         });
     }, [
-        computePlan,
         driverPresenceMap,
         isPlanning,
         logError,
         logInfo,
         logWarning,
         moveMotor,
+        requireFreshPlan,
         runState.status,
     ]);
 
-    const previewDisabled = isPlanning || isRunning || !activePattern;
+    const previewDisabled = isPlanning || isRunning || blockingIssues.length > 0;
+    const playDisabled = isPlanning || isRunning || blockingIssues.length > 0;
+    const isPlanRefreshing = plannerState.status === 'planning';
+    const isPlanStale = !currentPlan && !!displayPlan;
+    const planSummaryValues = {
+        targetedMirrorCount: planSummary?.targetedMirrorCount ?? '—',
+        axisCommandCount: planSummary?.axisCommandCount ?? '—',
+        clampedAxisCount: planSummary?.clampedAxisCount ?? '—',
+        skippedAxisCount: planSummary?.skippedAxisCount ?? '—',
+    };
 
     return (
         <div className="flex flex-col gap-6">
             <section className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
+                    <div className="flex-1">
                         <h2 className="text-lg font-semibold text-gray-100">Playback Controls</h2>
                         <p className="text-sm text-gray-400">
                             {activePattern
                                 ? `Active pattern: ${activePattern.name}`
-                                : 'Select a pattern in the library to begin planning playback.'}
+                                : 'Select a pattern in the library to begin playback.'}
                         </p>
+                        {blockingIssues.length > 0 ? (
+                            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-300">
+                                {blockingIssues.map((issue) => (
+                                    <li key={issue}>{issue}</li>
+                                ))}
+                            </ul>
+                        ) : displayAxisPlan ? (
+                            <p
+                                className={`mt-2 text-xs font-medium uppercase tracking-wide ${
+                                    isPlanStale ? 'text-emerald-200 opacity-60' : 'text-emerald-300'
+                                }`}
+                            >
+                                {displayAxisPlan.axes.length} axis command
+                                {displayAxisPlan.axes.length === 1 ? '' : 's'} ready
+                                {isPlanRefreshing && (
+                                    <span className="ml-2 text-[11px] font-normal uppercase tracking-wide text-gray-400">
+                                        Updating…
+                                    </span>
+                                )}
+                            </p>
+                        ) : null}
                     </div>
                     <div className="flex flex-wrap gap-3">
-                        <button
-                            type="button"
-                            onClick={handlePlanPlayback}
-                            disabled={!activePattern || isPlanning || isRunning}
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                                !activePattern || isPlanning || isRunning
-                                    ? 'cursor-not-allowed bg-gray-700 text-gray-400'
-                                    : 'bg-emerald-500 text-gray-900 hover:bg-emerald-400'
-                            }`}
-                        >
-                            {isPlanning ? 'Planning…' : 'Plan Playback'}
-                        </button>
                         <button
                             type="button"
                             onClick={handlePreviewCommands}
@@ -542,16 +711,16 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                                     : 'bg-indigo-500 text-gray-50 hover:bg-indigo-400'
                             }`}
                         >
-                            Preview Commands
+                            {isPlanning ? 'Calculating…' : 'Preview Commands'}
                         </button>
                         <button
                             type="button"
                             onClick={() => {
                                 void handlePlaybackStart();
                             }}
-                            disabled={!activePattern || isPlanning || isRunning}
+                            disabled={playDisabled}
                             className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                                !activePattern || isPlanning || isRunning
+                                playDisabled
                                     ? 'cursor-not-allowed bg-gray-800 text-gray-500'
                                     : 'bg-sky-500 text-gray-900 hover:bg-sky-400'
                             }`}
@@ -590,62 +759,69 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                         </p>
                     )}
                 </div>
-                {plannerState.message && (
-                    <div
-                        className={`mt-4 rounded-md border p-3 text-sm ${
-                            plannerState.status === 'error'
-                                ? 'border-red-500/40 bg-red-500/10 text-red-100'
-                                : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100'
-                        }`}
-                    >
-                        {plannerState.message}
-                    </div>
-                )}
-                {planSummary && (
-                    <div className="mt-4 grid gap-4 md:grid-cols-4">
-                        <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
+                <div
+                    className={`mt-4 grid gap-4 md:grid-cols-4 ${
+                        isPlanStale ? 'opacity-70 transition' : 'opacity-100'
+                    }`}
+                >
+                    <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
+                        <div className="flex items-center justify-between">
                             <p className="text-gray-400">Targeted mirrors</p>
-                            <p className="text-2xl font-semibold text-gray-50">
-                                {planSummary.targetedMirrorCount}
-                            </p>
+                            {isPlanRefreshing && (
+                                <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                                    Updating…
+                                </span>
+                            )}
                         </div>
-                        <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
-                            <p className="text-gray-400">Axis commands ready</p>
-                            <p className="text-2xl font-semibold text-gray-50">
-                                {planSummary.axisCommandCount}
-                            </p>
-                        </div>
-                        <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
-                            <p className="text-gray-400">Clamped axes</p>
-                            <p
-                                className={`text-2xl font-semibold ${
-                                    planSummary.clampedAxisCount > 0
-                                        ? 'text-amber-300'
-                                        : 'text-emerald-300'
-                                }`}
-                            >
-                                {planSummary.clampedAxisCount}
-                            </p>
-                        </div>
-                        <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
-                            <p className="text-gray-400">Skipped axes</p>
-                            <p
-                                className={`text-2xl font-semibold ${
-                                    planSummary.skippedAxisCount > 0
-                                        ? 'text-amber-300'
-                                        : 'text-emerald-300'
-                                }`}
-                            >
-                                {planSummary.skippedAxisCount}
-                            </p>
-                        </div>
+                        <p className="text-2xl font-semibold text-gray-50">
+                            {planSummaryValues.targetedMirrorCount}
+                        </p>
                     </div>
-                )}
-                {axisPlan && axisPlan.axes.some((axis) => axis.clamped) && (
+                    <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
+                        <p className="text-gray-400">Axis commands ready</p>
+                        <p className="text-2xl font-semibold text-gray-50">
+                            {planSummaryValues.axisCommandCount}
+                        </p>
+                    </div>
+                    <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
+                        <p className="text-gray-400">Clamped axes</p>
+                        <p
+                            className={`text-2xl font-semibold ${
+                                typeof planSummaryValues.clampedAxisCount === 'number' &&
+                                planSummaryValues.clampedAxisCount > 0
+                                    ? 'text-amber-300'
+                                    : 'text-emerald-300'
+                            }`}
+                        >
+                            {planSummaryValues.clampedAxisCount}
+                        </p>
+                    </div>
+                    <div className="rounded-md border border-gray-700 bg-gray-900/50 p-3 text-sm">
+                        <p className="text-gray-400">Skipped axes</p>
+                        <p
+                            className={`text-2xl font-semibold ${
+                                typeof planSummaryValues.skippedAxisCount === 'number' &&
+                                planSummaryValues.skippedAxisCount > 0
+                                    ? 'text-amber-300'
+                                    : 'text-emerald-300'
+                            }`}
+                        >
+                            {planSummaryValues.skippedAxisCount}
+                        </p>
+                    </div>
+                </div>
+                {displayAxisPlan && displayAxisPlan.axes.some((axis) => axis.clamped) && (
                     <div className="mt-4 rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-50">
-                        <p className="mb-2 font-semibold">Clamp warnings</p>
+                        <p className="mb-2 font-semibold">
+                            Clamp warnings
+                            {isPlanRefreshing && (
+                                <span className="ml-2 text-xs font-normal text-amber-200/80">
+                                    Updating…
+                                </span>
+                            )}
+                        </p>
                         <ul className="space-y-1">
-                            {axisPlan.axes
+                            {displayAxisPlan.axes
                                 .filter((axis) => axis.clamped)
                                 .slice(0, 5)
                                 .map((axis) => (
@@ -657,18 +833,25 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                                     </li>
                                 ))}
                         </ul>
-                        {axisPlan.axes.filter((axis) => axis.clamped).length > 5 && (
+                        {displayAxisPlan.axes.filter((axis) => axis.clamped).length > 5 && (
                             <p className="mt-2 text-xs text-amber-100/80">
                                 Additional clamped axes omitted for brevity.
                             </p>
                         )}
                     </div>
                 )}
-                {axisPlan && axisPlan.skipped.length > 0 && (
+                {displayAxisPlan && displayAxisPlan.skipped.length > 0 && (
                     <div className="mt-4 rounded-md border border-amber-300/30 bg-amber-400/5 p-3 text-sm text-amber-100">
-                        <p className="mb-2 font-semibold">Skipped axes</p>
+                        <p className="mb-2 font-semibold">
+                            Skipped axes
+                            {isPlanRefreshing && (
+                                <span className="ml-2 text-xs font-normal text-amber-100/70">
+                                    Updating…
+                                </span>
+                            )}
+                        </p>
                         <ul className="space-y-1">
-                            {axisPlan.skipped.slice(0, 5).map((skip, index) => (
+                            {displayAxisPlan.skipped.slice(0, 5).map((skip, index) => (
                                 <li key={`skip-${skip.mirrorId}-${skip.axis}-${index}`}>
                                     {formatTileLabel(skip.row, skip.col)} axis{' '}
                                     {skip.axis.toUpperCase()} skipped (
@@ -676,26 +859,28 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                                 </li>
                             ))}
                         </ul>
-                        {axisPlan.skipped.length > 5 && (
+                        {displayAxisPlan.skipped.length > 5 && (
                             <p className="mt-2 text-xs text-amber-100/80">
                                 Additional skipped axes omitted for brevity.
                             </p>
                         )}
                     </div>
                 )}
-                {plannerState.plan && plannerState.plan.errors.length > 0 && (
-                    <div className="mt-4 rounded-md border border-red-500/40 bg-red-500/5 p-3 text-sm text-red-100">
-                        <p className="mb-2 font-semibold">Solver issues</p>
-                        <ul className="space-y-1">
-                            {plannerState.plan.errors.map((error, index) => (
-                                <li key={`${error.code}-${index}`}>
-                                    <span className="font-medium">{error.code}:</span>{' '}
-                                    {error.message}
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
+                {plannerState.plan &&
+                    plannerState.signature === plannerInputsSignature &&
+                    plannerState.plan.errors.length > 0 && (
+                        <div className="mt-4 rounded-md border border-red-500/40 bg-red-500/5 p-3 text-sm text-red-100">
+                            <p className="mb-2 font-semibold">Solver issues</p>
+                            <ul className="space-y-1">
+                                {plannerState.plan.errors.map((error, index) => (
+                                    <li key={`${error.code}-${index}`}>
+                                        <span className="font-medium">{error.code}:</span>{' '}
+                                        {error.message}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
             </section>
 
             <section className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner space-y-4">
@@ -838,25 +1023,12 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 onClose={() => setIsPreviewOpen(false)}
                 title="Command Preview"
             >
-                {onNavigateSimulation && (
-                    <div className="mb-4 rounded-md border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm text-cyan-100">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <span>Need to adjust distances or angles? Jump to Simulation.</span>
-                            <button
-                                type="button"
-                                onClick={handleNavigateToSimulation}
-                                className="inline-flex items-center justify-center rounded-md border border-cyan-400 px-3 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
-                            >
-                                Open Simulation
-                            </button>
-                        </div>
-                    </div>
-                )}
                 {plannerState.status === 'planning' ? (
                     <p className="text-sm text-gray-300">Generating playback plan…</p>
-                ) : !axisPlan || sortedAxisEntries.length === 0 ? (
+                ) : !displayAxisPlan || sortedAxisEntries.length === 0 ? (
                     <p className="text-sm text-gray-300">
-                        No command plan is available yet. Plan playback before previewing commands.
+                        Command preview is unavailable until the current validation issues are
+                        resolved.
                     </p>
                 ) : (
                     <div className="space-y-4">

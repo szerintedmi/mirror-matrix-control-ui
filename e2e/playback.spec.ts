@@ -58,13 +58,9 @@ test.describe('Playback conversion & commands', () => {
 
         await connectMockTransport(page);
 
-        const planButton = page.getByRole('button', { name: 'Plan Playback' });
-        await expect(planButton).toBeEnabled();
-        await planButton.click();
-        await expect(page.getByText('Playback plan is ready.')).toBeVisible();
-
         const previewButton = page.getByRole('button', { name: 'Preview Commands' });
         await expect(previewButton).toBeEnabled();
+        await expect(page.getByText(/\d+\s+axis commands ready/i)).toBeVisible();
         await previewButton.click();
         const previewDialog = page.getByRole('dialog', { name: 'Command Preview' });
         await expect(previewDialog).toBeVisible();
@@ -76,9 +72,6 @@ test.describe('Playback conversion & commands', () => {
         await playButton.click();
 
         await expect(page.getByText('Playback commands completed.', { exact: true })).toBeVisible();
-        await expect(
-            page.getByText('Playback commands completed successfully.', { exact: false }),
-        ).toBeVisible();
 
         const logSection = page.getByRole('heading', { name: 'Playback Log' });
         await expect(logSection).toBeVisible();
