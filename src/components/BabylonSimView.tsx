@@ -30,6 +30,8 @@ interface BabylonSimViewProps {
     isPreviewStale: boolean;
     showIncomingPerMirror: boolean;
     activePatternId: string | null;
+    className?: string;
+    heightHint?: string;
 }
 
 const toVector3 = (value: Vec3): Vector3 => new Vector3(value.x, value.y, value.z);
@@ -65,6 +67,8 @@ const createMaterial = (
 const NORMAL_VECTOR_LENGTH_M = 0.05;
 const NORMAL_VECTOR_RADIUS_M = 0.003;
 
+const DEFAULT_HEIGHT = 'clamp(320px, 52vh, 600px)';
+
 const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     gridSize,
     settings,
@@ -75,6 +79,8 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     isPreviewStale,
     showIncomingPerMirror,
     activePatternId,
+    className,
+    heightHint = DEFAULT_HEIGHT,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -659,11 +665,15 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         camera.target = nextTarget;
     }, [emitterLayout.height, emitterLayout.width, settings.wallDistance, wallBasis]);
 
+    const containerClassName = [
+        'relative w-full flex-none rounded-lg border border-gray-700 bg-gray-900',
+        className ?? '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
     return (
-        <div
-            ref={containerRef}
-            className="relative w-full min-h-[360px] rounded-lg border border-gray-700 bg-gray-900"
-        >
+        <div ref={containerRef} className={containerClassName} style={{ height: heightHint }}>
             <canvas ref={canvasRef} className="h-full w-full" />
             {isPreviewStale && (
                 <div className="pointer-events-none absolute inset-0 flex items-start justify-end p-4">

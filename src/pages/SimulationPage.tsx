@@ -683,76 +683,84 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                 </aside>
 
                 <div className="flex-grow flex flex-col min-h-0 min-w-0 gap-4">
-                    <BabylonSimView
-                        gridSize={gridSize}
-                        settings={effectiveSettings}
-                        solverResult={effectiveResult}
-                        selectedMirrorId={resolvedSelectedMirrorId}
-                        errorMirrorIds={errorMirrorIds}
-                        debugOptions={visualizationToggles}
-                        isPreviewStale={previewIsStale}
-                        showIncomingPerMirror={visualizationToggles.showIncomingRays}
-                        activePatternId={activePatternId}
-                    />
+                    <div className="flex flex-col gap-2.5">
+                        <BabylonSimView
+                            gridSize={gridSize}
+                            settings={effectiveSettings}
+                            solverResult={effectiveResult}
+                            selectedMirrorId={resolvedSelectedMirrorId}
+                            errorMirrorIds={errorMirrorIds}
+                            debugOptions={visualizationToggles}
+                            isPreviewStale={previewIsStale}
+                            showIncomingPerMirror={visualizationToggles.showIncomingRays}
+                            activePatternId={activePatternId}
+                            className="flex-none"
+                            heightHint="clamp(340px, 54vh, 600px)"
+                        />
 
-                    <div className="flex flex-wrap gap-4 text-xs font-medium text-gray-300 sm:text-sm">
-                        <label className="inline-flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-600 bg-gray-900"
-                                checked={visualizationToggles.showRays}
-                                onChange={handleToggleChange('showRays')}
-                                data-testid="toggle-rays"
-                            />
-                            Rays
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-600 bg-gray-900"
-                                checked={visualizationToggles.showNormals}
-                                onChange={handleToggleChange('showNormals')}
-                                data-testid="toggle-normals"
-                            />
-                            Normal vectors
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-600 bg-gray-900"
-                                checked={visualizationToggles.showEllipses}
-                                onChange={handleToggleChange('showEllipses')}
-                                data-testid="toggle-ellipses"
-                            />
-                            Ellipses
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-600 bg-gray-900"
-                                checked={visualizationToggles.showIncomingRays}
-                                onChange={handleToggleChange('showIncomingRays')}
-                                data-testid="toggle-incoming-rays"
-                            />
-                            Incoming rays
-                        </label>
+                        <div className="flex flex-wrap gap-2.5 text-xs font-medium text-gray-300 sm:text-sm">
+                            <label className="inline-flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    checked={visualizationToggles.showRays}
+                                    onChange={handleToggleChange('showRays')}
+                                    data-testid="toggle-rays"
+                                />
+                                Rays
+                            </label>
+                            <label className="inline-flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    checked={visualizationToggles.showNormals}
+                                    onChange={handleToggleChange('showNormals')}
+                                    data-testid="toggle-normals"
+                                />
+                                Normal vectors
+                            </label>
+                            <label className="inline-flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    checked={visualizationToggles.showEllipses}
+                                    onChange={handleToggleChange('showEllipses')}
+                                    data-testid="toggle-ellipses"
+                                />
+                                Ellipses
+                            </label>
+                            <label className="inline-flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    checked={visualizationToggles.showIncomingRays}
+                                    onChange={handleToggleChange('showIncomingRays')}
+                                    data-testid="toggle-incoming-rays"
+                                />
+                                Incoming rays
+                            </label>
+                        </div>
+
+                        <GeometryStatusPanel
+                            errors={solverResult.errors}
+                            onFocusMirror={handleSelectMirror}
+                        />
                     </div>
 
-                    <GeometryStatusPanel
-                        errors={solverResult.errors}
-                        onFocusMirror={handleSelectMirror}
-                    />
-
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                        <GeometryOverlays
-                            mirrors={effectiveResult.mirrors}
-                            selectedMirrorId={resolvedSelectedMirrorId}
-                            onSelectMirror={handleSelectMirror}
-                            errorMirrorIds={errorMirrorIds}
-                            projectionSettings={effectiveSettings}
-                            gridSize={gridSize}
-                        />
-                        <GeometryDebugPanel mirror={selectedMirror} isStale={previewIsStale} />
+                    <div className="flex flex-col gap-4 xl:flex-row">
+                        <div className="min-w-0 xl:flex-[1.6]">
+                            <GeometryOverlays
+                                mirrors={effectiveResult.mirrors}
+                                selectedMirrorId={resolvedSelectedMirrorId}
+                                onSelectMirror={handleSelectMirror}
+                                errorMirrorIds={errorMirrorIds}
+                                projectionSettings={effectiveSettings}
+                                gridSize={gridSize}
+                            />
+                        </div>
+                        <div className="min-w-0 xl:flex-1">
+                            <GeometryDebugPanel mirror={selectedMirror} isStale={previewIsStale} />
+                        </div>
                     </div>
                 </div>
             </main>

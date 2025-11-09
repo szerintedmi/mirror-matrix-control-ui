@@ -12,12 +12,9 @@ const formatValue = (value: number | undefined, digits = 2, suffix = ''): string
 
 const GeometryDebugPanel: React.FC<GeometryDebugPanelProps> = ({ mirror, isStale }) => {
     return (
-        <section className="rounded-xl border border-gray-700/70 bg-gray-900/80 p-4">
+        <section className="rounded-xl border border-gray-700/70 bg-gray-900/80 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2">
-                <div>
-                    <h3 className="text-base font-semibold text-gray-100">Debug Metrics</h3>
-                    <p className="text-xs text-gray-400">Mirror orientation + footprint</p>
-                </div>
+                <h3 className="text-base font-semibold text-gray-100">Debug Metrics</h3>
                 {isStale && (
                     <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-100">
                         Preview paused

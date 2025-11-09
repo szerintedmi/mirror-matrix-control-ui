@@ -15,6 +15,8 @@ interface GeometryOverlaysProps {
 }
 
 const VIEW_BOX = 120;
+const POINT_PADDING = 4;
+const DRAW_SPAN = VIEW_BOX - POINT_PADDING * 2;
 
 interface PlanPoint {
     id: string;
@@ -42,8 +44,8 @@ const buildArrayPlan = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
         const normalizedY = (mirror.center.y - minY) / spanY;
         return {
             id: mirror.mirrorId,
-            x: normalizedX * VIEW_BOX,
-            y: VIEW_BOX - normalizedY * VIEW_BOX,
+            x: POINT_PADDING + normalizedX * DRAW_SPAN,
+            y: VIEW_BOX - POINT_PADDING - normalizedY * DRAW_SPAN,
             label: `${mirror.row + 1}:${mirror.col + 1}`,
             isActive: Boolean(mirror.patternId),
         } satisfies PlanPoint;
@@ -101,8 +103,8 @@ const buildWallHits = (
         const normalizedY = (v - minV) / spanV;
         return {
             id: mirror.mirrorId,
-            x: normalizedX * VIEW_BOX,
-            y: VIEW_BOX - normalizedY * VIEW_BOX,
+            x: POINT_PADDING + normalizedX * DRAW_SPAN,
+            y: VIEW_BOX - POINT_PADDING - normalizedY * DRAW_SPAN,
             label: mirror.patternId ?? mirror.mirrorId,
             isActive: Boolean(mirror.patternId),
         } satisfies PlanPoint;
@@ -155,17 +157,10 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
     };
 
     return (
-        <section className="rounded-xl border border-gray-700/70 bg-gray-900/80 p-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-base font-semibold text-gray-100">2D Overlays</h3>
-                    <p className="text-xs text-gray-400">
-                        Click a mirror to sync with the 3D preview.
-                    </p>
-                </div>
-            </div>
+        <section className="rounded-xl border border-gray-700/70 bg-gray-900/80 p-3 sm:p-4">
+            <h3 className="text-base font-semibold text-gray-100">2D Overlays</h3>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
                         Array layout
@@ -176,7 +171,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                         ) : (
                             <svg
                                 viewBox={`0 0 ${VIEW_BOX} ${VIEW_BOX}`}
-                                className="h-48 w-full"
+                                className="h-44 w-full"
                                 role="presentation"
                                 data-testid="array-plan"
                             >
@@ -209,7 +204,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                         ) : (
                             <svg
                                 viewBox={`0 0 ${VIEW_BOX} ${VIEW_BOX}`}
-                                className="h-48 w-full"
+                                className="h-44 w-full"
                                 role="presentation"
                                 data-testid="wall-plan"
                             >
