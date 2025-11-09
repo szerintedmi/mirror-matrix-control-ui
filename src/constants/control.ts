@@ -1,5 +1,6 @@
 export const MOTOR_MIN_POSITION_STEPS = -1_200;
 export const MOTOR_MAX_POSITION_STEPS = 1_200;
+export const STEPS_PER_DEGREE = 190;
 
 export const NUDGE_DELTA_STEPS = 500;
 

@@ -174,3 +174,50 @@ export interface ReflectionSolverResult {
     assignments: ReflectionAssignment[];
     errors: ReflectionSolverError[];
 }
+
+export interface PlaybackMirrorPlan {
+    mirrorId: string;
+    row: number;
+    col: number;
+    patternId: string | null;
+    yawDeg: number | null;
+    pitchDeg: number | null;
+    assignment: MirrorAssignment;
+    errors: ReflectionSolverError[];
+}
+
+export interface PlaybackPlanResult {
+    patternId: string | null;
+    mirrors: PlaybackMirrorPlan[];
+    assignments: ReflectionAssignment[];
+    errors: ReflectionSolverError[];
+}
+
+export interface PlaybackAxisTarget {
+    key: string;
+    mirrorId: string;
+    axis: Axis;
+    patternId: string | null;
+    motor: Motor;
+    row: number;
+    col: number;
+    angleDeg: number;
+    requestedSteps: number;
+    targetSteps: number;
+    clamped: boolean;
+}
+
+export type PlaybackAxisSkipReason = 'missing-motor' | 'missing-angle';
+
+export interface PlaybackAxisSkip {
+    mirrorId: string;
+    row: number;
+    col: number;
+    axis: Axis;
+    reason: PlaybackAxisSkipReason;
+}
+
+export interface PlaybackAxisPlan {
+    axes: PlaybackAxisTarget[];
+    skipped: PlaybackAxisSkip[];
+}

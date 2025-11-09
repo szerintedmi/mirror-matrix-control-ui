@@ -48,6 +48,13 @@ export interface HomeCommandResult {
     completion: CommandCompletionResult;
 }
 
+export interface MoveMotorArgs {
+    mac: string;
+    motorId: number;
+    positionSteps: number;
+    cmdId?: string;
+}
+
 const decoder = new TextDecoder();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -118,6 +125,7 @@ export interface MotorCommandApi {
     nudgeMotor: (args: NudgeMotorArgs) => Promise<NudgeCommandResult>;
     homeMotor: (args: HomeMotorArgs) => Promise<HomeCommandResult>;
     homeAll: (args: HomeAllArgs) => Promise<HomeCommandResult[]>;
+    moveMotor: (args: MoveMotorArgs) => Promise<CommandCompletionResult>;
 }
 
 export const useMotorCommands = (): MotorCommandApi => {
@@ -267,9 +275,31 @@ export const useMotorCommands = (): MotorCommandApi => {
         [publishCommand],
     );
 
+    const moveMotor = useCallback(
+        async ({
+            mac,
+            motorId,
+            positionSteps,
+            cmdId,
+        }: MoveMotorArgs): Promise<CommandCompletionResult> => {
+            const completion = await publishCommand({
+                mac,
+                action: MOVE_ACTION,
+                params: {
+                    target_ids: motorId,
+                    position_steps: positionSteps,
+                },
+                cmdId,
+            });
+            return completion;
+        },
+        [publishCommand],
+    );
+
     return {
         nudgeMotor,
         homeMotor,
         homeAll,
+        moveMotor,
     };
 };

@@ -14,6 +14,7 @@ import {
 import NavigationRail from './components/NavigationRail';
 import { BUILTIN_PATTERNS } from './constants/pattern';
 import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
+import { LogProvider } from './context/LogContext';
 import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
 import ConfiguratorPage from './pages/ConfiguratorPage';
@@ -191,6 +192,9 @@ const App: React.FC = () => {
                         patterns={patterns}
                         gridSize={gridSize}
                         mirrorConfig={mirrorConfig}
+                        projectionSettings={projectionSettings}
+                        activePatternId={activePatternId}
+                        onSelectPattern={handleSelectPattern}
                     />
                 );
             case 'editor':
@@ -283,43 +287,45 @@ const App: React.FC = () => {
     return (
         <MqttProvider>
             <StatusProvider>
-                <div className="flex h-screen min-h-screen overflow-hidden bg-gray-900 font-sans text-gray-200">
-                    <NavigationRail
-                        items={navigationItems}
-                        activePage={effectiveNavPage}
-                        collapsed={isRailCollapsed}
-                        onToggleCollapse={() => setIsRailCollapsed((prev) => !prev)}
-                        onNavigate={navigateTo}
-                    />
-                    <MobileNavigationDrawer
-                        open={isMobileNavOpen}
-                        onClose={() => setIsMobileNavOpen(false)}
-                        items={navigationItems}
-                        activePage={effectiveNavPage}
-                        onNavigate={navigateTo}
-                    />
-                    <div className="flex h-full flex-1 flex-col overflow-hidden">
-                        <AppTopBar
-                            onMenuClick={() => setIsMobileNavOpen(true)}
-                            onOpenSettings={() => setIsConnectionModalOpen(true)}
-                            pageTitle={pageTitle}
-                            breadcrumbs={breadcrumbs}
+                <LogProvider>
+                    <div className="flex h-screen min-h-screen overflow-hidden bg-gray-900 font-sans text-gray-200">
+                        <NavigationRail
+                            items={navigationItems}
+                            activePage={effectiveNavPage}
+                            collapsed={isRailCollapsed}
+                            onToggleCollapse={() => setIsRailCollapsed((prev) => !prev)}
+                            onNavigate={navigateTo}
                         />
-                        <main
-                            data-testid="app-root"
-                            className="flex-1 overflow-auto px-4 py-6 md:px-8"
+                        <MobileNavigationDrawer
+                            open={isMobileNavOpen}
+                            onClose={() => setIsMobileNavOpen(false)}
+                            items={navigationItems}
+                            activePage={effectiveNavPage}
+                            onNavigate={navigateTo}
+                        />
+                        <div className="flex h-full flex-1 flex-col overflow-hidden">
+                            <AppTopBar
+                                onMenuClick={() => setIsMobileNavOpen(true)}
+                                onOpenSettings={() => setIsConnectionModalOpen(true)}
+                                pageTitle={pageTitle}
+                                breadcrumbs={breadcrumbs}
+                            />
+                            <main
+                                data-testid="app-root"
+                                className="flex-1 overflow-auto px-4 py-6 md:px-8"
+                            >
+                                <div className="w-full">{renderPage()}</div>
+                            </main>
+                        </div>
+                        <Modal
+                            open={isConnectionModalOpen}
+                            onClose={() => setIsConnectionModalOpen(false)}
+                            title="Connection Settings"
                         >
-                            <div className="w-full">{renderPage()}</div>
-                        </main>
+                            <ConnectionSettingsContent />
+                        </Modal>
                     </div>
-                    <Modal
-                        open={isConnectionModalOpen}
-                        onClose={() => setIsConnectionModalOpen(false)}
-                        title="Connection Settings"
-                    >
-                        <ConnectionSettingsContent />
-                    </Modal>
-                </div>
+                </LogProvider>
             </StatusProvider>
         </MqttProvider>
     );
