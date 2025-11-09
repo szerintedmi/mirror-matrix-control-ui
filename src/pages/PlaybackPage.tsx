@@ -4,12 +4,19 @@ import LogConsole from '../components/LogConsole';
 import Modal from '../components/Modal';
 import MotorStatusOverview from '../components/MotorStatusOverview';
 import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
+import {
+    MAX_PROJECTION_OFFSET_M,
+    MAX_WALL_DISTANCE_M,
+    MIN_PROJECTION_OFFSET_M,
+    MIN_WALL_DISTANCE_M,
+} from '../constants/projection';
 import { useLogStore } from '../context/LogContext';
 import { useStatusStore } from '../context/StatusContext';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import { planPlayback } from '../services/playbackPlanner';
 import { buildAxisTargets } from '../services/playbackTargets';
 import { normalizeCommandError } from '../utils/commandErrors';
+import { withOrientationAngles } from '../utils/orientation';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type { MirrorConfig, Pattern, PlaybackPlanResult, ProjectionSettings } from '../types';
@@ -19,8 +26,10 @@ interface PlaybackPageProps {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
     projectionSettings: ProjectionSettings;
+    onUpdateProjection: (patch: Partial<ProjectionSettings>) => void;
     activePatternId: string | null;
     onSelectPattern: (patternId: string | null) => void;
+    onNavigateSimulation?: () => void;
 }
 
 const PatternThumbnail: React.FC<{
@@ -150,8 +159,10 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     gridSize,
     mirrorConfig,
     projectionSettings,
+    onUpdateProjection,
     activePatternId,
     onSelectPattern,
+    onNavigateSimulation,
 }) => {
     const { drivers } = useStatusStore();
     const { moveMotor } = useMotorCommands();
@@ -208,6 +219,52 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
 
     const previewSkipped = axisPlan?.skipped ?? [];
 
+    const clampValue = (value: number, min: number, max: number) =>
+        Math.min(max, Math.max(min, value));
+
+    const handleProjectionField =
+        (key: 'wallDistance' | 'projectionOffset', min: number, max: number) => (value: number) => {
+            if (Number.isNaN(value)) {
+                return;
+            }
+            const clamped = clampValue(value, min, max);
+            onUpdateProjection({ [key]: clamped });
+        };
+
+    const handleOrientationAngleChange =
+        (key: 'wallOrientation' | 'sunOrientation', field: 'yaw' | 'pitch') => (value: number) => {
+            if (Number.isNaN(value)) {
+                return;
+            }
+            const clamped = clampValue(value, -90, 90);
+            const orientation = projectionSettings[key];
+            const next = withOrientationAngles(
+                { ...orientation, mode: 'angles' },
+                field === 'yaw' ? clamped : orientation.yaw,
+                field === 'pitch' ? clamped : orientation.pitch,
+                'forward',
+            );
+            onUpdateProjection({ [key]: next });
+        };
+
+    const wallDistanceInput = handleProjectionField(
+        'wallDistance',
+        MIN_WALL_DISTANCE_M,
+        MAX_WALL_DISTANCE_M,
+    );
+    const projectionOffsetInput = handleProjectionField(
+        'projectionOffset',
+        MIN_PROJECTION_OFFSET_M,
+        MAX_PROJECTION_OFFSET_M,
+    );
+    const wallYawInput = handleOrientationAngleChange('wallOrientation', 'yaw');
+    const wallPitchInput = handleOrientationAngleChange('wallOrientation', 'pitch');
+    const sunYawInput = handleOrientationAngleChange('sunOrientation', 'yaw');
+    const sunPitchInput = handleOrientationAngleChange('sunOrientation', 'pitch');
+    const createNumberChangeHandler =
+        (handler: (value: number) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
+            handler(Number(event.target.value));
+        };
     const driverPresenceMap = React.useMemo(() => {
         const map = new Map<string, (typeof drivers)[number]>();
         drivers.forEach((driver) => {
@@ -279,6 +336,13 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
 
     const handlePlanPlayback = () => {
         computePlan();
+    };
+
+    const handleNavigateToSimulation = () => {
+        setIsPreviewOpen(false);
+        if (onNavigateSimulation) {
+            onNavigateSimulation();
+        }
     };
 
     const handlePreviewCommands = () => {
@@ -634,6 +698,104 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 )}
             </section>
 
+            <section className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner space-y-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <h2 className="text-lg font-semibold text-gray-100">Projection Setup</h2>
+                    {onNavigateSimulation && (
+                        <button
+                            type="button"
+                            onClick={handleNavigateToSimulation}
+                            aria-label="Open projection setup"
+                            className="inline-flex items-center justify-center rounded-md border border-cyan-400 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10"
+                        >
+                            <span aria-hidden="true">Simulation</span>
+                        </button>
+                    )}
+                </div>
+                <div className="rounded-md border border-gray-800/80 bg-gray-900/40 p-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div className="flex flex-col gap-3">
+                            <label className="flex flex-col gap-1 text-sm text-gray-300">
+                                <span>Wall Distance (m)</span>
+                                <input
+                                    type="number"
+                                    min={MIN_WALL_DISTANCE_M}
+                                    max={MAX_WALL_DISTANCE_M}
+                                    step={0.1}
+                                    value={projectionSettings.wallDistance}
+                                    onChange={createNumberChangeHandler(wallDistanceInput)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-gray-300">
+                                <span>Projection Height (m)</span>
+                                <input
+                                    type="number"
+                                    min={MIN_PROJECTION_OFFSET_M}
+                                    max={MAX_PROJECTION_OFFSET_M}
+                                    step={0.05}
+                                    value={projectionSettings.projectionOffset}
+                                    onChange={createNumberChangeHandler(projectionOffsetInput)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </label>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                            <label className="flex flex-col gap-1 text-sm text-gray-300">
+                                <span>Wall Yaw (°)</span>
+                                <input
+                                    type="number"
+                                    min={-90}
+                                    max={90}
+                                    step={0.1}
+                                    value={projectionSettings.wallOrientation.yaw}
+                                    onChange={createNumberChangeHandler(wallYawInput)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-gray-300">
+                                <span>Wall Pitch (°)</span>
+                                <input
+                                    type="number"
+                                    min={-90}
+                                    max={90}
+                                    step={0.1}
+                                    value={projectionSettings.wallOrientation.pitch}
+                                    onChange={createNumberChangeHandler(wallPitchInput)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </label>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                            <label className="flex flex-col gap-1 text-sm text-gray-300">
+                                <span>Light Yaw (°)</span>
+                                <input
+                                    type="number"
+                                    min={-90}
+                                    max={90}
+                                    step={0.1}
+                                    value={projectionSettings.sunOrientation.yaw}
+                                    onChange={createNumberChangeHandler(sunYawInput)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-sm text-gray-300">
+                                <span>Light Pitch (°)</span>
+                                <input
+                                    type="number"
+                                    min={-90}
+                                    max={90}
+                                    step={0.1}
+                                    value={projectionSettings.sunOrientation.pitch}
+                                    onChange={createNumberChangeHandler(sunPitchInput)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner">
                 <h2 className="mb-4 text-lg font-semibold text-gray-100">Array Overview</h2>
                 <MotorStatusOverview
@@ -676,6 +838,20 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 onClose={() => setIsPreviewOpen(false)}
                 title="Command Preview"
             >
+                {onNavigateSimulation && (
+                    <div className="mb-4 rounded-md border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm text-cyan-100">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <span>Need to adjust distances or angles? Jump to Simulation.</span>
+                            <button
+                                type="button"
+                                onClick={handleNavigateToSimulation}
+                                className="inline-flex items-center justify-center rounded-md border border-cyan-400 px-3 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
+                            >
+                                Open Simulation
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {plannerState.status === 'planning' ? (
                     <p className="text-sm text-gray-300">Generating playback plan…</p>
                 ) : !axisPlan || sortedAxisEntries.length === 0 ? (

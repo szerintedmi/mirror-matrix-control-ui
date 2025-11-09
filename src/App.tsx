@@ -193,8 +193,10 @@ const App: React.FC = () => {
                         gridSize={gridSize}
                         mirrorConfig={mirrorConfig}
                         projectionSettings={projectionSettings}
+                        onUpdateProjection={handleProjectionChange}
                         activePatternId={activePatternId}
                         onSelectPattern={handleSelectPattern}
+                        onNavigateSimulation={() => navigateTo('simulation')}
                     />
                 );
             case 'editor':
