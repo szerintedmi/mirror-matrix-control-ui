@@ -9,6 +9,7 @@ interface GeometryOverlaysProps {
     mirrors: MirrorReflectionSolution[];
     selectedMirrorId: string | null;
     onSelectMirror: (mirrorId: string) => void;
+    onClearSelection?: () => void;
     errorMirrorIds: Set<string>;
     projectionSettings: ProjectionSettings;
     gridSize: { rows: number; cols: number };
@@ -115,6 +116,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
     mirrors,
     selectedMirrorId,
     onSelectMirror,
+    onClearSelection,
     errorMirrorIds,
     projectionSettings,
     gridSize,
@@ -156,6 +158,15 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
         );
     };
 
+    const handleBackgroundClick = (event: React.MouseEvent<SVGSVGElement>) => {
+        if (
+            event.target === event.currentTarget ||
+            (event.target as HTMLElement).dataset.clearSelection === 'true'
+        ) {
+            onClearSelection?.();
+        }
+    };
+
     return (
         <section className="rounded-xl border border-gray-700/70 bg-gray-900/80 p-3 sm:p-4">
             <h3 className="text-base font-semibold text-gray-100">2D Overlays</h3>
@@ -171,9 +182,10 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                         ) : (
                             <svg
                                 viewBox={`0 0 ${VIEW_BOX} ${VIEW_BOX}`}
-                                className="h-44 w-full"
+                                className="h-44 w-full cursor-pointer"
                                 role="presentation"
                                 data-testid="array-plan"
+                                onClick={handleBackgroundClick}
                             >
                                 <rect
                                     x={1}
@@ -184,6 +196,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                                     stroke="#1e293b"
                                     strokeWidth={1}
                                     rx={4}
+                                    data-clear-selection="true"
                                 />
                                 {arrayPlan.map((point) => renderSvgPoint(point, 'array'))}
                             </svg>
@@ -204,9 +217,10 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                         ) : (
                             <svg
                                 viewBox={`0 0 ${VIEW_BOX} ${VIEW_BOX}`}
-                                className="h-44 w-full"
+                                className="h-44 w-full cursor-pointer"
                                 role="presentation"
                                 data-testid="wall-plan"
+                                onClick={handleBackgroundClick}
                             >
                                 <rect
                                     x={1}
@@ -217,6 +231,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                                     stroke="#1e293b"
                                     strokeWidth={1}
                                     rx={4}
+                                    data-clear-selection="true"
                                 />
                                 {wallHits.map((point) => renderSvgPoint(point, 'wall'))}
                             </svg>

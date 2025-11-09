@@ -110,7 +110,9 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
     const lightHitRef = useRef<Mesh | null>(null);
     const lightHitMaterialRef = useRef<StandardMaterial | null>(null);
     const rayMaterialRef = useRef<StandardMaterial | null>(null);
+    const raySelectedMaterialRef = useRef<StandardMaterial | null>(null);
     const incomingRayMaterialRef = useRef<StandardMaterial | null>(null);
+    const incomingRaySelectedMaterialRef = useRef<StandardMaterial | null>(null);
     const wallBasis = useMemo(
         () => deriveWallBasis(settings.wallOrientation, settings.worldUpOrientation),
         [settings.wallOrientation, settings.worldUpOrientation],
@@ -292,6 +294,8 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         const sunDistance = Math.max(wallDistance * 0.8, 2);
         const sunPosition = incomingDir.scale(sunDistance);
 
+        const selectionIsActive = Boolean(selectedMirrorId);
+
         const toWallLocal = (point: Vec3): Vector3 => {
             const worldPoint = toVector3(point);
             const delta = worldPoint.subtract(wallCenter);
@@ -346,12 +350,16 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
         disposeEntity(ellipseMaterialsRef.current?.selected);
         disposeEntity(ellipseMaterialsRef.current?.error);
         disposeEntity(rayMaterialRef.current);
+        disposeEntity(raySelectedMaterialRef.current);
         disposeEntity(incomingRayMaterialRef.current);
+        disposeEntity(incomingRaySelectedMaterialRef.current);
         disposeEntity(normalVectorMaterialRef.current);
         mirrorMaterialsRef.current = null;
         ellipseMaterialsRef.current = null;
         rayMaterialRef.current = null;
+        raySelectedMaterialRef.current = null;
         incomingRayMaterialRef.current = null;
+        incomingRaySelectedMaterialRef.current = null;
         normalVectorMaterialRef.current = null;
 
         const mirrorMaterials = {
@@ -428,8 +436,10 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             }
             const hasError = errorMirrorIds.has(mirror.mirrorId);
             const isInactive = !mirror.patternId;
+            const isSelected = selectedMirrorId === mirror.mirrorId;
+            const isDimmed = selectionIsActive && !isSelected;
             let material = mirrorMaterials.base;
-            if (selectedMirrorId === mirror.mirrorId) {
+            if (isSelected) {
                 material = mirrorMaterials.selected;
             } else if (hasError) {
                 material = mirrorMaterials.error;
@@ -437,7 +447,8 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
                 material = mirrorMaterials.inactive;
             }
             panel.material = material;
-            panel.visibility = isInactive ? 0.45 : 1;
+            const baseVisibility = isInactive ? 0.35 : 1;
+            panel.visibility = isDimmed ? (isInactive ? 0.2 : 0.55) : baseVisibility;
         });
 
         disposeEntity(normalLinesRef.current);
@@ -478,7 +489,9 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
 
         disposeEntity(rayRootRef.current);
         disposeEntity(rayMaterialRef.current);
+        disposeEntity(raySelectedMaterialRef.current);
         rayMaterialRef.current = null;
+        raySelectedMaterialRef.current = null;
         rayRootRef.current = null;
         if (debugOptions.showRays) {
             const mirrorsWithHits = solverResult.mirrors.filter((mirror) => mirror.wallHit);
@@ -492,17 +505,28 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
                 });
                 rayMaterial.disableLighting = true;
                 rayMaterial.backFaceCulling = false;
+                const raySelectedMaterial = createMaterial(scene, 'reflection-ray-selected', {
+                    diffuse: '#F97316',
+                    emissive: '#FDBA74',
+                    alpha: 0.5,
+                });
+                raySelectedMaterial.disableLighting = true;
+                raySelectedMaterial.backFaceCulling = false;
                 rayMaterialRef.current = rayMaterial;
+                raySelectedMaterialRef.current = raySelectedMaterial;
 
                 mirrorsWithHits.forEach((mirror) => {
+                    const isSelected = selectedMirrorId === mirror.mirrorId;
+                    const isDimmed = selectionIsActive && !isSelected;
                     const path = [toVector3(mirror.center), toVector3(mirror.wallHit as Vec3)];
                     const tube = MeshBuilder.CreateTube(
                         `reflection-ray-${mirror.mirrorId}`,
-                        { path, radius: 0.0025, tessellation: 10 },
+                        { path, radius: isSelected ? 0.0038 : 0.0022, tessellation: 10 },
                         scene,
                     );
                     tube.parent = rayRoot;
-                    tube.material = rayMaterial;
+                    tube.material = isSelected ? raySelectedMaterial : rayMaterial;
+                    tube.visibility = isDimmed ? 0.12 : isSelected ? 1 : 0.78;
                     tube.isPickable = false;
                 });
             }
@@ -510,8 +534,10 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
 
         disposeEntity(incomingRayRootRef.current);
         disposeEntity(incomingRayMaterialRef.current);
+        disposeEntity(incomingRaySelectedMaterialRef.current);
         incomingRayRootRef.current = null;
         incomingRayMaterialRef.current = null;
+        incomingRaySelectedMaterialRef.current = null;
         if (showIncomingPerMirror) {
             const incomingRoot = new TransformNode('incoming-rays-root', scene);
             incomingRayRootRef.current = incomingRoot;
@@ -522,13 +548,23 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
             });
             incomingMaterial.disableLighting = true;
             incomingMaterial.backFaceCulling = false;
+            const incomingSelectedMaterial = createMaterial(scene, 'incoming-ray-selected', {
+                diffuse: '#F97316',
+                emissive: '#FDBA74',
+                alpha: 0.45,
+            });
+            incomingSelectedMaterial.disableLighting = true;
+            incomingSelectedMaterial.backFaceCulling = false;
             incomingRayMaterialRef.current = incomingMaterial;
+            incomingRaySelectedMaterialRef.current = incomingSelectedMaterial;
 
             const normalizedIncoming = incomingDir.normalize();
             solverResult.mirrors.forEach((mirror) => {
                 if (activePatternId && mirror.patternId === null) {
                     return;
                 }
+                const isSelected = selectedMirrorId === mirror.mirrorId;
+                const isDimmed = selectionIsActive && !isSelected;
                 const end = toVector3(mirror.center);
                 const delta = end.subtract(sunPosition);
                 const parallelComponent = normalizedIncoming.scale(
@@ -539,11 +575,12 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
                 const path: Vector3[] = [sunPosition, startPoint, end];
                 const tube = MeshBuilder.CreateTube(
                     `incoming-ray-${mirror.mirrorId}`,
-                    { path, radius: 0.0015, tessellation: 8 },
+                    { path, radius: isSelected ? 0.0024 : 0.0012, tessellation: 8 },
                     scene,
                 );
                 tube.parent = incomingRoot;
-                tube.material = incomingMaterial;
+                tube.material = isSelected ? incomingSelectedMaterial : incomingMaterial;
+                tube.visibility = isDimmed ? 0.15 : isSelected ? 1 : 0.72;
                 tube.isPickable = false;
             });
         }
@@ -571,12 +608,14 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
                 const majorAngle = axisToLocalAngle(mirror.ellipse.majorAxis);
                 disc.rotationQuaternion = Quaternion.FromEulerAngles(0, 0, majorAngle);
                 const hasError = errorMirrorIds.has(mirror.mirrorId);
-                disc.material =
-                    selectedMirrorId === mirror.mirrorId
-                        ? ellipseMaterials.selected
-                        : hasError
-                          ? ellipseMaterials.error
-                          : ellipseMaterials.base;
+                const isSelected = selectedMirrorId === mirror.mirrorId;
+                const isDimmed = selectionIsActive && !isSelected;
+                disc.material = isSelected
+                    ? ellipseMaterials.selected
+                    : hasError
+                      ? ellipseMaterials.error
+                      : ellipseMaterials.base;
+                disc.visibility = isDimmed ? 0.3 : 1;
             });
             ellipseRootRef.current = ellipseRoot;
         }

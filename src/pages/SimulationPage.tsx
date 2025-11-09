@@ -353,7 +353,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
     activePatternId,
     onSelectPattern,
 }) => {
-    const [selectedMirrorId, setSelectedMirrorId] = useState<string | null>(null);
+    const [selectedMirrorId, setSelectedMirrorId] = useState<string | null | undefined>(undefined);
     const [visualizationToggles, setVisualizationToggles] = useState({
         showRays: true,
         showNormals: true,
@@ -421,16 +421,18 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
     }, [activePattern, gridSize]);
 
     const resolvedSelectedMirrorId = useMemo(() => {
-        if (
-            selectedMirrorId &&
-            effectiveResult.mirrors.some((mirror) => mirror.mirrorId === selectedMirrorId)
-        ) {
-            return selectedMirrorId;
+        if (selectedMirrorId === null) {
+            return null;
         }
         const fallback =
             effectiveResult.mirrors.find((mirror) => mirror.patternId) ??
             effectiveResult.mirrors[0] ??
             null;
+        if (typeof selectedMirrorId === 'string') {
+            return effectiveResult.mirrors.some((mirror) => mirror.mirrorId === selectedMirrorId)
+                ? selectedMirrorId
+                : (fallback?.mirrorId ?? null);
+        }
         return fallback?.mirrorId ?? null;
     }, [effectiveResult, selectedMirrorId]);
 
@@ -442,7 +444,11 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
         [effectiveResult, resolvedSelectedMirrorId],
     );
 
-    const handleSelectMirror = (mirrorId: string) => {
+    const handleToggleMirrorSelection = (mirrorId: string) => {
+        setSelectedMirrorId((prev) => (prev === mirrorId ? null : mirrorId));
+    };
+
+    const handleFocusMirror = (mirrorId: string) => {
         setSelectedMirrorId(mirrorId);
     };
 
@@ -743,7 +749,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
 
                         <GeometryStatusPanel
                             errors={solverResult.errors}
-                            onFocusMirror={handleSelectMirror}
+                            onFocusMirror={handleFocusMirror}
                         />
                     </div>
 
@@ -752,7 +758,8 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             <GeometryOverlays
                                 mirrors={effectiveResult.mirrors}
                                 selectedMirrorId={resolvedSelectedMirrorId}
-                                onSelectMirror={handleSelectMirror}
+                                onSelectMirror={handleToggleMirrorSelection}
+                                onClearSelection={() => setSelectedMirrorId(null)}
                                 errorMirrorIds={errorMirrorIds}
                                 projectionSettings={effectiveSettings}
                                 gridSize={gridSize}
