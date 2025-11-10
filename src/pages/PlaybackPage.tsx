@@ -600,45 +600,83 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             'playback',
             `Dispatching ${runnableAxes.length} MOVE command${runnableAxes.length === 1 ? '' : 's'}.`,
         );
-        for (let index = 0; index < runnableAxes.length; index += 1) {
-            if (cancelRequestedRef.current) {
-                setRunState({ status: 'cancelled', progress: index / runnableAxes.length });
-                cancelRequestedRef.current = false;
-                setCancelRequested(false);
-                logInfo('playback', 'Playback run cancelled.');
-                return;
-            }
-            const axis = runnableAxes[index];
-            try {
-                await moveMotor({
-                    mac: axis.motor.nodeMac,
-                    motorId: axis.motor.motorIndex,
-                    positionSteps: Math.round(axis.targetSteps),
-                });
-                setRunState({
-                    status: 'running',
-                    progress: (index + 1) / runnableAxes.length,
-                });
-            } catch (error) {
-                const normalized = normalizeCommandError(error);
-                setRunState({
-                    status: 'error',
-                    progress: (index + 1) / runnableAxes.length,
-                    error: normalized.message,
-                });
-                cancelRequestedRef.current = false;
-                setCancelRequested(false);
-                logError(
-                    'playback',
-                    `MOVE failed on ${formatTileLabel(axis.row, axis.col)} axis ${axis.axis.toUpperCase()}: ${normalized.message}`,
-                    {
-                        axis,
-                        code: normalized.code,
-                    },
-                );
-                return;
-            }
+        let completedCount = 0;
+        const totalCommands = runnableAxes.length;
+        const updateProgress = () => {
+            setRunState((prev) =>
+                prev.status === 'running'
+                    ? {
+                          status: 'running',
+                          progress: completedCount / totalCommands,
+                      }
+                    : prev,
+            );
+        };
+
+        const commandPromises = runnableAxes.map((axis) =>
+            moveMotor({
+                mac: axis.motor.nodeMac,
+                motorId: axis.motor.motorIndex,
+                positionSteps: Math.round(axis.targetSteps),
+            })
+                .then(() => {
+                    completedCount += 1;
+                    updateProgress();
+                    return null;
+                })
+                .catch((error) => {
+                    completedCount += 1;
+                    updateProgress();
+                    throw { axis, error };
+                }),
+        );
+
+        const results = await Promise.allSettled(commandPromises);
+
+        if (cancelRequestedRef.current) {
+            setRunState({
+                status: 'cancelled',
+                progress: completedCount / totalCommands,
+            });
+            cancelRequestedRef.current = false;
+            setCancelRequested(false);
+            logInfo('playback', 'Playback run cancelled (commands already dispatched).', {
+                completed: completedCount,
+                total: totalCommands,
+            });
+            return;
         }
+
+        const firstFailure = results.find(
+            (result): result is PromiseRejectedResult & { reason: { axis: (typeof runnableAxes)[number]; error: unknown } } =>
+                result.status === 'rejected',
+        );
+
+        if (firstFailure) {
+            const { axis, error } = firstFailure.reason || {};
+            const normalized = normalizeCommandError(error ?? firstFailure.reason);
+            setRunState({
+                status: 'error',
+                progress: completedCount / totalCommands,
+                error: normalized.message,
+            });
+            cancelRequestedRef.current = false;
+            setCancelRequested(false);
+            logError(
+                'playback',
+                axis
+                    ? `MOVE failed on ${formatTileLabel(axis.row, axis.col)} axis ${axis.axis.toUpperCase()}: ${normalized.message}`
+                    : `MOVE failed: ${normalized.message}`,
+                axis
+                    ? {
+                          axis,
+                          code: normalized.code,
+                      }
+                    : { code: normalized.code },
+            );
+            return;
+        }
+
         setRunState({ status: 'success', progress: 1 });
         cancelRequestedRef.current = false;
         setCancelRequested(false);
