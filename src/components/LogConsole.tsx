@@ -55,19 +55,20 @@ const LogConsole: React.FC<LogConsoleProps> = ({ scope, maxEntries = 50, title =
                     No log entries yet.
                 </div>
             ) : (
-                <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+                <div className="flex max-h-60 flex-col divide-y divide-gray-800 overflow-y-auto text-xs">
                     {scopedEntries.map((entry) => (
-                        <article
-                            key={entry.id}
-                            className="rounded-md border border-gray-800/60 bg-gray-900/40 p-3 text-sm"
-                        >
-                            <div className="flex items-center justify-between text-xs text-gray-500">
-                                <span>{formatTimestamp(entry.timestamp)}</span>
-                                <span className="uppercase tracking-wide">{entry.scope}</span>
-                            </div>
-                            <p className={`mt-1 font-medium ${severityClass(entry.severity)}`}>
+                        <article key={entry.id} className="flex items-center justify-between py-1">
+                            <span className="text-gray-500">
+                                {formatTimestamp(entry.timestamp)}
+                            </span>
+                            <span
+                                className={`flex-1 px-3 font-medium ${severityClass(entry.severity)}`}
+                            >
                                 {entry.message}
-                            </p>
+                            </span>
+                            <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                                {entry.scope}
+                            </span>
                         </article>
                     ))}
                 </div>

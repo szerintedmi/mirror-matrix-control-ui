@@ -50,9 +50,9 @@ const PatternThumbnail: React.FC<{
         paddingBottom: `${(1 / aspectRatio) * 100}%`,
         position: 'relative',
     };
-
     const rows = Math.max(1, Math.round(pattern.canvas.height / TILE_PLACEMENT_UNIT));
     const cols = Math.max(1, Math.round(pattern.canvas.width / TILE_PLACEMENT_UNIT));
+
     const footprints = React.useMemo(
         () =>
             pattern.tiles.map((tile) => ({
@@ -224,6 +224,8 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         progress: 0,
     });
     const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
+    const [isPatternPickerOpen, setIsPatternPickerOpen] = React.useState(false);
+    const [showAllPatterns, setShowAllPatterns] = React.useState(false);
     const [cancelRequested, setCancelRequested] = React.useState(false);
     const cancelRequestedRef = React.useRef(false);
 
@@ -233,6 +235,22 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         }
         return patterns.find((pattern) => pattern.id === activePatternId) ?? null;
     }, [activePatternId, patterns]);
+
+    const patternCapacity = gridSize.rows * gridSize.cols;
+    const compatiblePatterns = React.useMemo(
+        () => patterns.filter((pattern) => pattern.tiles.length <= patternCapacity),
+        [patternCapacity, patterns],
+    );
+    const incompatiblePatterns = React.useMemo(
+        () => patterns.filter((pattern) => pattern.tiles.length > patternCapacity),
+        [patternCapacity, patterns],
+    );
+    React.useEffect(() => {
+        if (showAllPatterns && incompatiblePatterns.length === 0) {
+            setShowAllPatterns(false);
+        }
+    }, [incompatiblePatterns.length, showAllPatterns]);
+    const visiblePatterns = showAllPatterns ? patterns : compatiblePatterns;
 
     const plannerInputsSignature = React.useMemo(
         () =>
@@ -499,6 +517,11 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         }
     };
 
+    const handlePatternSelect = (patternId: string) => {
+        onSelectPattern(patternId);
+        setIsPatternPickerOpen(false);
+    };
+
     const handlePreviewCommands = () => {
         if (isPlanning || isRunning) {
             return;
@@ -648,8 +671,11 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         }
 
         const firstFailure = results.find(
-            (result): result is PromiseRejectedResult & { reason: { axis: (typeof runnableAxes)[number]; error: unknown } } =>
-                result.status === 'rejected',
+            (
+                result,
+            ): result is PromiseRejectedResult & {
+                reason: { axis: (typeof runnableAxes)[number]; error: unknown };
+            } => result.status === 'rejected',
         );
 
         if (firstFailure) {
@@ -708,93 +734,122 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     return (
         <div className="flex flex-col gap-6">
             <section className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex-1">
-                        <h2 className="text-lg font-semibold text-gray-100">Playback Controls</h2>
-                        <p className="text-sm text-gray-400">
-                            {activePattern
-                                ? `Active pattern: ${activePattern.name}`
-                                : 'Select a pattern in the library to begin playback.'}
-                        </p>
-                        {blockingIssues.length > 0 ? (
-                            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-300">
-                                {blockingIssues.map((issue) => (
-                                    <li key={issue}>{issue}</li>
-                                ))}
-                            </ul>
-                        ) : displayAxisPlan ? (
-                            <p
-                                className={`mt-2 text-xs font-medium uppercase tracking-wide ${
-                                    isPlanStale ? 'text-emerald-200 opacity-60' : 'text-emerald-300'
-                                }`}
-                            >
-                                {displayAxisPlan.axes.length} axis command
-                                {displayAxisPlan.axes.length === 1 ? '' : 's'} ready
-                                {isPlanRefreshing && (
-                                    <span className="ml-2 text-[11px] font-normal uppercase tracking-wide text-gray-400">
-                                        Updating…
-                                    </span>
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex flex-1 items-start gap-4 rounded-lg border border-gray-800 bg-gray-900/60 p-3">
+                            {activePattern ? (
+                                <div className="flex flex-col items-start gap-2">
+                                    <div className="w-56">
+                                        <PatternThumbnail
+                                            pattern={activePattern}
+                                            isActive
+                                            onActivate={() => setIsPatternPickerOpen(true)}
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPatternPickerOpen(true)}
+                                        className="w-56 rounded-md border border-cyan-400 px-3 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10"
+                                    >
+                                        Change
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPatternPickerOpen(true)}
+                                    className="rounded-md border border-cyan-400 px-3 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10"
+                                >
+                                    Select pattern
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex flex-col gap-2 lg:items-end">
+                            <div className="flex flex-wrap gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handlePreviewCommands}
+                                    disabled={previewDisabled}
+                                    className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                                        previewDisabled
+                                            ? 'cursor-not-allowed bg-gray-700 text-gray-400'
+                                            : 'bg-indigo-500 text-gray-50 hover:bg-indigo-400'
+                                    }`}
+                                >
+                                    {isPlanning ? 'Calculating…' : 'Preview Commands'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        void handlePlaybackStart();
+                                    }}
+                                    disabled={playDisabled}
+                                    className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                                        playDisabled
+                                            ? 'cursor-not-allowed bg-gray-800 text-gray-500'
+                                            : 'bg-sky-500 text-gray-900 hover:bg-sky-400'
+                                    }`}
+                                >
+                                    {isRunning ? 'Playing…' : 'Play'}
+                                </button>
+                                {isRunning && (
+                                    <button
+                                        type="button"
+                                        onClick={handleCancelRun}
+                                        className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500"
+                                    >
+                                        Cancel
+                                    </button>
                                 )}
-                            </p>
-                        ) : null}
+                            </div>
+                            <div className="text-xs text-gray-400 lg:text-right">
+                                {displayAxisPlan && blockingIssues.length === 0 && (
+                                    <p
+                                        className={
+                                            isPlanStale
+                                                ? 'text-emerald-200 opacity-60'
+                                                : 'text-emerald-300'
+                                        }
+                                    >
+                                        {displayAxisPlan.axes.length} axis command
+                                        {displayAxisPlan.axes.length === 1 ? '' : 's'} ready
+                                        {isPlanRefreshing && (
+                                            <span className="ml-2 text-[11px] font-normal text-gray-400">
+                                                Updating…
+                                            </span>
+                                        )}
+                                    </p>
+                                )}
+                                {runState.status !== 'idle' && (
+                                    <p
+                                        className={
+                                            runState.status === 'error'
+                                                ? 'text-red-300'
+                                                : runState.status === 'success'
+                                                  ? 'text-emerald-300'
+                                                  : 'text-gray-400'
+                                        }
+                                    >
+                                        {runState.status === 'running'
+                                            ? cancelRequested
+                                                ? 'Canceling…'
+                                                : `Dispatching commands (${Math.round(runState.progress * 100)}%)…`
+                                            : runState.status === 'success'
+                                              ? 'Playback commands completed.'
+                                              : runState.status === 'cancelled'
+                                                ? 'Playback run cancelled.'
+                                                : (runState.error ?? 'Playback failed.')}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                        <button
-                            type="button"
-                            onClick={handlePreviewCommands}
-                            disabled={previewDisabled}
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                                previewDisabled
-                                    ? 'cursor-not-allowed bg-gray-700 text-gray-400'
-                                    : 'bg-indigo-500 text-gray-50 hover:bg-indigo-400'
-                            }`}
-                        >
-                            {isPlanning ? 'Calculating…' : 'Preview Commands'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                void handlePlaybackStart();
-                            }}
-                            disabled={playDisabled}
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                                playDisabled
-                                    ? 'cursor-not-allowed bg-gray-800 text-gray-500'
-                                    : 'bg-sky-500 text-gray-900 hover:bg-sky-400'
-                            }`}
-                        >
-                            {isRunning ? 'Playing…' : 'Play'}
-                        </button>
-                        {isRunning && (
-                            <button
-                                type="button"
-                                onClick={handleCancelRun}
-                                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500"
-                            >
-                                Cancel
-                            </button>
-                        )}
-                    </div>
-                    {runState.status !== 'idle' && (
-                        <p
-                            className={`text-sm ${
-                                runState.status === 'error'
-                                    ? 'text-red-300'
-                                    : runState.status === 'success'
-                                      ? 'text-emerald-300'
-                                      : 'text-gray-400'
-                            }`}
-                        >
-                            {runState.status === 'running'
-                                ? cancelRequested
-                                    ? 'Canceling…'
-                                    : `Dispatching commands (${Math.round(runState.progress * 100)}%)…`
-                                : runState.status === 'success'
-                                  ? 'Playback commands completed.'
-                                  : runState.status === 'cancelled'
-                                    ? 'Playback run cancelled.'
-                                    : (runState.error ?? 'Playback failed.')}
-                        </p>
+                    {blockingIssues.length > 0 && (
+                        <ul className="list-disc space-y-1 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                            {blockingIssues.map((issue) => (
+                                <li key={issue}>{issue}</li>
+                            ))}
+                        </ul>
                     )}
                 </div>
                 <div
@@ -1029,32 +1084,72 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 />
             </section>
 
-            <section className="rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10">
-                <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-gray-100">Playback Queue</h2>
-                    <span className="text-xs uppercase tracking-wide text-gray-500">
-                        {patterns.length} pattern{patterns.length === 1 ? '' : 's'}
-                    </span>
-                </div>
-                {patterns.length === 0 ? (
-                    <div className="rounded-md border border-gray-700 bg-gray-900/60 p-6 text-center text-sm text-gray-400">
-                        No patterns available for playback yet.
-                    </div>
-                ) : (
-                    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
-                        {patterns.map((pattern) => (
-                            <PatternThumbnail
-                                key={pattern.id}
-                                pattern={pattern}
-                                isActive={pattern.id === activePatternId}
-                                onActivate={(patternId) => onSelectPattern(patternId)}
-                            />
-                        ))}
-                    </div>
-                )}
-            </section>
-
             <LogConsole scope="playback" title="Playback Log" />
+
+            <Modal
+                open={isPatternPickerOpen}
+                onClose={() => setIsPatternPickerOpen(false)}
+                title="Select Pattern"
+            >
+                {patterns.length === 0 ? (
+                    <p className="text-sm text-gray-300">
+                        Create a pattern in the library to enable playback.
+                    </p>
+                ) : (
+                    <>
+                        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm text-gray-300">
+                                Showing {visiblePatterns.length} of {patterns.length} pattern
+                                {patterns.length === 1 ? '' : 's'}
+                                {!showAllPatterns && incompatiblePatterns.length > 0
+                                    ? ' (filtered to fit the current grid)'
+                                    : ''}
+                            </p>
+                            {incompatiblePatterns.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllPatterns((prev) => !prev)}
+                                    className="inline-flex items-center justify-center rounded-md border border-gray-600 px-3 py-1 text-xs font-semibold text-gray-200 hover:bg-gray-800/60"
+                                >
+                                    {showAllPatterns
+                                        ? 'Hide over-capacity patterns'
+                                        : `Show ${incompatiblePatterns.length} over-capacity pattern${incompatiblePatterns.length === 1 ? '' : 's'}`}
+                                </button>
+                            )}
+                        </div>
+                        {visiblePatterns.length === 0 ? (
+                            <div className="rounded-md border border-gray-700 bg-gray-900/70 p-4 text-sm text-gray-400">
+                                No patterns fit this grid yet. Expand the list to select from all
+                                patterns.
+                            </div>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {visiblePatterns.map((pattern) => {
+                                    const needsMoreMirrors = pattern.tiles.length > patternCapacity;
+                                    const deficit = pattern.tiles.length - patternCapacity;
+                                    return (
+                                        <div key={pattern.id} className="space-y-1">
+                                            <PatternThumbnail
+                                                pattern={pattern}
+                                                isActive={pattern.id === activePatternId}
+                                                onActivate={(patternId) =>
+                                                    handlePatternSelect(patternId)
+                                                }
+                                            />
+                                            {needsMoreMirrors && (
+                                                <p className="text-xs font-medium text-amber-300">
+                                                    Needs {deficit} more mirror
+                                                    {deficit === 1 ? '' : 's'}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </>
+                )}
+            </Modal>
 
             <Modal
                 open={isPreviewOpen}
