@@ -101,18 +101,38 @@ const translatePatternOffset = (
     return addVec(addVec(origin, offsetU), offsetV);
 };
 
+const derivePatternCenterOffset = (
+    gridSize: { rows: number; cols: number },
+    pattern: Pattern | null,
+): { cols: number; rows: number } => {
+    if (pattern && pattern.tiles.length > 0) {
+        const spanCols = Math.max(pattern.canvas.width / TILE_PLACEMENT_UNIT, 1);
+        const spanRows = Math.max(pattern.canvas.height / TILE_PLACEMENT_UNIT, 1);
+        return {
+            cols: (spanCols - 1) / 2,
+            rows: (spanRows - 1) / 2,
+        };
+    }
+    return {
+        cols: (gridSize.cols - 1) / 2,
+        rows: (gridSize.rows - 1) / 2,
+    };
+};
+
 const buildPatternTargets = ({
     pattern,
     uWall,
     vWall,
     patternOrigin,
     spacing,
+    centerOffset,
 }: {
     pattern: Pattern | null;
     uWall: Vec3;
     vWall: Vec3;
     patternOrigin: Vec3;
     spacing: { x: number; y: number };
+    centerOffset: { cols: number; rows: number };
 }): PatternTarget[] => {
     if (!pattern || pattern.tiles.length === 0) {
         return [];
@@ -125,8 +145,10 @@ const buildPatternTargets = ({
         const normalizedY = clamp01(
             pattern.canvas.height > 0 ? tile.center.y / pattern.canvas.height : 0.5,
         );
-        const offsetCols = tile.center.x / TILE_PLACEMENT_UNIT - 0.5;
-        const offsetRows = tile.center.y / TILE_PLACEMENT_UNIT - 0.5;
+        const columnIndex = tile.center.x / TILE_PLACEMENT_UNIT - 0.5;
+        const rowIndex = tile.center.y / TILE_PLACEMENT_UNIT - 0.5;
+        const offsetCols = columnIndex - centerOffset.cols;
+        const offsetRows = rowIndex - centerOffset.rows;
         const targetPoint = translatePatternOffset(
             patternOrigin,
             uWall,
@@ -149,19 +171,23 @@ const buildAlignedFallbackTargets = ({
     uWall,
     vWall,
     spacing,
+    centerOffset,
 }: {
     mirrors: MirrorMeta[];
     patternOrigin: Vec3;
     uWall: Vec3;
     vWall: Vec3;
     spacing: { x: number; y: number };
+    centerOffset: { cols: number; rows: number };
 }): PatternTarget[] =>
     mirrors.map((mirror) => {
+        const offsetCols = mirror.col - centerOffset.cols;
+        const offsetRows = mirror.row - centerOffset.rows;
         const targetPoint = translatePatternOffset(
             patternOrigin,
             uWall,
             vWall,
-            { cols: mirror.col, rows: mirror.row },
+            { cols: offsetCols, rows: offsetRows },
             spacing,
         );
         return {
@@ -475,14 +501,19 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
     const wallPoint =
         params.wallAnchor ?? addVec(arrayOrigin, scaleVec(wallNormal, projection.wallDistance));
 
-    const mirror00 = mirrorMeta[0];
-    const projectedOrigin = projectPointOntoPlane(mirror00.center, wallPoint, wallNormal);
-    const patternOrigin = addVec(projectedOrigin, scaleVec(vWall, projection.projectionOffset));
-
     const spacing = {
         x: projection.pixelSpacing.x,
         y: projection.pixelSpacing.y,
     };
+    const patternCenterOffset = derivePatternCenterOffset(gridSize, pattern);
+    const arrayCenterPoint: Vec3 = {
+        x: arrayOrigin.x + ((gridSize.cols - 1) * MIRROR_PITCH_M) / 2,
+        y: arrayOrigin.y - ((gridSize.rows - 1) * MIRROR_PITCH_M) / 2,
+        z: arrayOrigin.z,
+    };
+    const projectedCenter = projectPointOntoPlane(arrayCenterPoint, wallPoint, wallNormal);
+    const patternOrigin = addVec(projectedCenter, scaleVec(vWall, projection.projectionOffset));
+
     let patternTargets: PatternTarget[];
     if (!pattern || pattern.tiles.length === 0) {
         patternTargets = buildAlignedFallbackTargets({
@@ -491,6 +522,7 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
             uWall,
             vWall,
             spacing,
+            centerOffset: patternCenterOffset,
         });
     } else {
         patternTargets = buildPatternTargets({
@@ -499,6 +531,7 @@ export const solveReflection = (params: ReflectionSolverParams): ReflectionSolve
             vWall,
             patternOrigin,
             spacing,
+            centerOffset: patternCenterOffset,
         });
     }
 
