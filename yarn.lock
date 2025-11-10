@@ -256,10 +256,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babylonjs/core@npm:8.34.1":
-  version: 8.34.1
-  resolution: "@babylonjs/core@npm:8.34.1"
-  checksum: 10c0/64cb244375646623c2ec915bddb3362386a9abd0bc466a2f0d0ff5dfc51de52c473ec2ecfa262ff0e17d5173427f3ec6d7fec87d3efcef722c4cea156a76bedb
+"@babylonjs/core@npm:8.36.1":
+  version: 8.36.1
+  resolution: "@babylonjs/core@npm:8.36.1"
+  checksum: 10c0/cb16aa20a0817f26850c63e8cfee61912e36df9dde8a037bf7d96d4b579f237f9f19bc8502412aae66d24334eb381e29b198a284ad4a0b7d238ea452e34464fd
   languageName: node
   linkType: hard
 
@@ -4118,7 +4118,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "mirror-array-control-and-config@workspace:."
   dependencies:
-    "@babylonjs/core": "npm:8.34.1"
+    "@babylonjs/core": "npm:8.36.1"
     "@playwright/test": "npm:1.56.1"
     "@types/eslint-plugin-jsx-a11y": "npm:6"
     "@types/jsdom": "npm:27"
