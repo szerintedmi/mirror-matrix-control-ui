@@ -44,16 +44,31 @@ interface SelectedMotorState {
 const SelectedMotorPanel: React.FC<{
     selection: SelectedMotorState;
     telemetry?: MotorTelemetry;
+    indicator?: AxisDotView | null;
     onClear: () => void;
-}> = ({ selection, telemetry, onClear }) => {
+}> = ({ selection, telemetry, indicator, onClear }) => {
     const controller = useMotorController(selection.motor, telemetry);
 
     return (
         <div className="mt-4 rounded-lg border border-gray-700 bg-gray-900/70 p-4">
             <div className="flex items-center justify-between text-sm text-gray-300">
-                <span>
-                    {selection.tileTitle} • Axis {selection.axis.toUpperCase()} •{' '}
-                    {selection.motor.nodeMac.slice(-5)}:{selection.motor.motorIndex}
+                <span className="flex items-center gap-2">
+                    {indicator && (
+                        <span
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-900/60"
+                            title={indicator.title}
+                        >
+                            <span
+                                className={`h-3 w-3 rounded-full ${indicator.colorClass} ${indicator.animate ? 'animate-pulse' : ''} ${indicator.extraClass ?? ''}`}
+                                aria-hidden
+                            />
+                            <span className="sr-only">{indicator.title}</span>
+                        </span>
+                    )}
+                    <span>
+                        {selection.tileTitle} • Axis {selection.axis.toUpperCase()} •{' '}
+                        {selection.motor.nodeMac.slice(-5)}:{selection.motor.motorIndex}
+                    </span>
                 </span>
                 <button
                     type="button"
@@ -90,6 +105,29 @@ const getPresenceColor = (
         return 'bg-cyan-400';
     }
     return isAssigned ? 'bg-emerald-400' : 'bg-slate-500';
+};
+
+const HOMING_CRITICAL_RING = 'shadow-[0_0_0_2px_rgba(248,113,113,0.9)]';
+const HOMING_WARNING_RING = 'shadow-[0_0_0_2px_rgba(251,191,36,0.9)]';
+
+const resolveHomingRingClass = (telemetry?: MotorTelemetry): string => {
+    if (!telemetry) {
+        return '';
+    }
+    if (telemetry.homed === false) {
+        return HOMING_CRITICAL_RING;
+    }
+    const steps = telemetry.stepsSinceHome;
+    if (steps === undefined) {
+        return '';
+    }
+    if (steps >= STEPS_SINCE_HOME_CRITICAL) {
+        return HOMING_CRITICAL_RING;
+    }
+    if (steps >= STEPS_SINCE_HOME_WARNING) {
+        return HOMING_WARNING_RING;
+    }
+    return '';
 };
 
 const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
@@ -176,20 +214,17 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                             : presence === 'stale'
                               ? 'Delayed heartbeat'
                               : 'Offline';
-                    const label = `Tile ${row + 1},${col + 1} axis ${axis.toUpperCase()}: MAC ${macLabel} • Motor ${motor.motorIndex} • ${labelPresence}`;
-                    const stepsClass = (() => {
-                        const steps = status?.telemetry?.stepsSinceHome;
-                        if (steps === undefined) {
-                            return '';
-                        }
-                        if (steps >= STEPS_SINCE_HOME_CRITICAL) {
-                            return 'shadow-[0_0_0_2px_rgba(248,113,113,0.9)]';
-                        }
-                        if (steps >= STEPS_SINCE_HOME_WARNING) {
-                            return 'shadow-[0_0_0_2px_rgba(251,191,36,0.9)]';
-                        }
-                        return '';
-                    })();
+                    const statusNotes: string[] = [
+                        `Tile ${row + 1},${col + 1} axis ${axis.toUpperCase()}`,
+                        `MAC ${macLabel}`,
+                        `Motor ${motor.motorIndex}`,
+                        labelPresence,
+                    ];
+                    if (status?.telemetry?.homed === false) {
+                        statusNotes.push('Not homed');
+                    }
+                    const label = statusNotes.join(' • ');
+                    const homingRingClass = resolveHomingRingClass(status?.telemetry);
                     return {
                         key: `${key}-${axis}`,
                         axis,
@@ -197,7 +232,7 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                         animate: presence === 'ready' && moving,
                         title: label,
                         motor,
-                        extraClass: stepsClass,
+                        extraClass: homingRingClass,
                     };
                 });
 
@@ -210,6 +245,19 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
         }
         return views;
     }, [cols, mirrorConfig, motorStatus, rows]);
+
+    const selectedDotIndicator = useMemo<AxisDotView | null>(() => {
+        if (!selectedMotor) {
+            return null;
+        }
+        for (const tile of tiles) {
+            const match = tile.dots.find((dot) => dot.key === selectedMotor.key);
+            if (match) {
+                return match;
+            }
+        }
+        return null;
+    }, [selectedMotor, tiles]);
 
     if (tiles.length === 0) {
         return null;
@@ -283,16 +331,16 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                                 const isSelected = selectedMotor?.key === dot.key;
                                 const baseClasses = `h-2.5 w-2.5 rounded-full ${dot.colorClass} ${dot.animate ? 'animate-pulse' : ''}`;
                                 const interactiveClasses = dot.motor
-                                    ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 hover:scale-110'
+                                    ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 focus-visible:outline-offset-2 hover:scale-110'
                                     : 'cursor-not-allowed opacity-70';
-                                const ringClass = isSelected
-                                    ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-cyan-400'
+                                const selectionClasses = isSelected
+                                    ? 'outline outline-2 outline-cyan-300 outline-offset-2'
                                     : '';
                                 return (
                                     <button
                                         key={dot.key}
                                         type="button"
-                                        className={`${baseClasses} ${interactiveClasses} ${ringClass} ${dot.extraClass ?? ''}`}
+                                        className={`${baseClasses} ${interactiveClasses} ${selectionClasses} ${dot.extraClass ?? ''}`}
                                         title={dot.title}
                                         data-testid="motor-overview-dot"
                                         onClick={() => {
@@ -329,6 +377,7 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                             `${selectedMotor.motor.nodeMac}-${selectedMotor.motor.motorIndex}`,
                         )?.telemetry
                     }
+                    indicator={selectedDotIndicator}
                     onClear={() => setSelectedMotor(null)}
                 />
             )}
