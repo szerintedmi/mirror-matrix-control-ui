@@ -5,6 +5,7 @@ import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import { useMotorController } from '../hooks/useMotorController';
 import { normalizeCommandError } from '../utils/commandErrors';
+import { convertStepsToDegrees } from '../utils/motorSteps';
 
 import MotorActionButtons from './MotorActionButtons';
 
@@ -48,37 +49,69 @@ const SelectedMotorPanel: React.FC<{
     onClear: () => void;
 }> = ({ selection, telemetry, indicator, onClear }) => {
     const controller = useMotorController(selection.motor, telemetry);
+    const positionSteps = typeof telemetry?.position === 'number' ? telemetry.position : null;
+    const inferredAngleDeg =
+        positionSteps === null ? null : convertStepsToDegrees(positionSteps);
+    const axisLabel = selection.axis === 'x' ? 'Yaw' : 'Pitch';
 
     return (
         <div className="mt-4 rounded-lg border border-gray-700 bg-gray-900/70 p-4">
-            <div className="flex items-center justify-between text-sm text-gray-300">
-                <span className="flex items-center gap-2">
-                    {indicator && (
-                        <span
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-900/60"
-                            title={indicator.title}
-                        >
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between text-sm text-gray-300">
+                    <span className="flex items-center gap-2">
+                        {indicator && (
                             <span
-                                className={`h-3 w-3 rounded-full ${indicator.colorClass} ${indicator.animate ? 'animate-pulse' : ''} ${indicator.extraClass ?? ''}`}
-                                aria-hidden
-                            />
-                            <span className="sr-only">{indicator.title}</span>
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-900/60"
+                                title={indicator.title}
+                            >
+                                <span
+                                    className={`h-3 w-3 rounded-full ${indicator.colorClass} ${indicator.animate ? 'animate-pulse' : ''} ${indicator.extraClass ?? ''}`}
+                                    aria-hidden
+                                />
+                                <span className="sr-only">{indicator.title}</span>
+                            </span>
+                        )}
+                        <span>
+                            {selection.tileTitle} • Axis {selection.axis.toUpperCase()} •{' '}
+                            {selection.motor.nodeMac.slice(-5)}:{selection.motor.motorIndex}
                         </span>
-                    )}
-                    <span>
-                        {selection.tileTitle} • Axis {selection.axis.toUpperCase()} •{' '}
-                        {selection.motor.nodeMac.slice(-5)}:{selection.motor.motorIndex}
                     </span>
-                </span>
-                <button
-                    type="button"
-                    onClick={onClear}
-                    className="text-xs text-gray-400 transition-colors hover:text-gray-200"
-                >
-                    Clear
-                </button>
-            </div>
-            <div className="mt-3">
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        className="text-xs text-gray-400 transition-colors hover:text-gray-200"
+                    >
+                        Clear
+                    </button>
+                </div>
+                <div className="rounded-md border border-gray-800/80 bg-gray-950/40 p-3 text-sm text-gray-300">
+                    {positionSteps !== null ? (
+                        <div className="grid gap-3 text-gray-200 sm:grid-cols-2">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Current Position
+                                </p>
+                                <p className="font-mono text-lg text-cyan-200">
+                                    {positionSteps.toLocaleString()} steps
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Inferred {axisLabel}
+                                </p>
+                                <p className="font-mono text-lg text-cyan-200">
+                                    {inferredAngleDeg !== null
+                                        ? `${inferredAngleDeg.toFixed(2)} °`
+                                        : '—'}
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-gray-500">
+                            Live telemetry unavailable — position data not reported yet.
+                        </p>
+                    )}
+                </div>
                 <MotorActionButtons
                     motor={selection.motor}
                     telemetry={telemetry}

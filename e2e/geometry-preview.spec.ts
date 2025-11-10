@@ -51,7 +51,7 @@ test.describe('Geometry preview', () => {
         await expect(incomingToggle).toBeChecked();
         await incomingToggle.uncheck();
 
-        await expect(page.getByText('Debug Metrics')).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Selected mirror/i })).toBeVisible();
     });
 
     test('persists projection controls across reloads', async ({ page }) => {

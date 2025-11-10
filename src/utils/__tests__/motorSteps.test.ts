@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { convertAngleToSteps } from '../motorSteps';
+import { convertAngleToSteps, convertStepsToDegrees } from '../motorSteps';
 
 describe('convertAngleToSteps', () => {
     it('converts angles to steps using the default scale', () => {
@@ -21,5 +21,15 @@ describe('convertAngleToSteps', () => {
         const result = convertAngleToSteps(10);
         expect(result.targetSteps).toBe(1_200);
         expect(result.clamped).toBe(true);
+    });
+});
+
+describe('convertStepsToDegrees', () => {
+    it('returns the angle using default scale', () => {
+        expect(convertStepsToDegrees(380)).toBe(2);
+    });
+
+    it('supports custom scale and offsets', () => {
+        expect(convertStepsToDegrees(110, { stepsPerDegree: 10, zeroOffsetSteps: 10 })).toBe(10);
     });
 });

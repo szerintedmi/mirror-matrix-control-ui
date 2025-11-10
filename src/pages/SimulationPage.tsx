@@ -353,12 +353,12 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
     activePatternId,
     onSelectPattern,
 }) => {
-    const [selectedMirrorId, setSelectedMirrorId] = useState<string | null | undefined>(undefined);
+    const [selectedMirrorId, setSelectedMirrorId] = useState<string | null>(null);
     const [visualizationToggles, setVisualizationToggles] = useState({
         showRays: true,
         showNormals: true,
         showEllipses: true,
-        showIncomingRays: false,
+        showIncomingRays: true,
     });
 
     const activePattern = useMemo(
@@ -421,19 +421,13 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
     }, [activePattern, gridSize]);
 
     const resolvedSelectedMirrorId = useMemo(() => {
-        if (selectedMirrorId === null) {
+        if (!selectedMirrorId) {
             return null;
         }
-        const fallback =
-            effectiveResult.mirrors.find((mirror) => mirror.patternId) ??
-            effectiveResult.mirrors[0] ??
-            null;
-        if (typeof selectedMirrorId === 'string') {
-            return effectiveResult.mirrors.some((mirror) => mirror.mirrorId === selectedMirrorId)
-                ? selectedMirrorId
-                : (fallback?.mirrorId ?? null);
-        }
-        return fallback?.mirrorId ?? null;
+        const exists = effectiveResult.mirrors.some(
+            (mirror) => mirror.mirrorId === selectedMirrorId,
+        );
+        return exists ? selectedMirrorId : null;
     }, [effectiveResult, selectedMirrorId]);
 
     const selectedMirror = useMemo<MirrorReflectionSolution | null>(

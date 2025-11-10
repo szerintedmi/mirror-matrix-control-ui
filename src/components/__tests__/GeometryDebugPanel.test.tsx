@@ -38,12 +38,14 @@ describe('GeometryDebugPanel', () => {
             root.render(<GeometryDebugPanel mirror={createMirror()} isStale={false} />);
         });
 
+        expect(container.textContent).toContain('Selected mirror');
         expect(container.textContent).toContain('Yaw');
         expect(container.textContent).toContain('12.35°');
         expect(container.textContent).toContain('Pitch');
         expect(container.textContent).toContain('-4.57°');
         expect(container.textContent).toContain('0.250');
         expect(container.textContent).toContain('0.180 m');
+        expect(container.textContent).toContain('[0,0]');
 
         act(() => {
             root.unmount();

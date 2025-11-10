@@ -17,6 +17,11 @@ export interface AngleToStepsResult {
     clamped: boolean;
 }
 
+export interface StepsToDegreesOptions {
+    stepsPerDegree?: number;
+    zeroOffsetSteps?: number;
+}
+
 export const convertAngleToSteps = (
     degrees: number,
     {
@@ -33,4 +38,11 @@ export const convertAngleToSteps = (
         targetSteps,
         clamped: targetSteps !== requestedSteps,
     };
+};
+
+export const convertStepsToDegrees = (
+    steps: number,
+    { stepsPerDegree = STEPS_PER_DEGREE, zeroOffsetSteps = 0 }: StepsToDegreesOptions = {},
+): number => {
+    return (steps - zeroOffsetSteps) / stepsPerDegree;
 };

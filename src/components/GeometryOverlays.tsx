@@ -141,7 +141,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                 <circle
                     cx={point.x}
                     cy={point.y}
-                    r={isSelected ? 3 : 2.3}
+                    r={isSelected ? 3.8 : 2.8}
                     fill={fill}
                     fillOpacity={fillOpacity}
                     stroke={baseColor}

@@ -110,6 +110,8 @@ const NodeMotorCard: React.FC<NodeMotorCardProps> = ({
                     controller={controller}
                     dataTestIdPrefix={dataTestId}
                     compact
+                    showStepsBadge={false}
+                    showHome={false}
                 />
             </div>
         </div>

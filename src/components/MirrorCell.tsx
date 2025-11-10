@@ -198,34 +198,41 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
 
     return (
         <div className="space-y-2">
-            <div
-                data-testid={dataTestId}
-                draggable={!!motor}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                aria-disabled={!motor}
-                className={`flex h-10 items-center justify-center rounded transition-colors duration-200 border ${borderClasses} ${baseBg} ${draggableClasses}`}
-                title={slotTitle}
-            >
-                {motor ? (
-                    <span className={`font-mono text-sm ${motorTextColor}`}>
-                        {motor.nodeMac.slice(-5)}:{motor.motorIndex}
-                    </span>
-                ) : (
-                    <span className="font-mono text-sm text-gray-500">--</span>
-                )}
+            <div className="flex items-center gap-2">
+                <span className="w-5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    {axis.toUpperCase()}
+                </span>
+                <div
+                    data-testid={dataTestId}
+                    draggable={!!motor}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    aria-disabled={!motor}
+                    className={`flex flex-1 h-10 items-center justify-center rounded transition-colors duration-200 border ${borderClasses} ${baseBg} ${draggableClasses}`}
+                    title={slotTitle}
+                >
+                    {motor ? (
+                        <span className={`font-mono text-sm ${motorTextColor}`}>
+                            {motor.nodeMac.slice(-5)}:{motor.motorIndex}
+                        </span>
+                    ) : (
+                        <span className="font-mono text-sm text-gray-500">--</span>
+                    )}
+                </div>
             </div>
             {motor ? (
-                <MotorActionButtons
-                    motor={motor}
-                    telemetry={telemetry}
-                    controller={controller}
-                    layout="vertical"
-                    dataTestIdPrefix={`grid-${position.row}-${position.col}-${axis}`}
-                    compact
-                />
+                <div className="pl-7">
+                    <MotorActionButtons
+                        motor={motor}
+                        telemetry={telemetry}
+                        controller={controller}
+                        layout="horizontal"
+                        dataTestIdPrefix={`grid-${position.row}-${position.col}-${axis}`}
+                        compact
+                    />
+                </div>
             ) : null}
         </div>
     );
@@ -295,7 +302,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
             role="button"
             aria-pressed={isSelected}
             tabIndex={0}
-            className={`relative aspect-square flex flex-col rounded-md p-1.5 gap-2 transition-all duration-200 outline-none ${ringClasses} ${backgroundClass} ${borderVisualClass} ${nodeHighlightClass}`}
+            className={`relative flex flex-col rounded-md p-1.5 gap-1 transition-all duration-200 outline-none ${ringClasses} ${backgroundClass} ${borderVisualClass} ${nodeHighlightClass}`}
         >
             <div className="text-center text-xs font-semibold text-gray-400 select-none">
                 [{position.row},{position.col}]
@@ -314,7 +321,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                 </div>
             )}
 
-            <div className="w-full flex flex-col gap-1.5 mt-auto">
+            <div className="w-full flex flex-col gap-1.5 mt-1">
                 <MotorSlot
                     axis="x"
                     motor={assignment.x}

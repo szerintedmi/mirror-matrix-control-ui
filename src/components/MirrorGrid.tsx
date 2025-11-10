@@ -23,7 +23,7 @@ const MirrorGrid: React.FC<MirrorGridProps> = ({
 }) => {
     return (
         <div
-            className="grid gap-1 bg-gray-900 p-2"
+            className="grid gap-x-1 gap-y-0.5 bg-gray-900 p-2"
             style={{
                 gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
                 gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
