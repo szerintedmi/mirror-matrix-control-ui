@@ -50,8 +50,7 @@ const SelectedMotorPanel: React.FC<{
 }> = ({ selection, telemetry, indicator, onClear }) => {
     const controller = useMotorController(selection.motor, telemetry);
     const positionSteps = typeof telemetry?.position === 'number' ? telemetry.position : null;
-    const inferredAngleDeg =
-        positionSteps === null ? null : convertStepsToDegrees(positionSteps);
+    const inferredAngleDeg = positionSteps === null ? null : convertStepsToDegrees(positionSteps);
     const axisLabel = selection.axis === 'x' ? 'Yaw' : 'Pitch';
 
     return (

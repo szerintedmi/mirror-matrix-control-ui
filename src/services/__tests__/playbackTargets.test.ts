@@ -44,8 +44,10 @@ describe('buildAxisTargets', () => {
         expect(result.axes).toHaveLength(3);
         const first = result.axes[0];
         expect(first.axis).toBe('x');
-        expect(first.targetSteps).toBe(190);
+        expect(first.targetSteps).toBe(-190);
         expect(first.clamped).toBe(false);
+        const yAxis = result.axes.find((axis) => axis.axis === 'y');
+        expect(yAxis?.targetSteps).toBeCloseTo(-47.5, 5);
     });
 
     it('reports skipped axes and clamp diagnostics', () => {
@@ -57,6 +59,6 @@ describe('buildAxisTargets', () => {
             (axis) => axis.mirrorId === 'mirror-0-1' && axis.axis === 'x',
         );
         expect(clampedAxis?.clamped).toBe(true);
-        expect(clampedAxis?.targetSteps).toBe(1_200);
+        expect(clampedAxis?.targetSteps).toBe(-1_200);
     });
 });

@@ -13,6 +13,10 @@ interface BuildAxisTargetsParams {
     stepsPerDegree?: number;
 }
 
+const resolveAxisAngleForSteps = (_axis: Axis, angleDeg: number) => {
+    return -angleDeg;
+};
+
 const cloneMotor = (assignment: MirrorAssignment, axis: Axis) => {
     const motor = assignment[axis];
     if (!motor) {
@@ -40,7 +44,9 @@ const createAxisTarget = ({
     motor: NonNullable<ReturnType<typeof cloneMotor>>;
     stepsPerDegree?: number;
 }): PlaybackAxisTarget => {
-    const conversion = convertAngleToSteps(angleDeg, { stepsPerDegree });
+    const conversion = convertAngleToSteps(resolveAxisAngleForSteps(axis, angleDeg), {
+        stepsPerDegree,
+    });
     return {
         key: `${mirrorId}:${axis}:${motor.nodeMac}:${motor.motorIndex}`,
         mirrorId,
