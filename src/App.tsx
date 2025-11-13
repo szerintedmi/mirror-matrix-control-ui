@@ -6,6 +6,7 @@ import MobileNavigationDrawer from './components/MobileNavigationDrawer';
 import Modal from './components/Modal';
 import {
     ArrayConfigIcon,
+    CalibrationIcon,
     ConnectionIcon,
     PatternsIcon,
     PlaybackIcon,
@@ -17,6 +18,7 @@ import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
 import { LogProvider } from './context/LogContext';
 import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
+import CalibrationPage from './pages/CalibrationPage';
 import ConfiguratorPage from './pages/ConfiguratorPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
@@ -32,7 +34,14 @@ import { validateProjectionSettings } from './utils/geometryValidation';
 
 import type { MirrorConfig, Pattern, ProjectionSettings } from './types';
 
-export type Page = 'library' | 'editor' | 'playback' | 'configurator' | 'simulation' | 'connection';
+export type Page =
+    | 'library'
+    | 'editor'
+    | 'playback'
+    | 'calibration'
+    | 'configurator'
+    | 'simulation'
+    | 'connection';
 
 export interface NavigationControls {
     navigateTo: (page: Page) => void;
@@ -134,6 +143,11 @@ const App: React.FC = () => {
             icon: <PlaybackIcon />,
         },
         {
+            page: 'calibration' as const,
+            label: 'Calibration',
+            icon: <CalibrationIcon />,
+        },
+        {
             page: 'library' as const,
             label: 'Patterns',
             icon: <PatternsIcon />,
@@ -199,6 +213,8 @@ const App: React.FC = () => {
                         onNavigateSimulation={() => navigateTo('simulation')}
                     />
                 );
+            case 'calibration':
+                return <CalibrationPage />;
             case 'editor':
                 return (
                     <PatternEditorPage
@@ -255,6 +271,8 @@ const App: React.FC = () => {
                 return 'Patterns';
             case 'playback':
                 return 'Playback';
+            case 'calibration':
+                return 'Calibration';
             case 'configurator':
                 return 'Array Config';
             case 'simulation':

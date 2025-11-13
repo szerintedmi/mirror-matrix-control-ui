@@ -85,3 +85,22 @@ export const PlaybackIcon: React.FC = () => (
         <path d="M10 6.5v11l9-5.5-9-5.5z" />
     </svg>
 );
+
+export const CalibrationIcon: React.FC = () => (
+    <svg
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="h-5 w-5"
+    >
+        <circle cx="12" cy="12" r="6" />
+        <path d="M12 3v2" strokeLinecap="round" />
+        <path d="M12 19v2" strokeLinecap="round" />
+        <path d="M3 12h2" strokeLinecap="round" />
+        <path d="M19 12h2" strokeLinecap="round" />
+        <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+    </svg>
+);
