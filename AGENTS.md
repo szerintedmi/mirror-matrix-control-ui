@@ -74,7 +74,11 @@ use [ ] format so we can track progres
 
 #### 4. Implement and validate
 
-Once the user has reviewed the plan follow their instructions to start the implementation. Unless otherwise instructed try to implement as many steps as possible in one go but always make sure you also run all build/test commands, including e2e tests after a bigger task. Ask for elevated privileges if a command execution fails.
+- Once the user has reviewed the plan follow their instructions to start the implementation.
+- Try to implement as many steps as needed to achieve a feautre milestone which can be tested by the user
+- Before you report you are ready always run build , format, lint, test , test:e2e commands (in this order)
+- Always request elevated privileges if a command execution fails.
+- Never mark a task as complete until you have successull build, format, lint, test, test:e2e runs.
 
 #### 5. Report your progress
 
