@@ -232,7 +232,7 @@ For each mirror tile, measure how its reflection behaves and store that as calib
 
 - Light safety:
   - We deal with **non-laser reflected light spots**.
-  - Ensure we **never focus all mirrors to the same point** during calibration.
+  - Aim to avoid **focusing all mirrors to the same point** during calibration but no extreme pre-caution is required as calibration will be always supervised.
 
 #### 3.7.2 Calibration Steps (Per Run)
 
@@ -257,37 +257,40 @@ For each mirror tile, measure how its reflection behaves and store that as calib
 
    2. **Keep the target tile at its “home” position**:
       - This is its mechanical home position (but optically it may be misaligned).
-      - Restrict ROI such that its reflection is clearly visible if possible.
 
    3. **Measure and record**:
-      - Detect blob for the target tile:
-        - Blob center in the **coordinate system chosen for playback** (normalized).
-        - Blob size (initially from `KeyPoint.size`; normalization TBD).
-        - Possibly average over multiple frames for robustness.
-      - Store:
-        - **Home displacement** for that tile (`dx`, `dy` relative to some ideal grid position).
-        - **Blob size** for that tile at home position.
-        - **Confidence** (response) used, or at least that it passed the threshold.
+      - Detect blob for the target tile and store:
+        - The "uncalibrated" Blob center in the **coordinate system chosen for playback** (normalized).
+        - **Blob size** for that tile at home position. (initially from `KeyPoint.size`; normalization TBD).
 
-   4. **Optionally perform step-to-displacement characterization** (baseline consistency):
-      - After storing the home measurement, move the target tile by a known number of steps in **X and Y** (same pattern for all tiles).
-      - Measure the **change in projected position** on the wall.
+   4. **Perform step-to-displacement characterization** (baseline consistency):
+      - After storing the home measurement, move the target tile by a known number of steps in **X and Y** . (same pattern for all tiles).
+      - Measure the **change in projected position** on the wall and the size at the new position.
       - Store:
         - `stepToDisplacementX` (e.g. pixels per step or normalized units/step)
         - `stepToDisplacementY`
+        - `sizeDeltaAtStepTest`: +/- compared to the home size so installers can audit hotspotting
       - Default delta: **±400 steps** per axis with ~250 ms dwell before sampling; expose both values in an "Advanced" settings section so installers can adjust safely for different hardware envelopes.
       - This data is for:
         - Checking consistency between tiles.
         - Driving the new playback mapping.
 
-   5. **Mark tile as “calibrated” and move it to its “side” position**:
-      - Distinguish visually calibrated vs not yet calibrated tiles (e.g. in debug grid).
+   5. **Mark tile as “measured”**
+      - Move it to the left edge , distributed the same way as the "uncalibrated" mirror layed out earlier, just the other side
+      - Distinguish visually calibrated vs not yet calibrated tiles on a new calibration array overview component (it should be a compact visual overview similar to the existing array overview conponent).
+      - Keep the results updated in the overview component
       - Proceed to next tile.
 
-4. **Completion**
-   - After all tiles are processed:
-     - Show final calibration results in the debug grid.
-     - Allow user to **save** the calibration profile (see next section).
+4. **Completion after all tiles are measured**
+   - use the the biggest tile size measurement to calculate an ideal grid - where each mirror tile projects its shape with the adjsuted displacement to results in a perfectly aligned grid projection. Make sure there is gap between each projected tile. (gap size defaults to a reasonable default but adjustable in advanced settings)
+   - In the ideal grid each tile should project directly straight, ensure in the calculation that no crossing is needed (ie. tile 0,0 should project to 0,0 postion)
+   - Caculate the each **Home displacement** for all tiles: `dx`, `dy` relative to the ideal grid position.
+   - Show final calibration results in the calibration array overview. Include easily digestable visual for each tile:
+     - x/y displacement needed for each tile to achieve ideal position at home
+     - size difference among tiles
+     - stepToDisplacement difference among tiles
+   - Move all tiles to this ideal home position
+   - Allow user to **save** the calibration profile (see next section).
 
 ### 3.8 Calibration Profiles (Results)
 
@@ -300,6 +303,13 @@ For each profile:
 - Metadata:
   - **Name** (required; user-provided).
   - **Timestamp** (auto-added on save).
+  - **Grid blueprint** derived from the completion step in §3.7:
+    - `idealTileFootprint`: normalized width/height computed from the **largest** captured tile at home.
+    - `tileGap`: normalized space between tile footprints (records the advanced gap setting so playback honors installer intent).
+    - `gridOrigin`: normalized offset applied when pushing tiles to the aligned grid (defaults to `(0, 0)` but stored so future firmware uploads stay deterministic).
+  - **Step-test settings** actually used during the run (so advanced overrides persist with the data):
+    - `deltaSteps` per axis (default ±400 from §3.7.2.3.4).
+    - `dwellMs` before sampling (default ~250 ms).
 
 - Per-tile data (for every mirror tile):
   - **Home displacement** in the **normalized playback coordinate system**:
@@ -309,6 +319,8 @@ For each profile:
   - **Step-to-displacement mapping**:
     - `stepToDisplacementX` (how many **normalized coordinate** units per step in motor X).
     - `stepToDisplacementY` (normalized units per step in motor Y).
+  - **Size delta at displacement**:
+    - `sizeDeltaAtStepTest` captures how blob size changed during the ±step characterization so installers can spot hotspotting or clipping issues later.
 
 - **Baseline consistency / step-displacement consistency** is **part of the main profile**, not a separate “advanced” concept.
 - Calibration profiles **must not** embed camera device info, ROI values, CLAHE sliders, or other detection-specific data.
@@ -319,10 +331,12 @@ For each profile:
   - The pattern editor/grid (`0–1` canvas coordinates per axis) and
   - The projection/planner math (`reflectionSolver`).
 - During calibration runs, any pixel or world-space measurements must be converted into this normalized frame **before** persisting.
+- `gridBlueprint.tileGap` and `idealTileFootprint` live in this normalized frame as well so playback and previews can reconstruct the aligned layout without recomputing Section 3.7 math client-side.
 - The requirement is **one shared, consistent coordinate system** for:
   - Pattern pixels on the wall.
   - Measured blob positions.
   - Step-to-displacement factors.
+  - Grid blueprint metadata (tile footprint, gap, origin).
 - This guarantees that playback can swap between legacy angle mode and calibration mode without additional per-profile transforms.
 
 #### 3.8.3 Save / Load Behavior
@@ -333,6 +347,7 @@ For each profile:
     - Enter a **name**.
     - Save the current data as a profile.
   - System auto-stamps the timestamp.
+  - Partial runs can still be saved, but tiles that never completed auto-cal remain explicitly flagged (e.g., `null` tile entries) so playback can warn/block.
 - Loading:
   - User can select any saved calibration profile.
   - Profile is loaded and becomes the **active calibration** for playback.
@@ -353,10 +368,12 @@ For each profile:
   - User must pick a **Calibration Profile** (validated grid size + coordinate system) before playback controls unlock.
   - For MVP, reuse the existing pattern library to supply target points; roadmap item: add "ad hoc coordinate" tooling driven solely by calibration data.
   - Provide its own preview/status UI that does **not** depend on the legacy solver (preview parity can arrive post-MVP).
+  - Surface the profile's **grid blueprint** (tile footprint + gap + origin) so installers can confirm the aligned grid computed in §3.7; treat profiles missing this metadata as invalid.
 - Implement a **fresh playback solver** that:
   - Works purely from normalized calibration data plus pattern targets.
   - Bypasses `reflectionSolver` entirely—no intermediate angle math.
   - Converts normalized targets to motor steps via `homeOffset` and `stepToDisplacement` per tile.
+  - Can optionally leverage `sizeDeltaAtStepTest` to warn if a requested displacement risks shrinking/growing blobs beyond the characterized envelope (roadmap-level warning, but solver API should expose the metric).
   - Emits command plans compatible with the existing MQTT/motor command pipeline (skipped-axis reporting, clamping flags, etc.).
 
 #### 3.9.3 Mapping Logic (Calibration Route)
@@ -383,7 +400,7 @@ stepsY = ΔY / stepToDisplacement.y
 
 5. Issue commands to move the tile accordingly.
 
-- The calibration solver owns this end-to-end pipeline and can later power a dedicated preview/diagnostics overlay without touching the legacy solver.
+- The calibration solver owns this end-to-end pipeline, reuses the profile's grid blueprint to ensure the requested points respect the stored gap/origin, and can later power a dedicated preview/diagnostics overlay without touching the legacy solver.
 
 #### 3.9.4 Future Firmware Option
 
@@ -473,6 +490,7 @@ type DetectionSettings = {
 type TileCalibration = {
   homeOffset: { dx: number; dy: number }; // normalized 0–1 playback coords
   blobSize: number; // normalized to the same reference frame
+  sizeDeltaAtStepTest: number; // normalized delta captured during ±step characterization
   stepToDisplacement: {
     x: number; // normalized units per step X
     y: number; // normalized units per step Y
@@ -485,6 +503,15 @@ type CalibrationProfile = {
   timestamp: string; // ISO string
   tiles: TileCalibration[][]; // 2D grid [row][col]
   coordinateSystem: 'normalized-playback'; // explicit reference frame tag
+  gridBlueprint: {
+    idealTileFootprint: { width: number; height: number }; // normalized dims derived from largest tile
+    tileGap: number; // normalized spacing between footprints
+    gridOrigin: { x: number; y: number }; // normalized offset applied after calibration (usually 0,0)
+  };
+  stepTestSettings: {
+    deltaSteps: number; // absolute steps used during measurement (default 400)
+    dwellMs: number; // wait before sampling (default ~250)
+  };
   // optional additional metadata if needed
 };
 ```
@@ -506,7 +533,8 @@ The playback system must support switching between:
    - Uses only calibration data:
      - Per-tile **home displacement** offsets (dx, dy) in the normalized playback coordinate system.
      - Per-tile **step-to-displacement mappings** (units per step in X and Y).
-     - Normalized **blob size** if needed for wall-space scaling checks.
+    - Normalized **blob size** if needed for wall-space scaling checks.
+    - Profile-level **grid blueprint** metadata (tile footprint, gap, origin) so solver/previews can honor the aligned grid computed during calibration.
    - Maps pattern coordinates directly to required step movements.
 
 ### 6.2 Mapping Logic (Calibration-Based Mode)
