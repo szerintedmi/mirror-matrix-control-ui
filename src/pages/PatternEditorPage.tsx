@@ -395,12 +395,12 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
             </div>
             <div className="flex flex-grow flex-col gap-6 min-h-0 md:flex-row">
                 <PatternEditorSidebar {...sidebarProps} />
-                <main className="flex-grow bg-gray-800/50 rounded-lg ring-1 ring-white/10 p-4 flex items-center justify-center min-h-[320px]">
+                <main className="flex-grow bg-gray-800/50 rounded-lg ring-1 ring-white/10 p-4 flex items-center justify-center min-h-0">
                     <div
                         ref={containerRef}
-                        className="w-full h-full flex items-center justify-center"
+                        className="w-full h-full flex min-h-0 min-w-0 items-center justify-center"
                     >
-                        <div style={surfaceStyle} className="relative max-h-full w-full">
+                        <div style={surfaceStyle} className="relative max-h-full max-w-full">
                             <PatternCanvas
                                 canvasSize={canvasSize}
                                 canvasWidth={canvasWidth}
