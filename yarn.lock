@@ -933,6 +933,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@techstark/opencv-js@npm:4.12.0-release.1":
+  version: 4.12.0-release.1
+  resolution: "@techstark/opencv-js@npm:4.12.0-release.1"
+  checksum: 10c0/3e0976f489c775135904a5181c7f28c44b966d33f2b5334af0bb7f282c3a07863ce1ce72eaed46cda6991ea53e3c0a60a70876396dcc60637d0aeb4bbf2a9409
+  languageName: node
+  linkType: hard
+
 "@types/babel__core@npm:^7.20.5":
   version: 7.20.5
   resolution: "@types/babel__core@npm:7.20.5"
@@ -3846,6 +3853,7 @@ __metadata:
   dependencies:
     "@babylonjs/core": "npm:8.36.1"
     "@playwright/test": "npm:1.56.1"
+    "@techstark/opencv-js": "npm:4.12.0-release.1"
     "@types/eslint-plugin-jsx-a11y": "npm:6.10.1"
     "@types/jsdom": "npm:27.0.0"
     "@types/node": "npm:22.19.0"

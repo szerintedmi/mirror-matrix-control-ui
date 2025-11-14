@@ -25,6 +25,7 @@
     },
     "dependencies": {
         "@babylonjs/core": "8.36.1",
+        "@techstark/opencv-js": "4.12.0-release.1",
         "mqtt": "5.14.1",
         "react": "19.2.0",
         "react-dom": "19.2.0"
