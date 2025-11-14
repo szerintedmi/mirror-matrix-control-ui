@@ -26,6 +26,18 @@ All of this lives in a new **“Calibration”** page/menu in the existing app.
     - **Detection settings** (camera, ROI, processing, blob params) are persisted independently and never embedded into calibration profiles.
     - **Calibration profiles** contain only normalized, geometry-aware measurements that align with the shared playback coordinate system.
 
+### 2.1 Frontend implementation snapshot (Nov 14, 2025)
+
+Recent refactors split the legacy `CalibrationPage` blob into composable building blocks so future work (playback alignment, profile presets, CLAHE tuning) can iterate safely:
+
+- `src/hooks/useDetectionSettingsController.ts` owns all persisted camera/detection state and profile CRUD helpers.
+- `src/hooks/useCameraPipeline.ts` encapsulates camera streams, OpenCV worker messaging, and exposes a `captureBlobMeasurement` callback that the runner consumes.
+- `src/hooks/useRoiOverlayInteractions.ts` keeps ROI pointer/overlay behavior isolated so preview UI stays declarative while the pipeline reuses the same handlers.
+- `src/hooks/useCalibrationRunnerController.ts` wraps `CalibrationRunner` orchestration and feeds status into the UI.
+- Presentational components live under `src/components/calibration/` (`CalibrationPreview`, `DetectionSettingsPanel`, `DetectionProfileManager`, `CalibrationRunnerPanel`) and accept typed props only.
+
+If you need to extend the UI, prefer adding props/hooks instead of re-expanding `CalibrationPage`. When new state spans panels, lift it into a hook just like the structures above.
+
 - **Firmware / hardware**
   - Mirror array is fully controllable via existing motor controller protocol.
   - Calibration runs by sending commands to home and move individual tiles.

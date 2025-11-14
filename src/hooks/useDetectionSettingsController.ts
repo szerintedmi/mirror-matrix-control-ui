@@ -1,4 +1,12 @@
-import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type Dispatch,
+    type SetStateAction,
+} from 'react';
 
 import {
     clampRoi,
@@ -14,6 +22,7 @@ import {
     type DetectionSettingsProfile,
     loadDetectionSettings,
     loadSavedDetectionSettingsProfiles,
+    persistDetectionSettings,
     saveDetectionSettingsProfile,
 } from '@/services/detectionSettingsStorage';
 import type { BlobDetectorParams } from '@/services/opencvWorkerClient';
@@ -54,14 +63,12 @@ export interface DetectionSettingsController {
     profileNameInput: string;
     setProfileNameInput: (value: string) => void;
     applyProfileById: (profileId: string) => void;
-    saveProfile: (captureDimensions: {
-        width: number | null;
-        height: number | null;
-    }) => DetectionSettingsProfile | null;
+    saveProfile: () => DetectionSettingsProfile | null;
     resetProfileSelection: () => void;
     resolvedResolution: ResolutionOption;
     currentSettings: DetectionSettings;
     handleNativeDetectorAvailability: (hasNativeDetector: boolean) => void;
+    setLastCaptureDimensions: (dimensions: { width: number | null; height: number | null }) => void;
 }
 
 export const useDetectionSettingsController = (): DetectionSettingsController => {
@@ -99,6 +106,17 @@ export const useDetectionSettingsController = (): DetectionSettingsController =>
     );
     const [useWasmDetectorState, setUseWasmDetectorState] = useState(
         storedSettings?.useWasmDetector ?? false,
+    );
+    const [lastCaptureDimensions, setLastCaptureDimensionsState] = useState<{
+        width: number | null;
+        height: number | null;
+    }>(
+        storedSettings?.roi
+            ? {
+                  width: storedSettings.roi.lastCaptureWidth ?? null,
+                  height: storedSettings.roi.lastCaptureHeight ?? null,
+              }
+            : { width: null, height: null },
     );
     const detectionSettingsLoaded = true;
     const [savedProfiles, setSavedProfiles] = useState<DetectionSettingsProfile[]>(() =>
@@ -179,55 +197,54 @@ export const useDetectionSettingsController = (): DetectionSettingsController =>
         [applyProfile, savedProfiles, selectProfileId],
     );
 
-    const saveProfile = useCallback(
-        (captureDimensions: { width: number | null; height: number | null }) => {
-            const storage = getLocalStorage();
-            const saved = saveDetectionSettingsProfile(storage, {
-                id: selectedProfileId || undefined,
-                name: profileNameInput,
-                settings: {
-                    camera: {
-                        deviceId: selectedDeviceId,
-                        resolutionId: selectedResolutionId,
-                    },
-                    roi: {
-                        ...roi,
-                        lastCaptureWidth: captureDimensions.width,
-                        lastCaptureHeight: captureDimensions.height,
-                    },
-                    processing: {
-                        brightness,
-                        contrast,
-                        claheClipLimit,
-                        claheTileGridSize,
-                        rotationDegrees,
-                    },
-                    blobParams,
-                    useWasmDetector: useWasmDetectorState,
+    const saveProfile = useCallback(() => {
+        const storage = getLocalStorage();
+        const saved = saveDetectionSettingsProfile(storage, {
+            id: selectedProfileId || undefined,
+            name: profileNameInput,
+            settings: {
+                camera: {
+                    deviceId: selectedDeviceId,
+                    resolutionId: selectedResolutionId,
                 },
-            });
-            if (saved) {
-                selectProfileId(saved.id);
-                setSavedProfiles(loadSavedDetectionSettingsProfiles(getLocalStorage()));
-            }
-            return saved;
-        },
-        [
-            blobParams,
-            brightness,
-            claheClipLimit,
-            claheTileGridSize,
-            contrast,
-            profileNameInput,
-            roi,
-            rotationDegrees,
-            selectProfileId,
-            selectedDeviceId,
-            selectedProfileId,
-            selectedResolutionId,
-            useWasmDetectorState,
-        ],
-    );
+                roi: {
+                    ...roi,
+                    lastCaptureWidth: lastCaptureDimensions.width,
+                    lastCaptureHeight: lastCaptureDimensions.height,
+                },
+                processing: {
+                    brightness,
+                    contrast,
+                    claheClipLimit,
+                    claheTileGridSize,
+                    rotationDegrees,
+                },
+                blobParams,
+                useWasmDetector: useWasmDetectorState,
+            },
+        });
+        if (saved) {
+            selectProfileId(saved.id);
+            setSavedProfiles(loadSavedDetectionSettingsProfiles(getLocalStorage()));
+        }
+        return saved;
+    }, [
+        blobParams,
+        brightness,
+        claheClipLimit,
+        claheTileGridSize,
+        contrast,
+        lastCaptureDimensions.height,
+        lastCaptureDimensions.width,
+        profileNameInput,
+        roi,
+        rotationDegrees,
+        selectProfileId,
+        selectedDeviceId,
+        selectedProfileId,
+        selectedResolutionId,
+        useWasmDetectorState,
+    ]);
 
     const resetProfileSelection = useCallback(() => {
         selectProfileId('');
@@ -289,6 +306,38 @@ export const useDetectionSettingsController = (): DetectionSettingsController =>
         useWasmDetectorState,
     ]);
 
+    useEffect(() => {
+        if (!detectionSettingsLoaded) {
+            return;
+        }
+        const storage = getLocalStorage();
+        persistDetectionSettings(storage, {
+            ...currentSettings,
+            roi: {
+                ...currentSettings.roi,
+                lastCaptureWidth: lastCaptureDimensions.width,
+                lastCaptureHeight: lastCaptureDimensions.height,
+            },
+        });
+    }, [
+        currentSettings,
+        detectionSettingsLoaded,
+        lastCaptureDimensions.height,
+        lastCaptureDimensions.width,
+    ]);
+
+    const setLastCaptureDimensions = useCallback(
+        (dimensions: { width: number | null; height: number | null }) => {
+            setLastCaptureDimensionsState((prev) => {
+                if (prev.width === dimensions.width && prev.height === dimensions.height) {
+                    return prev;
+                }
+                return dimensions;
+            });
+        },
+        [],
+    );
+
     return {
         detectionSettingsLoaded,
         selectedDeviceId,
@@ -330,5 +379,6 @@ export const useDetectionSettingsController = (): DetectionSettingsController =>
         resolvedResolution,
         currentSettings,
         handleNativeDetectorAvailability,
+        setLastCaptureDimensions,
     };
 };
