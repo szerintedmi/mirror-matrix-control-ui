@@ -28,6 +28,7 @@ dist
 dist-ssr
 *.local
 
+public/opencv.js
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

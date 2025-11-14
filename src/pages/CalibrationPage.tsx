@@ -1,18 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import type {
+    OpenCvReadyMessage,
+    OpenCvWorkerClient,
+    OpenCvWorkerStatus,
+} from '@/services/opencvWorkerClient';
+import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
+import type { NormalizedRoi } from '@/types';
+
 interface ResolutionOption {
     id: string;
     label: string;
     width?: number;
     height?: number;
-}
-
-interface NormalizedRoi {
-    enabled: boolean;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
 }
 
 const RESOLUTION_OPTIONS: ResolutionOption[] = [
@@ -69,6 +69,11 @@ const CalibrationPage: React.FC = () => {
     const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number }>(
         () => ({ width: 0, height: 0 }),
     );
+    const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
+    const [opencvError, setOpenCvError] = useState<string | null>(null);
+    const [opencvInfo, setOpenCvInfo] = useState<OpenCvReadyMessage | null>(null);
+
+    const workerClientRef = useRef<OpenCvWorkerClient | null>(null);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const processedCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -84,6 +89,13 @@ const CalibrationPage: React.FC = () => {
         handle?: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
     } | null>(null);
     const roiRef = useRef<NormalizedRoi>(roi);
+
+    const workerSupported = useMemo(() => {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+        return typeof Worker !== 'undefined' && typeof window.createImageBitmap === 'function';
+    }, []);
 
     useEffect(() => {
         roiRef.current = roi;
@@ -108,6 +120,66 @@ const CalibrationPage: React.FC = () => {
             cancelled = true;
         };
     }, [roi.enabled, roiViewEnabled]);
+
+    useEffect(() => {
+        if (!workerSupported) {
+            setOpenCvStatus('error');
+            setOpenCvError('OpenCV worker is not supported in this browser.');
+            return;
+        }
+        let cancelled = false;
+        try {
+            const client = getOpenCvWorkerClient();
+            workerClientRef.current = client;
+            const initialStatus = client.getStatus();
+            setOpenCvStatus(initialStatus);
+            if (initialStatus === 'ready') {
+                const payload = client.getReadyPayload();
+                if (payload) {
+                    setOpenCvInfo(payload);
+                }
+                setOpenCvError(null);
+            }
+            const unsubscribe = client.onStatus((status, payload) => {
+                if (cancelled) {
+                    return;
+                }
+                setOpenCvStatus(status);
+                if (status === 'ready' && payload && typeof payload === 'object') {
+                    setOpenCvInfo(payload as OpenCvReadyMessage);
+                    setOpenCvError(null);
+                }
+                if (status === 'error') {
+                    const message = typeof payload === 'string' ? payload : 'OpenCV worker failed';
+                    setOpenCvError(message);
+                }
+            });
+            client
+                .init()
+                .then((payload) => {
+                    if (!cancelled) {
+                        setOpenCvStatus('ready');
+                        setOpenCvInfo(payload);
+                        setOpenCvError(null);
+                    }
+                })
+                .catch((error) => {
+                    if (!cancelled) {
+                        setOpenCvStatus('error');
+                        setOpenCvError(error instanceof Error ? error.message : String(error));
+                    }
+                });
+            return () => {
+                cancelled = true;
+                unsubscribe();
+            };
+        } catch (error) {
+            setOpenCvStatus('error');
+            setOpenCvError(
+                error instanceof Error ? error.message : 'Unable to start OpenCV worker',
+            );
+        }
+    }, [workerSupported]);
 
     const handleRotationPointerDown = () => {
         setIsRotationAdjusting(true);
@@ -228,133 +300,240 @@ const CalibrationPage: React.FC = () => {
         };
     }, []);
 
+    const shouldUseWorkerRoi = useMemo(
+        () => roi.enabled && roiViewEnabled && previewMode === 'processed' && rotationDegrees === 0,
+        [previewMode, roi.enabled, roiViewEnabled, rotationDegrees],
+    );
+
     useEffect(() => {
-        let animationFrameId: number;
+        if (!workerSupported || opencvStatus !== 'ready') {
+            if (previewMode === 'processed') {
+                setProcessedFps(0);
+            }
+            return;
+        }
+        const client = workerClientRef.current;
+        if (!client) {
+            return;
+        }
+        let cancelled = false;
+        let animationFrameId = 0;
+        let pending = false;
         let frames = 0;
         let windowStart = performance.now();
 
-        const processFrame = () => {
+        const loop = () => {
+            if (cancelled) {
+                return;
+            }
             const video = videoRef.current;
             const processedCanvas = processedCanvasRef.current;
             if (!video || !processedCanvas) {
-                animationFrameId = requestAnimationFrame(processFrame);
+                animationFrameId = requestAnimationFrame(loop);
                 return;
             }
-            if (video.readyState < 2) {
-                animationFrameId = requestAnimationFrame(processFrame);
+            if (video.readyState < 2 || previewMode !== 'processed') {
+                animationFrameId = requestAnimationFrame(loop);
                 return;
             }
+            if (!video.videoWidth || !video.videoHeight) {
+                animationFrameId = requestAnimationFrame(loop);
+                return;
+            }
+            if (pending) {
+                animationFrameId = requestAnimationFrame(loop);
+                return;
+            }
+            pending = true;
             const width = video.videoWidth;
             const height = video.videoHeight;
-            if (!width || !height) {
-                animationFrameId = requestAnimationFrame(processFrame);
+            const roiSnapshot = roiRef.current;
+
+            void (async () => {
+                try {
+                    const bitmap = await window.createImageBitmap(video);
+                    const result = await client.processFrame({
+                        frame: bitmap,
+                        width,
+                        height,
+                        brightness,
+                        contrast,
+                        roi: roiSnapshot,
+                        applyRoi: shouldUseWorkerRoi,
+                    });
+                    if (cancelled) {
+                        result.frame.close();
+                        return;
+                    }
+                    const canvas = processedCanvasRef.current;
+                    const ctx = canvas?.getContext('2d');
+                    if (canvas && ctx) {
+                        if (canvas.width !== result.width || canvas.height !== result.height) {
+                            canvas.width = result.width;
+                            canvas.height = result.height;
+                        }
+                        ctx.clearRect(0, 0, result.width, result.height);
+                        ctx.drawImage(result.frame, 0, 0, result.width, result.height);
+                    }
+                    result.frame.close();
+                    frames += 1;
+                    const now = performance.now();
+                    if (now - windowStart >= 1000) {
+                        setProcessedFps(Math.round((frames / (now - windowStart)) * 1000));
+                        frames = 0;
+                        windowStart = now;
+                    }
+                } catch (error) {
+                    if (!cancelled) {
+                        console.error('OpenCV worker frame failed', error);
+                        setOpenCvStatus('error');
+                        setOpenCvError(
+                            error instanceof Error ? error.message : 'Worker frame failed',
+                        );
+                    }
+                } finally {
+                    pending = false;
+                }
+            })();
+
+            animationFrameId = requestAnimationFrame(loop);
+        };
+
+        animationFrameId = requestAnimationFrame(loop);
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(animationFrameId);
+            setProcessedFps(0);
+        };
+    }, [brightness, contrast, opencvStatus, previewMode, shouldUseWorkerRoi, workerSupported]);
+
+    useEffect(() => {
+        let animationFrameId: number;
+
+        const render = () => {
+            const video = videoRef.current;
+            const processedCanvas = processedCanvasRef.current;
+            if (!video) {
+                animationFrameId = requestAnimationFrame(render);
                 return;
             }
-            if (processedCanvas.width !== width || processedCanvas.height !== height) {
-                processedCanvas.width = width;
-                processedCanvas.height = height;
-            }
-            const ctx = processedCanvas.getContext('2d', { willReadFrequently: true });
-            if (!ctx) {
-                animationFrameId = requestAnimationFrame(processFrame);
+            const processedSourceAvailable =
+                previewMode === 'processed' &&
+                processedCanvas &&
+                processedCanvas.width > 0 &&
+                processedCanvas.height > 0;
+            if (video.readyState < 2 && !processedSourceAvailable) {
+                animationFrameId = requestAnimationFrame(render);
                 return;
             }
-            ctx.drawImage(video, 0, 0, width, height);
-            const frame = ctx.getImageData(0, 0, width, height);
-            const data = frame.data;
-            const contrastFactor = contrast;
-            const brightnessOffset = brightness * 255;
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                let gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-                gray = gray * contrastFactor + brightnessOffset;
-                const clamped = Math.max(0, Math.min(255, gray));
-                data[i] = clamped;
-                data[i + 1] = clamped;
-                data[i + 2] = clamped;
+            const baseWidth = processedSourceAvailable
+                ? processedCanvas!.width
+                : video.videoWidth || processedCanvas?.width || 0;
+            const baseHeight = processedSourceAvailable
+                ? processedCanvas!.height
+                : video.videoHeight || processedCanvas?.height || 0;
+            if (!baseWidth || !baseHeight) {
+                animationFrameId = requestAnimationFrame(render);
+                return;
             }
-            ctx.putImageData(frame, 0, 0);
 
             let rotatedCanvas = rotatedCanvasRef.current;
             if (!rotatedCanvas && typeof document !== 'undefined') {
                 rotatedCanvas = document.createElement('canvas');
                 rotatedCanvasRef.current = rotatedCanvas;
             }
-            const rotationRadians = (rotationDegrees * Math.PI) / 180;
             let rotatedCtx: CanvasRenderingContext2D | null = null;
             if (rotatedCanvas) {
-                if (rotatedCanvas.width !== width || rotatedCanvas.height !== height) {
-                    rotatedCanvas.width = width;
-                    rotatedCanvas.height = height;
+                if (rotatedCanvas.width !== baseWidth || rotatedCanvas.height !== baseHeight) {
+                    rotatedCanvas.width = baseWidth;
+                    rotatedCanvas.height = baseHeight;
                 }
                 rotatedCtx = rotatedCanvas.getContext('2d');
                 if (rotatedCtx) {
                     rotatedCtx.save();
-                    rotatedCtx.clearRect(0, 0, width, height);
-                    rotatedCtx.translate(width / 2, height / 2);
-                    rotatedCtx.rotate(rotationRadians);
-                    rotatedCtx.translate(-width / 2, -height / 2);
-                    const sourceForRotation = previewMode === 'processed' ? processedCanvas : video;
-                    rotatedCtx.drawImage(sourceForRotation, 0, 0, width, height);
+                    rotatedCtx.clearRect(0, 0, baseWidth, baseHeight);
+                    rotatedCtx.translate(baseWidth / 2, baseHeight / 2);
+                    rotatedCtx.rotate((rotationDegrees * Math.PI) / 180);
+                    rotatedCtx.translate(-baseWidth / 2, -baseHeight / 2);
+                    const sourceForRotation =
+                        processedSourceAvailable && processedCanvas ? processedCanvas : video;
+                    if (sourceForRotation) {
+                        rotatedCtx.drawImage(sourceForRotation, 0, 0, baseWidth, baseHeight);
+                    }
                     rotatedCtx.restore();
                 }
             }
 
             const zoomCanvas = roiCanvasRef.current;
             const currentRoi = roiRef.current;
+            const showFullFrame = !roiViewEnabled || !currentRoi.enabled;
             if (zoomCanvas && currentRoi.enabled) {
-                if (zoomCanvas.width !== width || zoomCanvas.height !== height) {
-                    zoomCanvas.width = width;
-                    zoomCanvas.height = height;
+                const roiPixels =
+                    shouldUseWorkerRoi && processedSourceAvailable
+                        ? { width: baseWidth, height: baseHeight }
+                        : {
+                              width: Math.max(1, Math.round(currentRoi.width * baseWidth)),
+                              height: Math.max(1, Math.round(currentRoi.height * baseHeight)),
+                          };
+                const targetWidth = showFullFrame ? baseWidth : roiPixels.width;
+                const targetHeight = showFullFrame ? baseHeight : roiPixels.height;
+                if (zoomCanvas.width !== targetWidth || zoomCanvas.height !== targetHeight) {
+                    zoomCanvas.width = targetWidth;
+                    zoomCanvas.height = targetHeight;
                 }
                 const zoomCtx = zoomCanvas.getContext('2d');
                 if (zoomCtx) {
-                    const sx = currentRoi.x * width;
-                    const sy = currentRoi.y * height;
-                    const sw = Math.max(1, currentRoi.width * width);
-                    const sh = Math.max(1, currentRoi.height * height);
                     zoomCtx.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
-                    const roiSource = rotatedCtx && rotatedCanvas
-                        ? rotatedCanvas
-                        : previewMode === 'processed'
-                          ? processedCanvas
-                          : video;
+                    const roiSource =
+                        rotatedCtx && rotatedCanvas
+                            ? rotatedCanvas
+                            : processedSourceAvailable && processedCanvas
+                              ? processedCanvas
+                              : video;
                     if (roiSource) {
-                        zoomCtx.drawImage(
-                            roiSource,
-                            sx,
-                            sy,
-                            sw,
-                            sh,
-                            0,
-                            0,
-                            zoomCanvas.width,
-                            zoomCanvas.height,
-                        );
+                        if (shouldUseWorkerRoi && processedSourceAvailable) {
+                            zoomCtx.drawImage(
+                                roiSource,
+                                0,
+                                0,
+                                baseWidth,
+                                baseHeight,
+                                0,
+                                0,
+                                targetWidth,
+                                targetHeight,
+                            );
+                        } else {
+                            const sx = currentRoi.x * baseWidth;
+                            const sy = currentRoi.y * baseHeight;
+                            const sw = Math.max(1, currentRoi.width * baseWidth);
+                            const sh = Math.max(1, currentRoi.height * baseHeight);
+                            zoomCtx.drawImage(
+                                roiSource,
+                                sx,
+                                sy,
+                                sw,
+                                sh,
+                                0,
+                                0,
+                                targetWidth,
+                                targetHeight,
+                            );
+                        }
                     }
                 }
             } else if (zoomCanvas) {
                 zoomCanvas.getContext('2d')?.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
             }
 
-            frames += 1;
-            const now = performance.now();
-            if (now - windowStart >= 1000) {
-                setProcessedFps(Math.round((frames / (now - windowStart)) * 1000));
-                frames = 0;
-                windowStart = now;
-            }
-
-            animationFrameId = requestAnimationFrame(processFrame);
+            animationFrameId = requestAnimationFrame(render);
         };
 
-        animationFrameId = requestAnimationFrame(processFrame);
+        animationFrameId = requestAnimationFrame(render);
         return () => {
             cancelAnimationFrame(animationFrameId);
         };
-    }, [brightness, contrast, previewMode, rotationDegrees]);
+    }, [previewMode, roiViewEnabled, rotationDegrees, shouldUseWorkerRoi]);
 
     const handleOverlayPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (event.button !== 0) {
@@ -476,17 +655,49 @@ const CalibrationPage: React.FC = () => {
     const previewContainerClass =
         'relative w-full overflow-hidden rounded-lg border border-gray-700 bg-black shadow-inner';
 
+    const roiAspectRatio = useMemo(() => {
+        if (!roiViewEnabled || !roi.enabled) {
+            return null;
+        }
+        if (videoDimensions.width <= 0 || videoDimensions.height <= 0) {
+            return null;
+        }
+        const roiWidthPx = Math.max(1, roi.width * videoDimensions.width);
+        const roiHeightPx = Math.max(1, roi.height * videoDimensions.height);
+        if (!roiWidthPx || !roiHeightPx) {
+            return null;
+        }
+        return roiWidthPx / roiHeightPx;
+    }, [
+        roi.enabled,
+        roi.height,
+        roi.width,
+        roiViewEnabled,
+        videoDimensions.height,
+        videoDimensions.width,
+    ]);
+
     const previewAspectRatio = useMemo(() => {
+        if (roiAspectRatio) {
+            return roiAspectRatio;
+        }
         if (videoDimensions.width > 0 && videoDimensions.height > 0) {
             return videoDimensions.width / videoDimensions.height;
         }
         return 16 / 9;
-    }, [videoDimensions.height, videoDimensions.width]);
+    }, [roiAspectRatio, videoDimensions.height, videoDimensions.width]);
 
     const rotationOverlayVisible = isRotationAdjusting;
 
     const renderPreview = () => {
         const showFullFrame = !roiViewEnabled || !roi.enabled;
+        const processedVisible =
+            showFullFrame && previewMode === 'processed' && opencvStatus === 'ready';
+        const workerOverlayActive = previewMode === 'processed' && opencvStatus !== 'ready';
+        const workerOverlayMessage =
+            opencvStatus === 'loading'
+                ? 'OpenCV Worker: Loading…'
+                : `OpenCV Worker: ${opencvError ?? 'Unavailable'}`;
         return (
             <div
                 className={previewContainerClass}
@@ -529,9 +740,7 @@ const CalibrationPage: React.FC = () => {
                         <canvas
                             ref={processedCanvasRef}
                             className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                showFullFrame && previewMode === 'processed'
-                                    ? 'opacity-100'
-                                    : 'opacity-0 pointer-events-none'
+                                processedVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
                             }`}
                         />
                     </div>
@@ -593,6 +802,11 @@ const CalibrationPage: React.FC = () => {
                             }}
                         />
                     )}
+                    {workerOverlayActive && (
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 px-4 text-center text-sm font-medium text-gray-100">
+                            {workerOverlayMessage}
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -647,6 +861,14 @@ const CalibrationPage: React.FC = () => {
                             </span>
                         )}
                         <span>Processed FPS: {processedFps}</span>
+                        <span>
+                            OpenCV:{' '}
+                            {opencvStatus === 'ready'
+                                ? (opencvInfo?.version ?? 'Ready')
+                                : opencvStatus === 'loading'
+                                  ? 'Loading…'
+                                  : (opencvError ?? 'Unavailable')}
+                        </span>
                         {cameraStatus !== 'ready' && <span>Status: {cameraStatus}</span>}
                     </div>
                     {cameraError && (

@@ -21,6 +21,8 @@ export default [
             'test-results',
             '.tmp',
             '.local',
+            'agent_notes',
+            'public/opencv.js',
         ],
     },
     {

@@ -33,9 +33,9 @@ const createMockContext = () => {
 };
 
 const setupNavigatorMocks = () => {
-    const enumerateDevices = vi.fn().mockResolvedValue([
-        { deviceId: 'mock-device', kind: 'videoinput', label: 'Mock Cam' },
-    ]);
+    const enumerateDevices = vi
+        .fn()
+        .mockResolvedValue([{ deviceId: 'mock-device', kind: 'videoinput', label: 'Mock Cam' }]);
     const getUserMedia = vi.fn().mockResolvedValue(new FakeMediaStream());
     const addEventListener = vi.fn();
     const removeEventListener = vi.fn();
@@ -59,9 +59,9 @@ const setupNavigatorMocks = () => {
 };
 
 const setupCanvasMocks = () => {
-    HTMLCanvasElement.prototype.getContext = (function () {
+    HTMLCanvasElement.prototype.getContext = function () {
         return createMockContext();
-    } as unknown) as typeof HTMLCanvasElement.prototype.getContext;
+    } as unknown as typeof HTMLCanvasElement.prototype.getContext;
 };
 
 const renderPage = async () => {

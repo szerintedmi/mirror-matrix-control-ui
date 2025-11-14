@@ -221,3 +221,11 @@ export interface PlaybackAxisPlan {
     axes: PlaybackAxisTarget[];
     skipped: PlaybackAxisSkip[];
 }
+
+export interface NormalizedRoi {
+    enabled: boolean;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
