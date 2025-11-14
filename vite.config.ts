@@ -1,29 +1,10 @@
-import { promises as fs } from 'fs';
 import path from 'path';
 
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type PluginOption } from 'vite';
 import { configDefaults } from 'vitest/config';
 
-const ensureOpenCvAsset = async () => {
-    const source = path.resolve(__dirname, 'node_modules/@techstark/opencv-js/dist/opencv.js');
-    const destination = path.resolve(__dirname, 'public/opencv.js');
-    try {
-        await fs.mkdir(path.dirname(destination), { recursive: true });
-        const [sourceStat, destinationStat] = await Promise.all([
-            fs.stat(source),
-            fs.stat(destination).catch(() => null),
-        ]);
-        if (!destinationStat || destinationStat.mtimeMs < sourceStat.mtimeMs) {
-            await fs.copyFile(source, destination);
-        }
-    } catch (error) {
-        console.warn('[vite] Unable to sync OpenCV asset:', error);
-    }
-};
-
 export default defineConfig(async ({ mode }) => {
-    await ensureOpenCvAsset();
     const env = loadEnv(mode, '.', '');
     const isTest = mode === 'test' || Boolean(process.env.VITEST);
     const plugins: PluginOption[] = [];

@@ -22,7 +22,7 @@ export default [
             '.tmp',
             '.local',
             'agent_notes',
-            'public/opencv.js',
+            'public/opencv_js.js',
         ],
     },
     {

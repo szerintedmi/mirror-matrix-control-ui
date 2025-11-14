@@ -2,9 +2,15 @@ import type { NormalizedRoi } from '@/types';
 
 export type OpenCvWorkerStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+export interface DetectorCapabilities {
+    hasNativeBlobDetector: boolean;
+    hasJsFallback: boolean;
+}
+
 export interface OpenCvReadyMessage {
     version?: string;
     buildInformation?: string;
+    capabilities?: DetectorCapabilities;
 }
 
 export interface ProcessFrameParams {
@@ -19,7 +25,7 @@ export interface ProcessFrameParams {
     claheTileGridSize: number;
     blobParams: BlobDetectorParams;
     runDetection: boolean;
-    minConfidence: number;
+    preferFallbackDetector?: boolean;
 }
 
 export interface ProcessFrameResult {
@@ -190,6 +196,7 @@ export class OpenCvWorkerClient {
                 this.readyPayload = {
                     version: message.version,
                     buildInformation: message.buildInformation,
+                    capabilities: message.capabilities,
                 };
                 this.updateStatus('ready', this.readyPayload);
                 if (this.readyResolver) {

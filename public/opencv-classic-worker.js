@@ -4,6 +4,8 @@
 
 const workerCtx = self;
 
+let cvModule = null;
+
 const state = {
     cvReady: false,
     readyPayload: null,
@@ -12,6 +14,12 @@ const state = {
     detector: null,
     detectorKey: null,
     fallbackLoaded: false,
+};
+
+const deleteCvObject = (obj) => {
+    if (obj && typeof obj.delete === 'function') {
+        obj.delete();
+    }
 };
 
 const clamp = (value, min, max) => {
@@ -24,57 +32,160 @@ const postStatus = (status, extra) => {
 
 postStatus('loading', { stage: 'boot' });
 
+const finalizeReady = () => {
+    state.cvReady = true;
+    const payload = {
+        version: resolveVersion() ?? undefined,
+        buildInformation:
+            typeof cvModule.getBuildInformation === 'function'
+                ? cvModule.getBuildInformation()
+                : undefined,
+        capabilities: {
+            hasNativeBlobDetector: supportsNativeBlobDetector(),
+            hasJsFallback: true,
+        },
+    };
+    state.readyPayload = payload;
+    postStatus('ready', payload);
+    workerCtx.postMessage({ type: 'READY', ...payload });
+};
+
+const handleLegacyModule = () => {
+    if (!cvModule) {
+        postStatus('error', { message: 'OpenCV global not found after importScripts' });
+        return;
+    }
+    if (typeof cvModule.onRuntimeInitialized === 'function') {
+        const original = cvModule.onRuntimeInitialized;
+        cvModule.onRuntimeInitialized = () => {
+            try {
+                original();
+            } catch {
+                // ignore original handler errors to avoid swallowing readiness
+            }
+            finalizeReady();
+        };
+    } else {
+        finalizeReady();
+    }
+};
+
 try {
-    importScripts('/opencv.js');
+    importScripts('/opencv_js.js');
     postStatus('loading', { stage: 'importScripts' });
+    const maybeFactory = workerCtx.cv;
+    if (typeof maybeFactory === 'function') {
+        maybeFactory({
+            locateFile(path) {
+                if (path.endsWith('.wasm')) {
+                    return '/opencv_js.wasm';
+                }
+                return path;
+            },
+        })
+            .then((module) => {
+                cvModule = module;
+                workerCtx.cv = module;
+                console.info('[opencv-worker] OpenCV ready', {
+                    hasSimpleBlobDetector: Boolean(module.SimpleBlobDetector),
+                    hasSimpleBlobDetectorParams: Boolean(module.SimpleBlobDetector_Params),
+                });
+                finalizeReady();
+            })
+            .catch((error) => {
+                postStatus('error', {
+                    message: `OpenCV initialization failed: ${
+                        error && error.message ? error.message : String(error)
+                    }`,
+                });
+            });
+    } else {
+        cvModule = workerCtx.cv;
+        handleLegacyModule();
+    }
 } catch (error) {
     postStatus('error', {
-        message: `importScripts(/opencv.js) failed: ${error && error.message ? error.message : String(error)}`,
+        message: `importScripts(/opencv_js.js) failed: ${
+            error && error.message ? error.message : String(error)
+        }`,
     });
 }
 
-const cv = workerCtx.cv;
-
 const resolveVersion = () => {
-    if (!cv) {
+    if (!cvModule) {
         return null;
     }
-    if (typeof cv.version === 'string') {
-        return cv.version;
+    if (typeof cvModule.version === 'string') {
+        return cvModule.version;
     }
-    if (cv.version && typeof cv.version === 'object') {
+    if (cvModule.version && typeof cvModule.version === 'object') {
         const parts = ['major', 'minor', 'revision']
-            .map((key) => (typeof cv.version[key] === 'number' ? cv.version[key] : null))
+            .map((key) =>
+                typeof cvModule.version[key] === 'number' ? cvModule.version[key] : null,
+            )
             .filter((part) => part !== null);
         if (parts.length) {
             const base = parts.join('.');
-            const status = typeof cv.version.status === 'string' ? cv.version.status : '';
+            const status =
+                typeof cvModule.version.status === 'string' ? cvModule.version.status : '';
             return status ? `${base}-${status}` : base;
         }
     }
-    if (typeof cv.VERSION === 'string') {
-        return cv.VERSION;
+    if (typeof cvModule.VERSION === 'string') {
+        return cvModule.VERSION;
     }
     return null;
 };
 
-if (cv) {
-    cv.onRuntimeInitialized = () => {
-        state.cvReady = true;
-        const payload = {
-            version: resolveVersion() ?? undefined,
-            buildInformation:
-                typeof cv.getBuildInformation === 'function' ? cv.getBuildInformation() : undefined,
-        };
-        state.readyPayload = payload;
-        postStatus('ready', payload);
-        workerCtx.postMessage({ type: 'READY', ...payload });
-    };
-} else {
-    postStatus('error', { message: 'OpenCV global not found after importScripts' });
-}
+const createBlobDetectorParams = () => {
+    if (!cvModule || typeof cvModule.SimpleBlobDetector !== 'function') {
+        return null;
+    }
+    if (typeof cvModule.SimpleBlobDetector_Params === 'function') {
+        try {
+            return new cvModule.SimpleBlobDetector_Params();
+        } catch {
+            // Ignore and fall back to cloning default params
+        }
+    }
+    const proto = cvModule.SimpleBlobDetector?.prototype;
+    if (proto && typeof proto.getParams === 'function') {
+        let templateDetector = null;
+        try {
+            templateDetector = new cvModule.SimpleBlobDetector();
+            if (templateDetector && typeof templateDetector.getParams === 'function') {
+                const paramsInstance = templateDetector.getParams();
+                if (paramsInstance) {
+                    return paramsInstance;
+                }
+            }
+        } catch {
+            // Ignore and report unsupported below
+        } finally {
+            deleteCvObject(templateDetector);
+        }
+    }
+    return null;
+};
 
-const supportsNativeBlobDetector = Boolean(cv && typeof cv.SimpleBlobDetector === 'function');
+let nativeBlobDetectorSupported = null;
+
+const supportsNativeBlobDetector = () => {
+    if (!cvModule || typeof cvModule.SimpleBlobDetector !== 'function') {
+        return false;
+    }
+    if (nativeBlobDetectorSupported !== null) {
+        return nativeBlobDetectorSupported;
+    }
+    const paramsProbe = createBlobDetectorParams();
+    if (paramsProbe) {
+        deleteCvObject(paramsProbe);
+        nativeBlobDetectorSupported = true;
+    } else {
+        nativeBlobDetectorSupported = false;
+    }
+    return nativeBlobDetectorSupported;
+};
 
 const ensureCanvasContext = (width, height) => {
     if (!state.canvas || state.canvas.width !== width || state.canvas.height !== height) {
@@ -83,6 +194,9 @@ const ensureCanvasContext = (width, height) => {
     }
     return state.ctx;
 };
+
+let fallbackNoticeLogged = false;
+let nativeWarningLogged = false;
 
 const loadFallbackDetector = () => {
     if (state.fallbackLoaded) {
@@ -96,6 +210,10 @@ const loadFallbackDetector = () => {
             message: `Failed to load blob detector fallback: ${error && error.message ? error.message : String(error)}`,
         });
         state.fallbackLoaded = true;
+    }
+    if (!fallbackNoticeLogged) {
+        console.info('[opencv-worker] Falling back to JS SimpleBlobDetector implementation');
+        fallbackNoticeLogged = true;
     }
     return workerCtx.SimpleBlobDetectorFallback || null;
 };
@@ -113,10 +231,13 @@ const ensureBlobDetector = (params) => {
         return state.detector;
     }
     if (state.detector) {
-        state.detector.delete();
+        deleteCvObject(state.detector);
         state.detector = null;
     }
-    const detectorParams = new cv.SimpleBlobDetector_Params();
+    const detectorParams = createBlobDetectorParams();
+    if (!detectorParams) {
+        return null;
+    }
     detectorParams.minThreshold = params.minThreshold ?? 10;
     detectorParams.maxThreshold = params.maxThreshold ?? 200;
     detectorParams.thresholdStep = params.thresholdStep ?? 10;
@@ -138,51 +259,59 @@ const ensureBlobDetector = (params) => {
     detectorParams.filterByColor = params.filterByColor ?? true;
     detectorParams.blobColor = params.blobColor ?? 255;
 
-    const detector = new cv.SimpleBlobDetector(detectorParams);
+    let detector = null;
+    try {
+        detector = new cvModule.SimpleBlobDetector(detectorParams);
+    } finally {
+        deleteCvObject(detectorParams);
+    }
+    if (!detector) {
+        return null;
+    }
     state.detector = detector;
     state.detectorKey = key;
     return detector;
 };
 
-const detectBlobsNative = (mat, roiRect, params, minConfidence) => {
+const detectBlobsNative = (mat, roiRect, params) => {
     const detector = ensureBlobDetector(params);
     if (!detector) {
         return [];
     }
-    const keypoints = new cv.KeyPointVector();
+    const keypoints = new cvModule.KeyPointVector();
     detector.detect(mat, keypoints);
     const offsetX = roiRect ? roiRect.x : 0;
     const offsetY = roiRect ? roiRect.y : 0;
-    const minResponse = Number.isFinite(minConfidence) ? minConfidence : 0;
     const results = [];
     for (let i = 0; i < keypoints.size(); i += 1) {
         const kp = keypoints.get(i);
-        if (kp && Number.isFinite(kp.response) && kp.response >= minResponse) {
-            results.push({
-                x: kp.pt.x + offsetX,
-                y: kp.pt.y + offsetY,
-                size: kp.size,
-                response: kp.response,
-            });
+        if (!kp) {
+            continue;
         }
+        results.push({
+            x: kp.pt.x + offsetX,
+            y: kp.pt.y + offsetY,
+            size: kp.size,
+            response: Number.isFinite(kp.response) ? kp.response : 0,
+        });
     }
     keypoints.delete();
     return results;
 };
 
-const detectBlobsFallback = (mat, roiRect, params, minConfidence) => {
+const detectBlobsFallback = (mat, roiRect, params) => {
     const fallback = loadFallbackDetector();
     if (!fallback) {
         return [];
     }
-    const colorInput = new cv.Mat();
+    const colorInput = new cvModule.Mat();
     try {
         if (mat.channels() === 1) {
-            cv.cvtColor(mat, colorInput, cv.COLOR_GRAY2RGB);
+            cvModule.cvtColor(mat, colorInput, cvModule.COLOR_GRAY2RGB);
         } else if (mat.channels() === 3) {
             mat.copyTo(colorInput);
         } else {
-            cv.cvtColor(mat, colorInput, cv.COLOR_RGBA2RGB);
+            cvModule.cvtColor(mat, colorInput, cvModule.COLOR_RGBA2RGB);
         }
         const fallbackParams = {
             minRepeatability: params?.minRepeatability ?? 2,
@@ -205,29 +334,32 @@ const detectBlobsFallback = (mat, roiRect, params, minConfidence) => {
         const keypoints = fallback(colorInput, fallbackParams) || [];
         const offsetX = roiRect ? roiRect.x : 0;
         const offsetY = roiRect ? roiRect.y : 0;
-        return keypoints
-            .filter(
-                (kp) =>
-                    !Number.isFinite(minConfidence) ||
-                    kp.response === undefined ||
-                    kp.response >= minConfidence,
-            )
-            .map((kp) => ({
-                x: kp.pt.x + offsetX,
-                y: kp.pt.y + offsetY,
-                size: kp.size,
-                response: 1,
-            }));
+        return keypoints.map((kp) => ({
+            x: kp.pt.x + offsetX,
+            y: kp.pt.y + offsetY,
+            size: kp.size,
+            response: 1,
+        }));
     } finally {
         colorInput.delete();
     }
 };
 
-const detectBlobs = (mat, roiRect, params, minConfidence) => {
-    if (supportsNativeBlobDetector) {
-        return detectBlobsNative(mat, roiRect, params, minConfidence);
+const detectBlobs = (mat, roiRect, params, preferFallback) => {
+    if (!preferFallback && supportsNativeBlobDetector()) {
+        try {
+            return detectBlobsNative(mat, roiRect, params);
+        } catch (error) {
+            if (!nativeWarningLogged) {
+                console.warn(
+                    '[opencv-worker] Native SimpleBlobDetector failed, falling back',
+                    error,
+                );
+                nativeWarningLogged = true;
+            }
+        }
     }
-    return detectBlobsFallback(mat, roiRect, params, minConfidence);
+    return detectBlobsFallback(mat, roiRect, params);
 };
 
 const buildRect = (roi, width, height) => {
@@ -241,7 +373,7 @@ const buildRect = (roi, width, height) => {
     const maxHeight = Math.max(1, Math.floor(roiHeight * height));
     const limitedWidth = Math.max(1, Math.min(maxWidth, width - originX));
     const limitedHeight = Math.max(1, Math.min(maxHeight, height - originY));
-    return new cv.Rect(originX, originY, limitedWidth, limitedHeight);
+    return new cvModule.Rect(originX, originY, limitedWidth, limitedHeight);
 };
 
 const cleanupMats = (mats) => {
@@ -266,7 +398,7 @@ const handleProcessFrame = async (payload) => {
         claheTileGridSize = 8,
         blobParams,
         runDetection,
-        minConfidence = 0,
+        preferFallbackDetector = true,
     } = payload;
     const ctx2d = ensureCanvasContext(width, height);
     if (!ctx2d) {
@@ -282,19 +414,19 @@ const handleProcessFrame = async (payload) => {
     }
 
     const imageData = ctx2d.getImageData(0, 0, width, height);
-    const src = cv.matFromImageData(imageData);
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    const src = cvModule.matFromImageData(imageData);
+    const gray = new cvModule.Mat();
+    cvModule.cvtColor(src, gray, cvModule.COLOR_RGBA2GRAY);
 
-    const adjusted = new cv.Mat();
+    const adjusted = new cvModule.Mat();
     const alpha = Number.isFinite(contrast) ? contrast : 1;
     const beta = Number.isFinite(brightness) ? brightness * 255 : 0;
-    cv.convertScaleAbs(gray, adjusted, alpha, beta);
+    cvModule.convertScaleAbs(gray, adjusted, alpha, beta);
 
-    const claheResult = new cv.Mat();
+    const claheResult = new cvModule.Mat();
     const clipLimit = Math.max(0.1, claheClipLimit || 2);
     const grid = Math.max(1, Math.floor(claheTileGridSize || 8));
-    const clahe = new cv.CLAHE(clipLimit, new cv.Size(grid, grid));
+    const clahe = new cvModule.CLAHE(clipLimit, new cvModule.Size(grid, grid));
     clahe.apply(adjusted, claheResult);
     clahe.delete();
 
@@ -311,14 +443,19 @@ const handleProcessFrame = async (payload) => {
     const detectionRect = roi && roi.enabled ? buildRect(roi, width, height) : null;
     const detectionView = detectionRect ? claheResult.roi(detectionRect) : claheResult;
     const keypoints = runDetection
-        ? detectBlobs(detectionView, detectionRect, blobParams, minConfidence)
+        ? detectBlobs(
+              detectionView,
+              detectionRect,
+              blobParams,
+              Boolean(preferFallbackDetector),
+          )
         : [];
     if (detectionRect && detectionView !== claheResult) {
         detectionView.delete();
     }
 
-    const rgba = new cv.Mat();
-    cv.cvtColor(view, rgba, cv.COLOR_GRAY2RGBA);
+    const rgba = new cvModule.Mat();
+    cvModule.cvtColor(view, rgba, cvModule.COLOR_GRAY2RGBA);
 
     const output = new ImageData(new Uint8ClampedArray(rgba.data), view.cols, view.rows);
     const bitmap = await createImageBitmap(output);

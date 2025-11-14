@@ -129,6 +129,11 @@ After each task finished mark the relevant task if complete and add instructions
 - Structure: place tests alongside their implementation (`App.test.tsx` next to `App.tsx`); avoid shared `__tests__` folders or repo-root specs.
 - Coverage: keep trending toward ≥80%.
 
+## OpenCV / Blob Detection
+
+- The calibration worker (`public/opencv-classic-worker.js`) always runs the same pre-processing pipeline (RGBA → grayscale → CLAHE) and then tries to use OpenCV’s `SimpleBlobDetector`. If the native WASM detector is missing or fails we fall back to the JS implementation in `public/simple-blob-detector.js`.
+- We host both `public/opencv.js` (from `@techstark/opencv-js`) and a custom `public/opencv_js.wasm` build that actually contains `SimpleBlobDetector`. The worker prefers the WASM detector whenever `cv.SimpleBlobDetector` exists; otherwise it sticks to the JS fallback, so keep both assets in sync when touching blob detection logic.
+
 ## Commit & Pull Request Guidelines
 
 - Commits:

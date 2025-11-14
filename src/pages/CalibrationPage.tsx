@@ -98,9 +98,10 @@ const CalibrationPage: React.FC = () => {
     const [blobParams, setBlobParams] = useState<BlobDetectorParams>(() => ({
         ...DEFAULT_BLOB_PARAMS,
     }));
-    const [minConfidence, setMinConfidence] = useState(0.2);
     const [detectedBlobCount, setDetectedBlobCount] = useState(0);
     const [showAdvancedDetection, setShowAdvancedDetection] = useState(false);
+    const [useWasmDetector, setUseWasmDetectorState] = useState(false);
+    const userDetectorPreferenceRef = useRef(false);
     const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
     const [opencvError, setOpenCvError] = useState<string | null>(null);
     const [opencvInfo, setOpenCvInfo] = useState<OpenCvReadyMessage | null>(null);
@@ -135,6 +136,10 @@ const CalibrationPage: React.FC = () => {
         }
         return typeof Worker !== 'undefined' && typeof window.createImageBitmap === 'function';
     }, []);
+
+    const nativeBlobDetectorAvailable = Boolean(
+        opencvInfo?.capabilities?.hasNativeBlobDetector,
+    );
 
     const updateBlobParam = useCallback(
         <K extends keyof BlobDetectorParams>(key: K, value: BlobDetectorParams[K]) => {
@@ -234,6 +239,23 @@ const CalibrationPage: React.FC = () => {
             );
         }
     }, [workerSupported]);
+
+    useEffect(() => {
+        if (!nativeBlobDetectorAvailable && useWasmDetector) {
+            setUseWasmDetectorState(false);
+        }
+    }, [nativeBlobDetectorAvailable, useWasmDetector]);
+
+    useEffect(() => {
+        if (nativeBlobDetectorAvailable && !userDetectorPreferenceRef.current) {
+            setUseWasmDetectorState(true);
+        }
+    }, [nativeBlobDetectorAvailable]);
+
+    const setUseWasmDetector = useCallback((next: boolean) => {
+        userDetectorPreferenceRef.current = true;
+        setUseWasmDetectorState(next);
+    }, []);
 
     const handleRotationPointerDown = () => {
         setIsRotationAdjusting(true);
@@ -471,7 +493,8 @@ const CalibrationPage: React.FC = () => {
                         claheTileGridSize,
                         blobParams,
                         runDetection: true,
-                        minConfidence,
+                        preferFallbackDetector:
+                            !useWasmDetector || !nativeBlobDetectorAvailable,
                     });
                     if (cancelled) {
                         result.frame.close();
@@ -530,10 +553,11 @@ const CalibrationPage: React.FC = () => {
         claheClipLimit,
         claheTileGridSize,
         contrast,
-        minConfidence,
         opencvStatus,
         previewMode,
         shouldUseWorkerRoi,
+        useWasmDetector,
+        nativeBlobDetectorAvailable,
         workerSupported,
     ]);
 
@@ -1189,30 +1213,6 @@ const CalibrationPage: React.FC = () => {
                         <span className="text-xs text-gray-400">Detected: {detectedBlobCount}</span>
                     </div>
                     <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
-                        <div className="flex flex-col gap-1">
-                            <label
-                                htmlFor="blob-confidence"
-                                className="flex items-center justify-between text-sm"
-                            >
-                                <span>Minimum confidence ({Math.round(minConfidence * 100)}%)</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setMinConfidence(0.2)}
-                                    className="text-xs text-emerald-300 hover:text-emerald-200"
-                                >
-                                    Reset
-                                </button>
-                            </label>
-                            <input
-                                id="blob-confidence"
-                                type="range"
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                value={minConfidence}
-                                onChange={(event) => setMinConfidence(Number(event.target.value))}
-                            />
-                        </div>
                         <div className="grid gap-4 md:grid-cols-2">
                             <label className="flex flex-col gap-2">
                                 <span>Min threshold ({blobParams.minThreshold})</span>
@@ -1278,6 +1278,24 @@ const CalibrationPage: React.FC = () => {
                         </button>
                         {showAdvancedDetection && (
                             <div className="grid gap-4 md:grid-cols-2">
+                                <label className="md:col-span-2 flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span>Use WASM detector</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={useWasmDetector && nativeBlobDetectorAvailable}
+                                            onChange={(event) =>
+                                                setUseWasmDetector(event.target.checked)
+                                            }
+                                            disabled={!nativeBlobDetectorAvailable}
+                                        />
+                                    </div>
+                                    <span className="text-xs text-gray-400">
+                                        {nativeBlobDetectorAvailable
+                                            ? 'WASM path is faster; switch off to try the JS fallback.'
+                                            : 'WASM detector unavailable in this build.'}
+                                    </span>
+                                </label>
                                 <label className="flex flex-col gap-2">
                                     <span>Threshold step ({blobParams.thresholdStep})</span>
                                     <input
