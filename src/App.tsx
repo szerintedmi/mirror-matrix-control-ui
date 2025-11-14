@@ -214,7 +214,7 @@ const App: React.FC = () => {
                     />
                 );
             case 'calibration':
-                return <CalibrationPage />;
+                return <CalibrationPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
             case 'editor':
                 return (
                     <PatternEditorPage

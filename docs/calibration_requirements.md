@@ -533,8 +533,8 @@ The playback system must support switching between:
    - Uses only calibration data:
      - Per-tile **home displacement** offsets (dx, dy) in the normalized playback coordinate system.
      - Per-tile **step-to-displacement mappings** (units per step in X and Y).
-    - Normalized **blob size** if needed for wall-space scaling checks.
-    - Profile-level **grid blueprint** metadata (tile footprint, gap, origin) so solver/previews can honor the aligned grid computed during calibration.
+   - Normalized **blob size** if needed for wall-space scaling checks.
+   - Profile-level **grid blueprint** metadata (tile footprint, gap, origin) so solver/previews can honor the aligned grid computed during calibration.
    - Maps pattern coordinates directly to required step movements.
 
 ### 6.2 Mapping Logic (Calibration-Based Mode)

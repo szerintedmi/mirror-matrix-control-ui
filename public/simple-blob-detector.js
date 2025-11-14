@@ -166,8 +166,6 @@
     function simpleBlobDetector(image, params = {}) {
         const options = { ...defaultParams, ...params };
 
-        console.debug('Fallback SimpleBlobDetector', params);
-
         const grayScaleImage = new cv.Mat(image.rows, image.cols, cv.CV_8UC1);
         cv.cvtColor(image, grayScaleImage, cv.COLOR_RGB2GRAY);
 

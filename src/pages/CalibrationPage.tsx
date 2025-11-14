@@ -1,83 +1,103 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import {
-    DEFAULT_BLOB_PARAMS,
-    DetectionSettingsProfile,
-    loadDetectionSettings,
-    loadSavedDetectionSettingsProfiles,
-    persistDetectionSettings,
-    saveDetectionSettingsProfile,
-} from '@/services/detectionSettingsStorage';
+    DEFAULT_CLAHE_CLIP_LIMIT,
+    DEFAULT_CLAHE_TILE_GRID_SIZE,
+    DEFAULT_ROI,
+    RESOLUTION_OPTIONS,
+    clamp01,
+} from '@/constants/calibration';
+import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
+import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
+import { useMotorCommands } from '@/hooks/useMotorCommands';
+import type { BlobMeasurement } from '@/services/calibrationRunner';
+import { persistDetectionSettings } from '@/services/detectionSettingsStorage';
 import type {
-    BlobDetectorParams,
     DetectedBlob,
     OpenCvReadyMessage,
     OpenCvWorkerClient,
     OpenCvWorkerStatus,
 } from '@/services/opencvWorkerClient';
 import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
-import type { NormalizedRoi } from '@/types';
+import type { MirrorConfig, NormalizedRoi } from '@/types';
 
-interface ResolutionOption {
-    id: string;
-    label: string;
-    width?: number;
-    height?: number;
+interface CalibrationPageProps {
+    gridSize: { rows: number; cols: number };
+    mirrorConfig: MirrorConfig;
 }
-
-const RESOLUTION_OPTIONS: ResolutionOption[] = [
-    { id: 'auto', label: 'Auto' },
-    { id: 'vga', label: '640 x 480', width: 640, height: 480 },
-    { id: '720p', label: '1280 x 720', width: 1280, height: 720 },
-    { id: '1080p', label: '1920 x 1080', width: 1920, height: 1080 },
-    { id: '4k', label: '3840 x 2160', width: 3840, height: 2160 },
-];
-
-const DEFAULT_ROI: NormalizedRoi = {
-    enabled: true,
-    x: 0.15,
-    y: 0.15,
-    width: 0.7,
-    height: 0.7,
-};
-
-const DEFAULT_CLAHE_CLIP_LIMIT = 2;
-const DEFAULT_CLAHE_TILE_GRID_SIZE = 8;
-
-const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
-
-const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
-    const width = Math.min(1, Math.max(0.01, roi.width));
-    const height = Math.min(1, Math.max(0.01, roi.height));
-    const x = clamp01(Math.min(roi.x, 1 - width));
-    const y = clamp01(Math.min(roi.y, 1 - height));
-    return {
-        enabled: roi.enabled,
-        x,
-        y,
-        width,
-        height,
-    };
-};
 
 const getLocalStorage = (): Storage | undefined =>
     typeof window !== 'undefined' ? window.localStorage : undefined;
 
-const CalibrationPage: React.FC = () => {
+const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
+    new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new Error('Aborted'));
+            return;
+        }
+        const timer = setTimeout(() => {
+            if (signal) {
+                signal.removeEventListener('abort', onAbort);
+            }
+            resolve();
+        }, ms);
+        const onAbort = () => {
+            clearTimeout(timer);
+            if (signal) {
+                signal.removeEventListener('abort', onAbort);
+            }
+            reject(new Error('Aborted'));
+        };
+        if (signal) {
+            signal.addEventListener('abort', onAbort);
+        }
+    });
+
+const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfig }) => {
+    const detection = useDetectionSettingsController();
+    const {
+        detectionSettingsLoaded,
+        selectedDeviceId,
+        setSelectedDeviceId,
+        selectedResolutionId,
+        setSelectedResolutionId,
+        brightness,
+        setBrightness,
+        contrast,
+        setContrast,
+        rotationDegrees,
+        setRotationDegrees,
+        claheClipLimit,
+        setClaheClipLimit,
+        claheTileGridSize,
+        setClaheTileGridSize,
+        roi,
+        setRoi,
+        blobParams,
+        updateBlobParam,
+        useWasmDetector,
+        setUseWasmDetector,
+        savedProfiles,
+        selectedProfileId,
+        selectProfileId,
+        profileNameInput,
+        setProfileNameInput,
+        applyProfileById,
+        saveProfile,
+        resetProfileSelection,
+        resolvedResolution,
+        currentSettings,
+        handleNativeDetectorAvailability,
+    } = detection;
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-    const [selectedDeviceId, setSelectedDeviceId] = useState<string>('default');
-    const [selectedResolutionId, setSelectedResolutionId] = useState<string>('auto');
     const [previewMode, setPreviewMode] = useState<'raw' | 'processed'>('processed');
-    const [brightness, setBrightness] = useState(0);
-    const [contrast, setContrast] = useState(1);
-    const [rotationDegrees, setRotationDegrees] = useState(0);
     const [isRotationAdjusting, setIsRotationAdjusting] = useState(false);
     const [processedFps, setProcessedFps] = useState(0);
     const [cameraStatus, setCameraStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
         'idle',
     );
     const [cameraError, setCameraError] = useState<string | null>(null);
-    const [roi, setRoi] = useState<NormalizedRoi>(DEFAULT_ROI);
     const [roiViewEnabled, setRoiViewEnabled] = useState(false);
     const [roiEditingMode, setRoiEditingMode] = useState<'idle' | 'drag' | 'resize' | 'draw'>(
         'idle',
@@ -85,19 +105,27 @@ const CalibrationPage: React.FC = () => {
     const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number }>(
         () => ({ width: 0, height: 0 }),
     );
-    const [detectionSettingsLoaded, setDetectionSettingsLoaded] = useState(false);
-    const [savedProfiles, setSavedProfiles] = useState<DetectionSettingsProfile[]>([]);
-    const [selectedProfileId, setSelectedProfileId] = useState('');
-    const [profileNameInput, setProfileNameInput] = useState('');
-    const [claheClipLimit, setClaheClipLimit] = useState(DEFAULT_CLAHE_CLIP_LIMIT);
-    const [claheTileGridSize, setClaheTileGridSize] = useState(DEFAULT_CLAHE_TILE_GRID_SIZE);
-    const [blobParams, setBlobParams] = useState<BlobDetectorParams>(() => ({
-        ...DEFAULT_BLOB_PARAMS,
-    }));
+
+    const handleSaveProfile = useCallback(() => {
+        saveProfile({
+            width: videoDimensions.width > 0 ? videoDimensions.width : null,
+            height: videoDimensions.height > 0 ? videoDimensions.height : null,
+        });
+    }, [saveProfile, videoDimensions.height, videoDimensions.width]);
+
+    const handleLoadProfile = useCallback(() => {
+        if (!selectedProfileId) {
+            return;
+        }
+        applyProfileById(selectedProfileId);
+    }, [applyProfileById, selectedProfileId]);
+
+    const handleNewProfile = useCallback(() => {
+        resetProfileSelection();
+    }, [resetProfileSelection]);
     const [detectedBlobCount, setDetectedBlobCount] = useState(0);
     const [showAdvancedDetection, setShowAdvancedDetection] = useState(false);
-    const [useWasmDetector, setUseWasmDetectorState] = useState(false);
-    const userDetectorPreferenceRef = useRef(false);
+    const motorCommands = useMotorCommands();
     const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
     const [opencvError, setOpenCvError] = useState<string | null>(null);
     const [opencvInfo, setOpenCvInfo] = useState<OpenCvReadyMessage | null>(null);
@@ -125,6 +153,8 @@ const CalibrationPage: React.FC = () => {
         sourceHeight: number;
         appliedRoi: { x: number; y: number; width: number; height: number } | null;
     } | null>(null);
+    const detectionSequenceRef = useRef(0);
+    const detectionUpdatedAtRef = useRef(0);
 
     const workerSupported = useMemo(() => {
         if (typeof window === 'undefined') {
@@ -133,41 +163,69 @@ const CalibrationPage: React.FC = () => {
         return typeof Worker !== 'undefined' && typeof window.createImageBitmap === 'function';
     }, []);
 
-    const nativeBlobDetectorAvailable = Boolean(opencvInfo?.capabilities?.hasNativeBlobDetector);
-
-    const updateBlobParam = useCallback(
-        <K extends keyof BlobDetectorParams>(key: K, value: BlobDetectorParams[K]) => {
-            setBlobParams((prev) => {
-                if (prev[key] === value) {
-                    return prev;
-                }
-                return {
-                    ...prev,
-                    [key]: value,
-                };
-            });
-        },
-        [],
-    );
-
-    const refreshSavedProfiles = useCallback(() => {
-        setSavedProfiles(loadSavedDetectionSettingsProfiles(getLocalStorage()));
+    const readBestBlobMeasurement = useCallback((): BlobMeasurement | null => {
+        const meta = processedFrameMetaRef.current;
+        const blobs = detectionResultsRef.current;
+        if (!meta || !meta.sourceWidth || !meta.sourceHeight || blobs.length === 0) {
+            return null;
+        }
+        const best = blobs.reduce((top, blob) => (blob.response > top.response ? blob : top));
+        const normalizedX = best.x / meta.sourceWidth;
+        const normalizedY = best.y / meta.sourceHeight;
+        const normalizedSize = best.size / Math.max(meta.sourceWidth, meta.sourceHeight);
+        return {
+            x: clamp01(normalizedX),
+            y: clamp01(normalizedY),
+            size: Math.max(0, normalizedSize),
+            response: best.response,
+            capturedAt: detectionUpdatedAtRef.current || performance.now(),
+        };
     }, []);
 
-    useEffect(() => {
-        refreshSavedProfiles();
-    }, [refreshSavedProfiles]);
+    const captureBlobMeasurement = useCallback(
+        async ({ timeoutMs, signal }: { timeoutMs: number; signal?: AbortSignal }) => {
+            const start = performance.now();
+            let baselineSequence = detectionSequenceRef.current;
+            while (performance.now() - start < timeoutMs) {
+                if (signal?.aborted) {
+                    throw new Error('Calibration measurement aborted');
+                }
+                const sequenceChanged = detectionSequenceRef.current !== baselineSequence;
+                if (sequenceChanged) {
+                    const measurement = readBestBlobMeasurement();
+                    baselineSequence = detectionSequenceRef.current;
+                    if (measurement) {
+                        return measurement;
+                    }
+                }
+                await waitFor(50, signal);
+            }
+            return null;
+        },
+        [readBestBlobMeasurement],
+    );
 
-    useEffect(() => {
-        if (!selectedProfileId) {
-            setProfileNameInput('');
-            return;
-        }
-        const next = savedProfiles.find((profile) => profile.id === selectedProfileId);
-        if (next) {
-            setProfileNameInput(next.name);
-        }
-    }, [selectedProfileId, savedProfiles]);
+    const detectionReady = cameraStatus === 'ready' && opencvStatus === 'ready';
+
+    const {
+        runnerState,
+        runnerSettings,
+        updateSetting: updateRunnerSetting,
+        tileEntries,
+        startRunner,
+        pauseRunner,
+        resumeRunner,
+        abortRunner,
+    } = useCalibrationRunnerController({
+        gridSize,
+        mirrorConfig,
+        motorApi: motorCommands,
+        captureMeasurement: captureBlobMeasurement,
+        detectionReady,
+    });
+
+    const nativeBlobDetectorStatus = opencvInfo?.capabilities?.hasNativeBlobDetector;
+    const nativeBlobDetectorAvailable = nativeBlobDetectorStatus === true;
 
     useEffect(() => {
         roiRef.current = roi;
@@ -192,6 +250,30 @@ const CalibrationPage: React.FC = () => {
             cancelled = true;
         };
     }, [roi.enabled, roiViewEnabled]);
+
+    useEffect(() => {
+        if (nativeBlobDetectorStatus === undefined) {
+            return;
+        }
+        handleNativeDetectorAvailability(nativeBlobDetectorStatus);
+    }, [handleNativeDetectorAvailability, nativeBlobDetectorStatus]);
+
+    useEffect(() => {
+        if (!detectionSettingsLoaded) {
+            return;
+        }
+        const storage = getLocalStorage();
+        const lastCaptureWidth = videoDimensions.width > 0 ? videoDimensions.width : null;
+        const lastCaptureHeight = videoDimensions.height > 0 ? videoDimensions.height : null;
+        persistDetectionSettings(storage, {
+            ...currentSettings,
+            roi: {
+                ...currentSettings.roi,
+                lastCaptureWidth,
+                lastCaptureHeight,
+            },
+        });
+    }, [currentSettings, detectionSettingsLoaded, videoDimensions.height, videoDimensions.width]);
 
     useEffect(() => {
         if (!workerSupported) {
@@ -253,167 +335,6 @@ const CalibrationPage: React.FC = () => {
         }
     }, [workerSupported]);
 
-    useEffect(() => {
-        if (!nativeBlobDetectorAvailable && useWasmDetector) {
-            setUseWasmDetectorState(false);
-        }
-    }, [nativeBlobDetectorAvailable, useWasmDetector]);
-
-    useEffect(() => {
-        if (nativeBlobDetectorAvailable && !userDetectorPreferenceRef.current) {
-            setUseWasmDetectorState(true);
-        }
-    }, [nativeBlobDetectorAvailable]);
-
-    useEffect(() => {
-        const storage = getLocalStorage();
-        const storedSettings = loadDetectionSettings(storage);
-        if (storedSettings) {
-            setSelectedDeviceId(storedSettings.camera.deviceId);
-            const resolutionOption = RESOLUTION_OPTIONS.find(
-                (option) => option.id === storedSettings.camera.resolutionId,
-            );
-            setSelectedResolutionId(resolutionOption ? storedSettings.camera.resolutionId : 'auto');
-            setBrightness(storedSettings.processing.brightness);
-            setContrast(storedSettings.processing.contrast);
-            setClaheClipLimit(storedSettings.processing.claheClipLimit);
-            setClaheTileGridSize(storedSettings.processing.claheTileGridSize);
-            setBlobParams(storedSettings.blobParams);
-            setRoi({
-                enabled: storedSettings.roi.enabled,
-                x: storedSettings.roi.x,
-                y: storedSettings.roi.y,
-                width: storedSettings.roi.width,
-                height: storedSettings.roi.height,
-            });
-            setRotationDegrees(storedSettings.processing.rotationDegrees);
-            userDetectorPreferenceRef.current = true;
-            setUseWasmDetectorState(storedSettings.useWasmDetector);
-        }
-        setDetectionSettingsLoaded(true);
-    }, []);
-
-    useEffect(() => {
-        if (!detectionSettingsLoaded) {
-            return;
-        }
-        const storage = getLocalStorage();
-        const lastCaptureWidth = videoDimensions.width > 0 ? videoDimensions.width : null;
-        const lastCaptureHeight = videoDimensions.height > 0 ? videoDimensions.height : null;
-        persistDetectionSettings(storage, {
-            camera: {
-                deviceId: selectedDeviceId,
-                resolutionId: selectedResolutionId,
-            },
-            roi: {
-                ...roi,
-                lastCaptureWidth,
-                lastCaptureHeight,
-            },
-            processing: {
-                brightness,
-                contrast,
-                claheClipLimit,
-                claheTileGridSize,
-                rotationDegrees,
-            },
-            blobParams,
-            useWasmDetector,
-        });
-    }, [
-        detectionSettingsLoaded,
-        selectedDeviceId,
-        selectedResolutionId,
-        roi,
-        brightness,
-        contrast,
-        claheClipLimit,
-        claheTileGridSize,
-        rotationDegrees,
-        blobParams,
-        useWasmDetector,
-        videoDimensions.width,
-        videoDimensions.height,
-    ]);
-
-    const setUseWasmDetector = useCallback((next: boolean) => {
-        userDetectorPreferenceRef.current = true;
-        setUseWasmDetectorState(next);
-    }, []);
-
-    const applySavedProfile = (profile: DetectionSettingsProfile) => {
-        setSelectedDeviceId(profile.settings.camera.deviceId);
-        const resolutionOption = RESOLUTION_OPTIONS.find(
-            (option) => option.id === profile.settings.camera.resolutionId,
-        );
-        setSelectedResolutionId(resolutionOption ? profile.settings.camera.resolutionId : 'auto');
-        setBrightness(profile.settings.processing.brightness);
-        setContrast(profile.settings.processing.contrast);
-        setClaheClipLimit(profile.settings.processing.claheClipLimit);
-        setClaheTileGridSize(profile.settings.processing.claheTileGridSize);
-        setRotationDegrees(profile.settings.processing.rotationDegrees);
-        setBlobParams(profile.settings.blobParams);
-        setRoi({
-            enabled: profile.settings.roi.enabled,
-            x: profile.settings.roi.x,
-            y: profile.settings.roi.y,
-            width: profile.settings.roi.width,
-            height: profile.settings.roi.height,
-        });
-        setUseWasmDetector(profile.settings.useWasmDetector);
-    };
-
-    const handleSaveProfile = () => {
-        const storage = getLocalStorage();
-        const lastCaptureWidth = videoDimensions.width > 0 ? videoDimensions.width : null;
-        const lastCaptureHeight = videoDimensions.height > 0 ? videoDimensions.height : null;
-        const saved = saveDetectionSettingsProfile(storage, {
-            id: selectedProfileId || undefined,
-            name: profileNameInput,
-            settings: {
-                camera: {
-                    deviceId: selectedDeviceId,
-                    resolutionId: selectedResolutionId,
-                },
-                roi: {
-                    ...roi,
-                    lastCaptureWidth,
-                    lastCaptureHeight,
-                },
-                processing: {
-                    brightness,
-                    contrast,
-                    claheClipLimit,
-                    claheTileGridSize,
-                    rotationDegrees,
-                },
-                blobParams,
-                useWasmDetector,
-            },
-        });
-        if (saved) {
-            setSelectedProfileId(saved.id);
-            setProfileNameInput(saved.name);
-            refreshSavedProfiles();
-        }
-    };
-
-    const handleLoadProfile = () => {
-        if (!selectedProfileId) {
-            return;
-        }
-        const profile = savedProfiles.find((entry) => entry.id === selectedProfileId);
-        if (profile) {
-            applySavedProfile(profile);
-            setProfileNameInput(profile.name);
-        }
-    };
-
-    const handleNewProfile = () => {
-        setSelectedProfileId('');
-        setProfileNameInput('');
-    };
-
     const handleRotationPointerDown = () => {
         setIsRotationAdjusting(true);
     };
@@ -421,13 +342,6 @@ const CalibrationPage: React.FC = () => {
     const handleRotationPointerUp = () => {
         setIsRotationAdjusting(false);
     };
-
-    const selectedResolution = useMemo<ResolutionOption>(() => {
-        return (
-            RESOLUTION_OPTIONS.find((option) => option.id === selectedResolutionId) ??
-            RESOLUTION_OPTIONS[0]
-        );
-    }, [selectedResolutionId]);
 
     useEffect(() => {
         const syncDevices = async () => {
@@ -475,8 +389,8 @@ const CalibrationPage: React.FC = () => {
                 video: {
                     deviceId:
                         selectedDeviceId !== 'default' ? { exact: selectedDeviceId } : undefined,
-                    width: selectedResolution.width,
-                    height: selectedResolution.height,
+                    width: resolvedResolution.width,
+                    height: resolvedResolution.height,
                 },
             };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -497,7 +411,7 @@ const CalibrationPage: React.FC = () => {
             setCameraError('Unable to access the selected camera. Please check permissions.');
             stopCurrentStream();
         }
-    }, [selectedDeviceId, selectedResolution.height, selectedResolution.width, stopCurrentStream]);
+    }, [selectedDeviceId, resolvedResolution.height, resolvedResolution.width, stopCurrentStream]);
 
     useEffect(() => {
         if (!detectionSettingsLoaded) {
@@ -675,6 +589,8 @@ const CalibrationPage: React.FC = () => {
                         sourceHeight: result.sourceHeight ?? height,
                         appliedRoi: result.appliedRoi,
                     };
+                    detectionSequenceRef.current += 1;
+                    detectionUpdatedAtRef.current = performance.now();
                     setDetectedBlobCount(detectionResultsRef.current.length);
                     result.frame.close();
                     frames += 1;
@@ -932,7 +848,7 @@ const CalibrationPage: React.FC = () => {
             const y = Math.min(startY, relativeY);
             const width = Math.abs(relativeX - startX);
             const height = Math.abs(relativeY - startY);
-            setRoi((prev) => clampRoi({ ...prev, x, y, width, height }));
+            setRoi((prev) => ({ ...prev, x, y, width, height }));
             return;
         }
         if (state.mode === 'move') {
@@ -943,7 +859,7 @@ const CalibrationPage: React.FC = () => {
                 x: state.initialRoi.x + deltaX,
                 y: state.initialRoi.y + deltaY,
             };
-            setRoi(clampRoi(next));
+            setRoi(next);
             return;
         }
         if (state.mode === 'resize' && state.handle) {
@@ -968,7 +884,6 @@ const CalibrationPage: React.FC = () => {
                 const left = initial.x;
                 next.width = clamp01(relativeX - left);
             }
-            next = clampRoi(next);
             setRoi(next);
         }
     };
@@ -1035,12 +950,11 @@ const CalibrationPage: React.FC = () => {
         const rawVisible =
             showFullFrame &&
             (previewMode === 'raw' || (previewMode === 'processed' && opencvStatus !== 'ready'));
-        const workerOverlayActive =
-            previewMode === 'processed' && opencvStatus !== 'ready' && showFullFrame;
+        const workerOverlayActive = previewMode === 'processed' && opencvStatus !== 'ready';
         const workerOverlayMessage =
-            opencvStatus === 'loading'
-                ? 'OpenCV Worker: Loading…'
-                : `OpenCV Worker: ${opencvError ?? 'Unavailable'}`;
+            opencvStatus === 'error'
+                ? opencvError ?? 'OpenCV initialization failed.'
+                : 'Launching OpenCV…';
         return (
             <div
                 className={previewContainerClass}
@@ -1150,8 +1064,10 @@ const CalibrationPage: React.FC = () => {
                         />
                     )}
                     {workerOverlayActive && (
-                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 px-4 text-center text-sm font-medium text-gray-100">
-                            {workerOverlayMessage}
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/85 px-6 text-center">
+                            <div className="rounded-xl border border-emerald-400/60 bg-black/60 px-6 py-4 text-2xl font-bold uppercase tracking-wide text-white drop-shadow-[0_0_12px_rgba(16,185,129,0.65)]">
+                                {workerOverlayMessage}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1160,572 +1076,616 @@ const CalibrationPage: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col gap-6 lg:flex-row">
-            <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">
-                <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-                    <h2 className="text-lg font-semibold text-gray-100">Camera Setup</h2>
-                    <div className="mt-4 grid gap-4">
-                        <label className="flex flex-col gap-2 text-sm text-gray-300">
-                            Camera Device
-                            <select
-                                value={selectedDeviceId}
-                                onChange={(event) => setSelectedDeviceId(event.target.value)}
-                                className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
-                            >
-                                <option value="default">Default Camera</option>
-                                {devices.map((device) => (
-                                    <option key={device.deviceId} value={device.deviceId}>
-                                        {device.label || `Camera ${device.deviceId}`}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                        <label className="flex flex-col gap-2 text-sm text-gray-300">
-                            Resolution
-                            <select
-                                value={selectedResolutionId}
-                                onChange={(event) => setSelectedResolutionId(event.target.value)}
-                                className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
-                            >
-                                {RESOLUTION_OPTIONS.map((option) => (
-                                    <option key={option.id} value={option.id}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-400">
-                        {videoDimensions.width > 0 && (
-                            <span>
-                                Feed: {videoDimensions.width} × {videoDimensions.height}
-                            </span>
-                        )}
-                        {roi.enabled && (
-                            <span>
-                                ROI: {Math.round(roi.width * videoDimensions.width)} ×{' '}
-                                {Math.round(roi.height * videoDimensions.height)}
-                            </span>
-                        )}
-                        <span>Processed FPS: {processedFps}</span>
-                        {previewMode === 'processed' && (
-                            <span>Detected blobs: {detectedBlobCount}</span>
-                        )}
-                        <span>
-                            OpenCV:{' '}
-                            {opencvStatus === 'ready'
-                                ? (opencvInfo?.version ?? 'Ready')
-                                : opencvStatus === 'loading'
-                                  ? 'Loading…'
-                                  : (opencvError ?? 'Unavailable')}
-                        </span>
-                        {cameraStatus !== 'ready' && <span>Status: {cameraStatus}</span>}
-                    </div>
-                    {cameraError && (
-                        <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                            {cameraError}
-                        </p>
-                    )}
-                </section>
-
-                <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-                    <h2 className="text-lg font-semibold text-gray-100">Processing Controls</h2>
-                    <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
-                        <div className="flex flex-col gap-1">
-                            <label
-                                htmlFor="calibration-brightness"
-                                className="flex items-center justify-between text-sm"
-                            >
-                                <span>Brightness ({brightness.toFixed(2)})</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setBrightness(0)}
-                                    className="text-xs text-emerald-300 hover:text-emerald-200"
-                                    title="Reset brightness"
-                                >
-                                    Reset
-                                </button>
-                            </label>
-                            <input
-                                id="calibration-brightness"
-                                type="range"
-                                min={-1}
-                                max={1}
-                                step={0.05}
-                                value={brightness}
-                                onChange={(event) => setBrightness(Number(event.target.value))}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label
-                                htmlFor="calibration-contrast"
-                                className="flex items-center justify-between text-sm"
-                            >
-                                <span>Contrast ({contrast.toFixed(2)})</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setContrast(1)}
-                                    className="text-xs text-emerald-300 hover:text-emerald-200"
-                                    title="Reset contrast"
-                                >
-                                    Reset
-                                </button>
-                            </label>
-                            <input
-                                id="calibration-contrast"
-                                type="range"
-                                min={0.2}
-                                max={3}
-                                step={0.05}
-                                value={contrast}
-                                onChange={(event) => setContrast(Number(event.target.value))}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label
-                                htmlFor="calibration-clahe-clip"
-                                className="flex items-center justify-between text-sm"
-                            >
-                                <span>CLAHE clip limit ({claheClipLimit.toFixed(2)})</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setClaheClipLimit(DEFAULT_CLAHE_CLIP_LIMIT)}
-                                    className="text-xs text-emerald-300 hover:text-emerald-200"
-                                >
-                                    Reset
-                                </button>
-                            </label>
-                            <input
-                                id="calibration-clahe-clip"
-                                type="range"
-                                min={0.5}
-                                max={8}
-                                step={0.1}
-                                value={claheClipLimit}
-                                onChange={(event) => setClaheClipLimit(Number(event.target.value))}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label
-                                htmlFor="calibration-clahe-grid"
-                                className="flex items-center justify-between text-sm"
-                            >
-                                <span>CLAHE tile grid ({claheTileGridSize})</span>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setClaheTileGridSize(DEFAULT_CLAHE_TILE_GRID_SIZE)
-                                    }
-                                    className="text-xs text-emerald-300 hover:text-emerald-200"
-                                >
-                                    Reset
-                                </button>
-                            </label>
-                            <input
-                                id="calibration-clahe-grid"
-                                type="range"
-                                min={2}
-                                max={32}
-                                step={2}
-                                value={claheTileGridSize}
-                                onChange={(event) =>
-                                    setClaheTileGridSize(Number(event.target.value))
-                                }
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label
-                                htmlFor="calibration-rotation"
-                                className="flex items-center justify-between text-sm"
-                            >
-                                <span>Horizontal rotation ({rotationDegrees.toFixed(2)}°)</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setRotationDegrees(0)}
-                                    className="text-xs text-emerald-300 hover:text-emerald-200"
-                                    title="Reset rotation"
-                                >
-                                    Reset
-                                </button>
-                            </label>
-                            <input
-                                id="calibration-rotation"
-                                type="range"
-                                min={-10}
-                                max={10}
-                                step={0.1}
-                                value={rotationDegrees}
-                                onChange={(event) => setRotationDegrees(Number(event.target.value))}
-                                onPointerDown={handleRotationPointerDown}
-                                onPointerUp={handleRotationPointerUp}
-                                onPointerLeave={handleRotationPointerUp}
-                                onTouchEnd={handleRotationPointerUp}
-                                onBlur={handleRotationPointerUp}
-                            />
-                        </div>
-                    </div>
-                </section>
-
-                <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-100">Detection Profiles</h2>
-                        <span className="text-xs text-gray-400">{savedProfiles.length} saved</span>
-                    </div>
-                    <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
-                        <label className="flex flex-col gap-2">
-                            <span>Profile name</span>
-                            <input
-                                type="text"
-                                value={profileNameInput}
-                                onChange={(event) => setProfileNameInput(event.target.value)}
-                                placeholder="e.g. Lab baseline"
-                                className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
-                            />
-                        </label>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={handleSaveProfile}
-                                className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300 hover:border-emerald-400"
-                            >
-                                Save profile
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleNewProfile}
-                                className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-200 hover:border-gray-500"
-                            >
-                                New profile
-                            </button>
-                        </div>
-                        <label className="flex flex-col gap-2">
-                            <span>Saved settings</span>
-                            <div className="flex gap-2">
+        <div className="flex flex-col gap-6">
+            <CalibrationRunnerPanel
+                runnerState={runnerState}
+                runnerSettings={runnerSettings}
+                tileEntries={tileEntries}
+                detectionReady={detectionReady}
+                onUpdateSetting={updateRunnerSetting}
+                onStart={startRunner}
+                onPause={pauseRunner}
+                onResume={resumeRunner}
+                onAbort={abortRunner}
+            />
+            <div className="flex flex-col gap-6 lg:flex-row">
+                <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">
+                    <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                        <h2 className="text-lg font-semibold text-gray-100">Camera Setup</h2>
+                        <div className="mt-4 grid gap-4">
+                            <label className="flex flex-col gap-2 text-sm text-gray-300">
+                                Camera Device
                                 <select
-                                    value={selectedProfileId}
-                                    onChange={(event) => setSelectedProfileId(event.target.value)}
-                                    className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
+                                    value={selectedDeviceId}
+                                    onChange={(event) => setSelectedDeviceId(event.target.value)}
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
                                 >
-                                    <option value="">Select saved profile</option>
-                                    {savedProfiles.map((profile) => (
-                                        <option key={profile.id} value={profile.id}>
-                                            {profile.name}
+                                    <option value="default">Default Camera</option>
+                                    {devices.map((device) => (
+                                        <option key={device.deviceId} value={device.deviceId}>
+                                            {device.label || `Camera ${device.deviceId}`}
                                         </option>
                                     ))}
                                 </select>
-                                <button
-                                    type="button"
-                                    onClick={handleLoadProfile}
-                                    disabled={!selectedProfileId}
-                                    className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300 disabled:opacity-40"
+                            </label>
+                            <label className="flex flex-col gap-2 text-sm text-gray-300">
+                                Resolution
+                                <select
+                                    value={selectedResolutionId}
+                                    onChange={(event) =>
+                                        setSelectedResolutionId(event.target.value)
+                                    }
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
                                 >
-                                    Load
-                                </button>
-                            </div>
-                        </label>
-                    </div>
-                </section>
-
-                <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-100">Blob Detection</h2>
-                        <span className="text-xs text-gray-400">Detected: {detectedBlobCount}</span>
-                    </div>
-                    <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <label className="flex flex-col gap-2">
-                                <span>Min threshold ({blobParams.minThreshold})</span>
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={255}
-                                    step={5}
-                                    value={blobParams.minThreshold}
-                                    onChange={(event) =>
-                                        updateBlobParam('minThreshold', Number(event.target.value))
-                                    }
-                                />
-                            </label>
-                            <label className="flex flex-col gap-2">
-                                <span>Max threshold ({blobParams.maxThreshold})</span>
-                                <input
-                                    type="range"
-                                    min={50}
-                                    max={255}
-                                    step={5}
-                                    value={blobParams.maxThreshold}
-                                    onChange={(event) =>
-                                        updateBlobParam('maxThreshold', Number(event.target.value))
-                                    }
-                                />
-                            </label>
-                            <label className="flex flex-col gap-2">
-                                <span>Min area ({blobParams.minArea} px)</span>
-                                <input
-                                    type="range"
-                                    min={100}
-                                    max={5000}
-                                    step={100}
-                                    value={blobParams.minArea}
-                                    onChange={(event) =>
-                                        updateBlobParam('minArea', Number(event.target.value))
-                                    }
-                                />
-                            </label>
-                            <label className="flex flex-col gap-2">
-                                <span>Max area ({blobParams.maxArea} px)</span>
-                                <input
-                                    type="range"
-                                    min={5000}
-                                    max={40000}
-                                    step={500}
-                                    value={blobParams.maxArea}
-                                    onChange={(event) =>
-                                        updateBlobParam('maxArea', Number(event.target.value))
-                                    }
-                                />
+                                    {RESOLUTION_OPTIONS.map((option) => (
+                                        <option key={option.id} value={option.id}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </label>
                         </div>
-                        <button
-                            type="button"
-                            className="text-xs text-emerald-300 hover:text-emerald-200"
-                            onClick={() => setShowAdvancedDetection((prev) => !prev)}
-                        >
-                            {showAdvancedDetection
-                                ? 'Hide advanced parameters'
-                                : 'Show advanced parameters'}
-                        </button>
-                        {showAdvancedDetection && (
+                        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-400">
+                            {videoDimensions.width > 0 && (
+                                <span>
+                                    Feed: {videoDimensions.width} × {videoDimensions.height}
+                                </span>
+                            )}
+                            {roi.enabled && (
+                                <span>
+                                    ROI: {Math.round(roi.width * videoDimensions.width)} ×{' '}
+                                    {Math.round(roi.height * videoDimensions.height)}
+                                </span>
+                            )}
+                            <span>Processed FPS: {processedFps}</span>
+                            {previewMode === 'processed' && (
+                                <span>Detected blobs: {detectedBlobCount}</span>
+                            )}
+                            <span>
+                                OpenCV:{' '}
+                                {opencvStatus === 'ready'
+                                    ? (opencvInfo?.version ?? 'Ready')
+                                    : opencvStatus === 'loading'
+                                      ? 'Loading…'
+                                      : (opencvError ?? 'Unavailable')}
+                            </span>
+                            {cameraStatus !== 'ready' && <span>Status: {cameraStatus}</span>}
+                        </div>
+                        {cameraError && (
+                            <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                                {cameraError}
+                            </p>
+                        )}
+                    </section>
+
+                    <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                        <h2 className="text-lg font-semibold text-gray-100">Processing Controls</h2>
+                        <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
+                            <div className="flex flex-col gap-1">
+                                <label
+                                    htmlFor="calibration-brightness"
+                                    className="flex items-center justify-between text-sm"
+                                >
+                                    <span>Brightness ({brightness.toFixed(2)})</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setBrightness(0)}
+                                        className="text-xs text-emerald-300 hover:text-emerald-200"
+                                        title="Reset brightness"
+                                    >
+                                        Reset
+                                    </button>
+                                </label>
+                                <input
+                                    id="calibration-brightness"
+                                    type="range"
+                                    min={-1}
+                                    max={1}
+                                    step={0.05}
+                                    value={brightness}
+                                    onChange={(event) => setBrightness(Number(event.target.value))}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label
+                                    htmlFor="calibration-contrast"
+                                    className="flex items-center justify-between text-sm"
+                                >
+                                    <span>Contrast ({contrast.toFixed(2)})</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setContrast(1)}
+                                        className="text-xs text-emerald-300 hover:text-emerald-200"
+                                        title="Reset contrast"
+                                    >
+                                        Reset
+                                    </button>
+                                </label>
+                                <input
+                                    id="calibration-contrast"
+                                    type="range"
+                                    min={0.2}
+                                    max={3}
+                                    step={0.05}
+                                    value={contrast}
+                                    onChange={(event) => setContrast(Number(event.target.value))}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label
+                                    htmlFor="calibration-clahe-clip"
+                                    className="flex items-center justify-between text-sm"
+                                >
+                                    <span>CLAHE clip limit ({claheClipLimit.toFixed(2)})</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setClaheClipLimit(DEFAULT_CLAHE_CLIP_LIMIT)}
+                                        className="text-xs text-emerald-300 hover:text-emerald-200"
+                                    >
+                                        Reset
+                                    </button>
+                                </label>
+                                <input
+                                    id="calibration-clahe-clip"
+                                    type="range"
+                                    min={0.5}
+                                    max={8}
+                                    step={0.1}
+                                    value={claheClipLimit}
+                                    onChange={(event) =>
+                                        setClaheClipLimit(Number(event.target.value))
+                                    }
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label
+                                    htmlFor="calibration-clahe-grid"
+                                    className="flex items-center justify-between text-sm"
+                                >
+                                    <span>CLAHE tile grid ({claheTileGridSize})</span>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setClaheTileGridSize(DEFAULT_CLAHE_TILE_GRID_SIZE)
+                                        }
+                                        className="text-xs text-emerald-300 hover:text-emerald-200"
+                                    >
+                                        Reset
+                                    </button>
+                                </label>
+                                <input
+                                    id="calibration-clahe-grid"
+                                    type="range"
+                                    min={2}
+                                    max={32}
+                                    step={2}
+                                    value={claheTileGridSize}
+                                    onChange={(event) =>
+                                        setClaheTileGridSize(Number(event.target.value))
+                                    }
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label
+                                    htmlFor="calibration-rotation"
+                                    className="flex items-center justify-between text-sm"
+                                >
+                                    <span>Horizontal rotation ({rotationDegrees.toFixed(2)}°)</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRotationDegrees(0)}
+                                        className="text-xs text-emerald-300 hover:text-emerald-200"
+                                        title="Reset rotation"
+                                    >
+                                        Reset
+                                    </button>
+                                </label>
+                                <input
+                                    id="calibration-rotation"
+                                    type="range"
+                                    min={-10}
+                                    max={10}
+                                    step={0.1}
+                                    value={rotationDegrees}
+                                    onChange={(event) =>
+                                        setRotationDegrees(Number(event.target.value))
+                                    }
+                                    onPointerDown={handleRotationPointerDown}
+                                    onPointerUp={handleRotationPointerUp}
+                                    onPointerLeave={handleRotationPointerUp}
+                                    onTouchEnd={handleRotationPointerUp}
+                                    onBlur={handleRotationPointerUp}
+                                />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-gray-100">
+                                Detection Profiles
+                            </h2>
+                            <span className="text-xs text-gray-400">
+                                {savedProfiles.length} saved
+                            </span>
+                        </div>
+                        <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
+                            <label className="flex flex-col gap-2">
+                                <span>Profile name</span>
+                                <input
+                                    type="text"
+                                    value={profileNameInput}
+                                    onChange={(event) => setProfileNameInput(event.target.value)}
+                                    placeholder="e.g. Lab baseline"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
+                                />
+                            </label>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleSaveProfile}
+                                    className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300 hover:border-emerald-400"
+                                >
+                                    Save profile
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleNewProfile}
+                                    className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-200 hover:border-gray-500"
+                                >
+                                    New profile
+                                </button>
+                            </div>
+                            <label className="flex flex-col gap-2">
+                                <span>Saved settings</span>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={selectedProfileId}
+                                        onChange={(event) => selectProfileId(event.target.value)}
+                                        className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
+                                    >
+                                        <option value="">Select saved profile</option>
+                                        {savedProfiles.map((profile) => (
+                                            <option key={profile.id} value={profile.id}>
+                                                {profile.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={handleLoadProfile}
+                                        disabled={!selectedProfileId}
+                                        className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300 disabled:opacity-40"
+                                    >
+                                        Load
+                                    </button>
+                                </div>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-gray-100">Blob Detection</h2>
+                            <span className="text-xs text-gray-400">
+                                Detected: {detectedBlobCount}
+                            </span>
+                        </div>
+                        <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
                             <div className="grid gap-4 md:grid-cols-2">
-                                <label className="md:col-span-2 flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span>Use WASM detector</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={useWasmDetector && nativeBlobDetectorAvailable}
-                                            onChange={(event) =>
-                                                setUseWasmDetector(event.target.checked)
-                                            }
-                                            disabled={!nativeBlobDetectorAvailable}
-                                        />
-                                    </div>
-                                    <span className="text-xs text-gray-400">
-                                        {nativeBlobDetectorAvailable
-                                            ? 'WASM path is faster; switch off to try the JS fallback.'
-                                            : 'WASM detector unavailable in this build.'}
-                                    </span>
-                                </label>
                                 <label className="flex flex-col gap-2">
-                                    <span>Threshold step ({blobParams.thresholdStep})</span>
-                                    <input
-                                        type="range"
-                                        min={1}
-                                        max={50}
-                                        step={1}
-                                        value={blobParams.thresholdStep}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'thresholdStep',
-                                                Number(event.target.value),
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="flex flex-col gap-2">
-                                    <span>Min distance ({blobParams.minDistBetweenBlobs} px)</span>
-                                    <input
-                                        type="range"
-                                        min={5}
-                                        max={100}
-                                        step={5}
-                                        value={blobParams.minDistBetweenBlobs}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'minDistBetweenBlobs',
-                                                Number(event.target.value),
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="flex items-center justify-between gap-2">
-                                    <span>Filter by convexity</span>
-                                    <input
-                                        type="checkbox"
-                                        checked={blobParams.filterByConvexity}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'filterByConvexity',
-                                                event.target.checked,
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="flex flex-col gap-2">
-                                    <span>
-                                        Min convexity ({blobParams.minConvexity.toFixed(2)})
-                                    </span>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={blobParams.minConvexity}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'minConvexity',
-                                                Number(event.target.value),
-                                            )
-                                        }
-                                        disabled={!blobParams.filterByConvexity}
-                                    />
-                                </label>
-                                <label className="flex items-center justify-between gap-2">
-                                    <span>Filter by inertia</span>
-                                    <input
-                                        type="checkbox"
-                                        checked={blobParams.filterByInertia}
-                                        onChange={(event) =>
-                                            updateBlobParam('filterByInertia', event.target.checked)
-                                        }
-                                    />
-                                </label>
-                                <label className="flex flex-col gap-2">
-                                    <span>
-                                        Min inertia ({blobParams.minInertiaRatio.toFixed(2)})
-                                    </span>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={blobParams.minInertiaRatio}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'minInertiaRatio',
-                                                Number(event.target.value),
-                                            )
-                                        }
-                                        disabled={!blobParams.filterByInertia}
-                                    />
-                                </label>
-                                <label className="flex items-center justify-between gap-2">
-                                    <span>Filter by circularity</span>
-                                    <input
-                                        type="checkbox"
-                                        checked={blobParams.filterByCircularity}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'filterByCircularity',
-                                                event.target.checked,
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="flex flex-col gap-2">
-                                    <span>
-                                        Min circularity ({blobParams.minCircularity.toFixed(2)})
-                                    </span>
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        value={blobParams.minCircularity}
-                                        onChange={(event) =>
-                                            updateBlobParam(
-                                                'minCircularity',
-                                                Number(event.target.value),
-                                            )
-                                        }
-                                        disabled={!blobParams.filterByCircularity}
-                                    />
-                                </label>
-                                <label className="flex items-center justify-between gap-2">
-                                    <span>Filter by color</span>
-                                    <input
-                                        type="checkbox"
-                                        checked={blobParams.filterByColor}
-                                        onChange={(event) =>
-                                            updateBlobParam('filterByColor', event.target.checked)
-                                        }
-                                    />
-                                </label>
-                                <label className="flex flex-col gap-2">
-                                    <span>Blob color ({blobParams.blobColor})</span>
+                                    <span>Min threshold ({blobParams.minThreshold})</span>
                                     <input
                                         type="range"
                                         min={0}
                                         max={255}
                                         step={5}
-                                        value={blobParams.blobColor}
+                                        value={blobParams.minThreshold}
                                         onChange={(event) =>
-                                            updateBlobParam('blobColor', Number(event.target.value))
+                                            updateBlobParam(
+                                                'minThreshold',
+                                                Number(event.target.value),
+                                            )
                                         }
-                                        disabled={!blobParams.filterByColor}
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>Max threshold ({blobParams.maxThreshold})</span>
+                                    <input
+                                        type="range"
+                                        min={50}
+                                        max={255}
+                                        step={5}
+                                        value={blobParams.maxThreshold}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'maxThreshold',
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>Min area ({blobParams.minArea} px)</span>
+                                    <input
+                                        type="range"
+                                        min={100}
+                                        max={5000}
+                                        step={100}
+                                        value={blobParams.minArea}
+                                        onChange={(event) =>
+                                            updateBlobParam('minArea', Number(event.target.value))
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>Max area ({blobParams.maxArea} px)</span>
+                                    <input
+                                        type="range"
+                                        min={5000}
+                                        max={40000}
+                                        step={500}
+                                        value={blobParams.maxArea}
+                                        onChange={(event) =>
+                                            updateBlobParam('maxArea', Number(event.target.value))
+                                        }
                                     />
                                 </label>
                             </div>
-                        )}
+                            <button
+                                type="button"
+                                className="text-xs text-emerald-300 hover:text-emerald-200"
+                                onClick={() => setShowAdvancedDetection((prev) => !prev)}
+                            >
+                                {showAdvancedDetection
+                                    ? 'Hide advanced parameters'
+                                    : 'Show advanced parameters'}
+                            </button>
+                            {showAdvancedDetection && (
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="md:col-span-2 flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span>Use WASM detector</span>
+                                            <input
+                                                type="checkbox"
+                                                checked={
+                                                    useWasmDetector && nativeBlobDetectorAvailable
+                                                }
+                                                onChange={(event) =>
+                                                    setUseWasmDetector(event.target.checked)
+                                                }
+                                                disabled={!nativeBlobDetectorAvailable}
+                                            />
+                                        </div>
+                                        <span className="text-xs text-gray-400">
+                                            {nativeBlobDetectorAvailable
+                                                ? 'WASM path is faster; switch off to try the JS fallback.'
+                                                : 'WASM detector unavailable in this build.'}
+                                        </span>
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span>Threshold step ({blobParams.thresholdStep})</span>
+                                        <input
+                                            type="range"
+                                            min={1}
+                                            max={50}
+                                            step={1}
+                                            value={blobParams.thresholdStep}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'thresholdStep',
+                                                    Number(event.target.value),
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span>
+                                            Min distance ({blobParams.minDistBetweenBlobs} px)
+                                        </span>
+                                        <input
+                                            type="range"
+                                            min={5}
+                                            max={100}
+                                            step={5}
+                                            value={blobParams.minDistBetweenBlobs}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'minDistBetweenBlobs',
+                                                    Number(event.target.value),
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="flex items-center justify-between gap-2">
+                                        <span>Filter by convexity</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={blobParams.filterByConvexity}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'filterByConvexity',
+                                                    event.target.checked,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span>
+                                            Min convexity ({blobParams.minConvexity.toFixed(2)})
+                                        </span>
+                                        <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={blobParams.minConvexity}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'minConvexity',
+                                                    Number(event.target.value),
+                                                )
+                                            }
+                                            disabled={!blobParams.filterByConvexity}
+                                        />
+                                    </label>
+                                    <label className="flex items-center justify-between gap-2">
+                                        <span>Filter by inertia</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={blobParams.filterByInertia}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'filterByInertia',
+                                                    event.target.checked,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span>
+                                            Min inertia ({blobParams.minInertiaRatio.toFixed(2)})
+                                        </span>
+                                        <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={blobParams.minInertiaRatio}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'minInertiaRatio',
+                                                    Number(event.target.value),
+                                                )
+                                            }
+                                            disabled={!blobParams.filterByInertia}
+                                        />
+                                    </label>
+                                    <label className="flex items-center justify-between gap-2">
+                                        <span>Filter by circularity</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={blobParams.filterByCircularity}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'filterByCircularity',
+                                                    event.target.checked,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span>
+                                            Min circularity ({blobParams.minCircularity.toFixed(2)})
+                                        </span>
+                                        <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={blobParams.minCircularity}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'minCircularity',
+                                                    Number(event.target.value),
+                                                )
+                                            }
+                                            disabled={!blobParams.filterByCircularity}
+                                        />
+                                    </label>
+                                    <label className="flex items-center justify-between gap-2">
+                                        <span>Filter by color</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={blobParams.filterByColor}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'filterByColor',
+                                                    event.target.checked,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span>Blob color ({blobParams.blobColor})</span>
+                                        <input
+                                            type="range"
+                                            min={0}
+                                            max={255}
+                                            step={5}
+                                            value={blobParams.blobColor}
+                                            onChange={(event) =>
+                                                updateBlobParam(
+                                                    'blobColor',
+                                                    Number(event.target.value),
+                                                )
+                                            }
+                                            disabled={!blobParams.filterByColor}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                </div>
+
+                <section className="flex-1 min-w-0 rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                    <div className="mb-4 flex flex-wrap items-center gap-3">
+                        <div className="inline-flex rounded-md border border-gray-700 bg-gray-900 text-sm">
+                            {(['raw', 'processed'] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    className={`px-3 py-1 ${
+                                        previewMode === mode
+                                            ? 'bg-emerald-500/20 text-emerald-300'
+                                            : 'text-gray-400'
+                                    }`}
+                                    onClick={() => setPreviewMode(mode)}
+                                >
+                                    {mode === 'raw' ? 'Raw view' : 'Processed view'}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={toggleRoiEnabled}
+                            className={`rounded-md border px-3 py-1 text-sm ${
+                                roi.enabled
+                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                                    : 'border-gray-700 bg-gray-900 text-gray-400'
+                            }`}
+                        >
+                            ROI {roi.enabled ? 'Enabled' : 'Disabled'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setRoiViewEnabled((prev) => !prev)}
+                            disabled={!roi.enabled}
+                            className={`rounded-md border px-3 py-1 text-sm ${
+                                roiViewEnabled
+                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                                    : 'border-gray-700 bg-gray-900 text-gray-400'
+                            } ${!roi.enabled ? 'opacity-50' : ''}`}
+                            title={
+                                roi.enabled
+                                    ? 'Toggle cropped ROI preview'
+                                    : 'Enable ROI to use this view'
+                            }
+                        >
+                            ROI view {roiViewEnabled ? 'On' : 'Off'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={resetRoi}
+                            className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-300 hover:border-gray-500"
+                        >
+                            Reset ROI
+                        </button>
                     </div>
+                    {renderPreview()}
                 </section>
             </div>
-
-            <section className="flex-1 min-w-0 rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-                <div className="mb-4 flex flex-wrap items-center gap-3">
-                    <div className="inline-flex rounded-md border border-gray-700 bg-gray-900 text-sm">
-                        {(['raw', 'processed'] as const).map((mode) => (
-                            <button
-                                key={mode}
-                                type="button"
-                                className={`px-3 py-1 ${
-                                    previewMode === mode
-                                        ? 'bg-emerald-500/20 text-emerald-300'
-                                        : 'text-gray-400'
-                                }`}
-                                onClick={() => setPreviewMode(mode)}
-                            >
-                                {mode === 'raw' ? 'Raw view' : 'Processed view'}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        type="button"
-                        onClick={toggleRoiEnabled}
-                        className={`rounded-md border px-3 py-1 text-sm ${
-                            roi.enabled
-                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                                : 'border-gray-700 bg-gray-900 text-gray-400'
-                        }`}
-                    >
-                        ROI {roi.enabled ? 'Enabled' : 'Disabled'}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setRoiViewEnabled((prev) => !prev)}
-                        disabled={!roi.enabled}
-                        className={`rounded-md border px-3 py-1 text-sm ${
-                            roiViewEnabled
-                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                                : 'border-gray-700 bg-gray-900 text-gray-400'
-                        } ${!roi.enabled ? 'opacity-50' : ''}`}
-                        title={
-                            roi.enabled
-                                ? 'Toggle cropped ROI preview'
-                                : 'Enable ROI to use this view'
-                        }
-                    >
-                        ROI view {roiViewEnabled ? 'On' : 'Off'}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={resetRoi}
-                        className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-300 hover:border-gray-500"
-                    >
-                        Reset ROI
-                    </button>
-                </div>
-                {renderPreview()}
-            </section>
         </div>
     );
 };

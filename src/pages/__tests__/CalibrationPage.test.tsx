@@ -4,6 +4,23 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import CalibrationPage from '../CalibrationPage';
 
+import type { MirrorConfig } from '../../types';
+
+const mockCommandResult = {
+    status: 'done',
+    cmdId: 'mock-cmd',
+    action: 'MOCK',
+};
+
+vi.mock('@/hooks/useMotorCommands', () => ({
+    useMotorCommands: () => ({
+        nudgeMotor: vi.fn(),
+        homeMotor: vi.fn().mockResolvedValue({ mac: 'mock', completion: mockCommandResult }),
+        homeAll: vi.fn().mockResolvedValue([{ mac: 'mock', completion: mockCommandResult }]),
+        moveMotor: vi.fn().mockResolvedValue(mockCommandResult),
+    }),
+}));
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const originalNavigator = globalThis.navigator;
@@ -68,8 +85,11 @@ const renderPage = async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
+    const mirrorConfig: MirrorConfig = new Map();
     await act(async () => {
-        root.render(<CalibrationPage />);
+        root.render(
+            <CalibrationPage gridSize={{ rows: 2, cols: 2 }} mirrorConfig={mirrorConfig} />,
+        );
     });
     // flush pending microtasks/startStream
     await act(async () => {
