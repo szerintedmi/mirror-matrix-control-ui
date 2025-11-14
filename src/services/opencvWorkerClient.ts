@@ -15,13 +15,53 @@ export interface ProcessFrameParams {
     contrast: number;
     roi: NormalizedRoi;
     applyRoi: boolean;
+    claheClipLimit: number;
+    claheTileGridSize: number;
+    blobParams: BlobDetectorParams;
+    runDetection: boolean;
+    minConfidence: number;
 }
 
 export interface ProcessFrameResult {
     requestId: number;
     width: number;
     height: number;
+    sourceWidth: number;
+    sourceHeight: number;
+    appliedRoi: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null;
+    keypoints: DetectedBlob[];
     frame: ImageBitmap;
+}
+
+export interface DetectedBlob {
+    x: number;
+    y: number;
+    size: number;
+    response: number;
+}
+
+export interface BlobDetectorParams {
+    minThreshold: number;
+    maxThreshold: number;
+    thresholdStep: number;
+    minDistBetweenBlobs: number;
+    minRepeatability: number;
+    filterByArea: boolean;
+    minArea: number;
+    maxArea: number;
+    filterByCircularity: boolean;
+    minCircularity: number;
+    filterByConvexity: boolean;
+    minConvexity: number;
+    filterByInertia: boolean;
+    minInertiaRatio: number;
+    filterByColor: boolean;
+    blobColor: number;
 }
 
 interface StatusMessage extends OpenCvReadyMessage {

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
+    BlobDetectorParams,
+    DetectedBlob,
     OpenCvReadyMessage,
     OpenCvWorkerClient,
     OpenCvWorkerStatus,
@@ -29,6 +31,28 @@ const DEFAULT_ROI: NormalizedRoi = {
     y: 0.15,
     width: 0.7,
     height: 0.7,
+};
+
+const DEFAULT_CLAHE_CLIP_LIMIT = 2;
+const DEFAULT_CLAHE_TILE_GRID_SIZE = 8;
+
+const DEFAULT_BLOB_PARAMS: BlobDetectorParams = {
+    minThreshold: 30,
+    maxThreshold: 255,
+    thresholdStep: 10,
+    minDistBetweenBlobs: 10,
+    minRepeatability: 2,
+    filterByArea: true,
+    minArea: 1500,
+    maxArea: 15000,
+    filterByCircularity: false,
+    minCircularity: 0.5,
+    filterByConvexity: true,
+    minConvexity: 0.6,
+    filterByInertia: true,
+    minInertiaRatio: 0.6,
+    filterByColor: true,
+    blobColor: 255,
 };
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -69,6 +93,14 @@ const CalibrationPage: React.FC = () => {
     const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number }>(
         () => ({ width: 0, height: 0 }),
     );
+    const [claheClipLimit, setClaheClipLimit] = useState(DEFAULT_CLAHE_CLIP_LIMIT);
+    const [claheTileGridSize, setClaheTileGridSize] = useState(DEFAULT_CLAHE_TILE_GRID_SIZE);
+    const [blobParams, setBlobParams] = useState<BlobDetectorParams>(() => ({
+        ...DEFAULT_BLOB_PARAMS,
+    }));
+    const [minConfidence, setMinConfidence] = useState(0.2);
+    const [detectedBlobCount, setDetectedBlobCount] = useState(0);
+    const [showAdvancedDetection, setShowAdvancedDetection] = useState(false);
     const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
     const [opencvError, setOpenCvError] = useState<string | null>(null);
     const [opencvInfo, setOpenCvInfo] = useState<OpenCvReadyMessage | null>(null);
@@ -78,6 +110,7 @@ const CalibrationPage: React.FC = () => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const processedCanvasRef = useRef<HTMLCanvasElement>(null);
     const roiCanvasRef = useRef<HTMLCanvasElement>(null);
+    const detectionOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const rotatedCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -89,6 +122,12 @@ const CalibrationPage: React.FC = () => {
         handle?: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
     } | null>(null);
     const roiRef = useRef<NormalizedRoi>(roi);
+    const detectionResultsRef = useRef<DetectedBlob[]>([]);
+    const processedFrameMetaRef = useRef<{
+        sourceWidth: number;
+        sourceHeight: number;
+        appliedRoi: { x: number; y: number; width: number; height: number } | null;
+    } | null>(null);
 
     const workerSupported = useMemo(() => {
         if (typeof window === 'undefined') {
@@ -96,6 +135,21 @@ const CalibrationPage: React.FC = () => {
         }
         return typeof Worker !== 'undefined' && typeof window.createImageBitmap === 'function';
     }, []);
+
+    const updateBlobParam = useCallback(
+        <K extends keyof BlobDetectorParams>(key: K, value: BlobDetectorParams[K]) => {
+            setBlobParams((prev) => {
+                if (prev[key] === value) {
+                    return prev;
+                }
+                return {
+                    ...prev,
+                    [key]: value,
+                };
+            });
+        },
+        [],
+    );
 
     useEffect(() => {
         roiRef.current = roi;
@@ -305,6 +359,59 @@ const CalibrationPage: React.FC = () => {
         [previewMode, roi.enabled, roiViewEnabled, rotationDegrees],
     );
 
+    const drawBlobOverlay = useCallback(
+        (
+            ctx: CanvasRenderingContext2D | null,
+            width: number,
+            height: number,
+            displayRectOverride?: { x: number; y: number; width: number; height: number },
+        ) => {
+            if (!ctx) {
+                return;
+            }
+            const meta = processedFrameMetaRef.current;
+            const blobs = detectionResultsRef.current;
+            if (!meta || blobs.length === 0) {
+                return;
+            }
+            const baseRect = displayRectOverride ??
+                meta.appliedRoi ?? {
+                    x: 0,
+                    y: 0,
+                    width: meta.sourceWidth || width,
+                    height: meta.sourceHeight || height,
+                };
+            if (!baseRect.width || !baseRect.height) {
+                return;
+            }
+            const scaleX = width / baseRect.width;
+            const scaleY = height / baseRect.height;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.9)';
+            ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.003);
+            blobs.forEach((blob) => {
+                const adjustedX = blob.x - baseRect.x;
+                const adjustedY = blob.y - baseRect.y;
+                if (
+                    adjustedX < 0 ||
+                    adjustedY < 0 ||
+                    adjustedX > baseRect.width ||
+                    adjustedY > baseRect.height
+                ) {
+                    return;
+                }
+                const drawX = adjustedX * scaleX;
+                const drawY = adjustedY * scaleY;
+                const radius = Math.max(2, (blob.size / 2) * ((scaleX + scaleY) / 2));
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+            ctx.restore();
+        },
+        [],
+    );
+
     useEffect(() => {
         if (!workerSupported || opencvStatus !== 'ready') {
             if (previewMode === 'processed') {
@@ -360,6 +467,11 @@ const CalibrationPage: React.FC = () => {
                         contrast,
                         roi: roiSnapshot,
                         applyRoi: shouldUseWorkerRoi,
+                        claheClipLimit,
+                        claheTileGridSize,
+                        blobParams,
+                        runDetection: true,
+                        minConfidence,
                     });
                     if (cancelled) {
                         result.frame.close();
@@ -375,6 +487,13 @@ const CalibrationPage: React.FC = () => {
                         ctx.clearRect(0, 0, result.width, result.height);
                         ctx.drawImage(result.frame, 0, 0, result.width, result.height);
                     }
+                    detectionResultsRef.current = result.keypoints ?? [];
+                    processedFrameMetaRef.current = {
+                        sourceWidth: result.sourceWidth ?? width,
+                        sourceHeight: result.sourceHeight ?? height,
+                        appliedRoi: result.appliedRoi,
+                    };
+                    setDetectedBlobCount(detectionResultsRef.current.length);
                     result.frame.close();
                     frames += 1;
                     const now = performance.now();
@@ -405,7 +524,18 @@ const CalibrationPage: React.FC = () => {
             cancelAnimationFrame(animationFrameId);
             setProcessedFps(0);
         };
-    }, [brightness, contrast, opencvStatus, previewMode, shouldUseWorkerRoi, workerSupported]);
+    }, [
+        blobParams,
+        brightness,
+        claheClipLimit,
+        claheTileGridSize,
+        contrast,
+        minConfidence,
+        opencvStatus,
+        previewMode,
+        shouldUseWorkerRoi,
+        workerSupported,
+    ]);
 
     useEffect(() => {
         let animationFrameId: number;
@@ -467,6 +597,20 @@ const CalibrationPage: React.FC = () => {
             const zoomCanvas = roiCanvasRef.current;
             const currentRoi = roiRef.current;
             const showFullFrame = !roiViewEnabled || !currentRoi.enabled;
+            const overlayCanvas = detectionOverlayCanvasRef.current;
+            if (overlayCanvas) {
+                const overlayCtx = overlayCanvas.getContext('2d');
+                if (showFullFrame && previewMode === 'processed') {
+                    if (overlayCanvas.width !== baseWidth || overlayCanvas.height !== baseHeight) {
+                        overlayCanvas.width = baseWidth;
+                        overlayCanvas.height = baseHeight;
+                    }
+                    overlayCtx?.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                    drawBlobOverlay(overlayCtx, baseWidth, baseHeight);
+                } else if (overlayCtx) {
+                    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                }
+            }
             if (zoomCanvas && currentRoi.enabled) {
                 const roiPixels =
                     shouldUseWorkerRoi && processedSourceAvailable
@@ -521,6 +665,18 @@ const CalibrationPage: React.FC = () => {
                             );
                         }
                     }
+                    if (!showFullFrame && previewMode === 'processed') {
+                        const meta = processedFrameMetaRef.current;
+                        const sourceWidth = meta?.sourceWidth ?? baseWidth;
+                        const sourceHeight = meta?.sourceHeight ?? baseHeight;
+                        const roiRect = meta?.appliedRoi ?? {
+                            x: currentRoi.x * sourceWidth,
+                            y: currentRoi.y * sourceHeight,
+                            width: Math.max(1, currentRoi.width * sourceWidth),
+                            height: Math.max(1, currentRoi.height * sourceHeight),
+                        };
+                        drawBlobOverlay(zoomCtx, zoomCanvas.width, zoomCanvas.height, roiRect);
+                    }
                 }
             } else if (zoomCanvas) {
                 zoomCanvas.getContext('2d')?.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
@@ -533,7 +689,7 @@ const CalibrationPage: React.FC = () => {
         return () => {
             cancelAnimationFrame(animationFrameId);
         };
-    }, [previewMode, roiViewEnabled, rotationDegrees, shouldUseWorkerRoi]);
+    }, [drawBlobOverlay, previewMode, roiViewEnabled, rotationDegrees, shouldUseWorkerRoi]);
 
     const handleOverlayPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (event.button !== 0) {
@@ -743,6 +899,14 @@ const CalibrationPage: React.FC = () => {
                                 processedVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
                             }`}
                         />
+                        <canvas
+                            ref={detectionOverlayCanvasRef}
+                            className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
+                                showFullFrame && previewMode === 'processed'
+                                    ? 'opacity-100'
+                                    : 'opacity-0'
+                            }`}
+                        />
                     </div>
                     <canvas
                         ref={roiCanvasRef}
@@ -861,6 +1025,9 @@ const CalibrationPage: React.FC = () => {
                             </span>
                         )}
                         <span>Processed FPS: {processedFps}</span>
+                        {previewMode === 'processed' && (
+                            <span>Detected blobs: {detectedBlobCount}</span>
+                        )}
                         <span>
                             OpenCV:{' '}
                             {opencvStatus === 'ready'
@@ -933,6 +1100,58 @@ const CalibrationPage: React.FC = () => {
                         </div>
                         <div className="flex flex-col gap-1">
                             <label
+                                htmlFor="calibration-clahe-clip"
+                                className="flex items-center justify-between text-sm"
+                            >
+                                <span>CLAHE clip limit ({claheClipLimit.toFixed(2)})</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setClaheClipLimit(DEFAULT_CLAHE_CLIP_LIMIT)}
+                                    className="text-xs text-emerald-300 hover:text-emerald-200"
+                                >
+                                    Reset
+                                </button>
+                            </label>
+                            <input
+                                id="calibration-clahe-clip"
+                                type="range"
+                                min={0.5}
+                                max={8}
+                                step={0.1}
+                                value={claheClipLimit}
+                                onChange={(event) => setClaheClipLimit(Number(event.target.value))}
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label
+                                htmlFor="calibration-clahe-grid"
+                                className="flex items-center justify-between text-sm"
+                            >
+                                <span>CLAHE tile grid ({claheTileGridSize})</span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setClaheTileGridSize(DEFAULT_CLAHE_TILE_GRID_SIZE)
+                                    }
+                                    className="text-xs text-emerald-300 hover:text-emerald-200"
+                                >
+                                    Reset
+                                </button>
+                            </label>
+                            <input
+                                id="calibration-clahe-grid"
+                                type="range"
+                                min={2}
+                                max={32}
+                                step={2}
+                                value={claheTileGridSize}
+                                onChange={(event) =>
+                                    setClaheTileGridSize(Number(event.target.value))
+                                }
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label
                                 htmlFor="calibration-rotation"
                                 className="flex items-center justify-between text-sm"
                             >
@@ -961,6 +1180,255 @@ const CalibrationPage: React.FC = () => {
                                 onBlur={handleRotationPointerUp}
                             />
                         </div>
+                    </div>
+                </section>
+
+                <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-gray-100">Blob Detection</h2>
+                        <span className="text-xs text-gray-400">Detected: {detectedBlobCount}</span>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
+                        <div className="flex flex-col gap-1">
+                            <label
+                                htmlFor="blob-confidence"
+                                className="flex items-center justify-between text-sm"
+                            >
+                                <span>Minimum confidence ({Math.round(minConfidence * 100)}%)</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setMinConfidence(0.2)}
+                                    className="text-xs text-emerald-300 hover:text-emerald-200"
+                                >
+                                    Reset
+                                </button>
+                            </label>
+                            <input
+                                id="blob-confidence"
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={minConfidence}
+                                onChange={(event) => setMinConfidence(Number(event.target.value))}
+                            />
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <label className="flex flex-col gap-2">
+                                <span>Min threshold ({blobParams.minThreshold})</span>
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={255}
+                                    step={5}
+                                    value={blobParams.minThreshold}
+                                    onChange={(event) =>
+                                        updateBlobParam('minThreshold', Number(event.target.value))
+                                    }
+                                />
+                            </label>
+                            <label className="flex flex-col gap-2">
+                                <span>Max threshold ({blobParams.maxThreshold})</span>
+                                <input
+                                    type="range"
+                                    min={50}
+                                    max={255}
+                                    step={5}
+                                    value={blobParams.maxThreshold}
+                                    onChange={(event) =>
+                                        updateBlobParam('maxThreshold', Number(event.target.value))
+                                    }
+                                />
+                            </label>
+                            <label className="flex flex-col gap-2">
+                                <span>Min area ({blobParams.minArea} px)</span>
+                                <input
+                                    type="range"
+                                    min={100}
+                                    max={5000}
+                                    step={100}
+                                    value={blobParams.minArea}
+                                    onChange={(event) =>
+                                        updateBlobParam('minArea', Number(event.target.value))
+                                    }
+                                />
+                            </label>
+                            <label className="flex flex-col gap-2">
+                                <span>Max area ({blobParams.maxArea} px)</span>
+                                <input
+                                    type="range"
+                                    min={5000}
+                                    max={40000}
+                                    step={500}
+                                    value={blobParams.maxArea}
+                                    onChange={(event) =>
+                                        updateBlobParam('maxArea', Number(event.target.value))
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <button
+                            type="button"
+                            className="text-xs text-emerald-300 hover:text-emerald-200"
+                            onClick={() => setShowAdvancedDetection((prev) => !prev)}
+                        >
+                            {showAdvancedDetection
+                                ? 'Hide advanced parameters'
+                                : 'Show advanced parameters'}
+                        </button>
+                        {showAdvancedDetection && (
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <label className="flex flex-col gap-2">
+                                    <span>Threshold step ({blobParams.thresholdStep})</span>
+                                    <input
+                                        type="range"
+                                        min={1}
+                                        max={50}
+                                        step={1}
+                                        value={blobParams.thresholdStep}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'thresholdStep',
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>Min distance ({blobParams.minDistBetweenBlobs} px)</span>
+                                    <input
+                                        type="range"
+                                        min={5}
+                                        max={100}
+                                        step={5}
+                                        value={blobParams.minDistBetweenBlobs}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'minDistBetweenBlobs',
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label className="flex items-center justify-between gap-2">
+                                    <span>Filter by convexity</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={blobParams.filterByConvexity}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'filterByConvexity',
+                                                event.target.checked,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>
+                                        Min convexity ({blobParams.minConvexity.toFixed(2)})
+                                    </span>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={blobParams.minConvexity}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'minConvexity',
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                        disabled={!blobParams.filterByConvexity}
+                                    />
+                                </label>
+                                <label className="flex items-center justify-between gap-2">
+                                    <span>Filter by inertia</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={blobParams.filterByInertia}
+                                        onChange={(event) =>
+                                            updateBlobParam('filterByInertia', event.target.checked)
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>
+                                        Min inertia ({blobParams.minInertiaRatio.toFixed(2)})
+                                    </span>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={blobParams.minInertiaRatio}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'minInertiaRatio',
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                        disabled={!blobParams.filterByInertia}
+                                    />
+                                </label>
+                                <label className="flex items-center justify-between gap-2">
+                                    <span>Filter by circularity</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={blobParams.filterByCircularity}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'filterByCircularity',
+                                                event.target.checked,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>
+                                        Min circularity ({blobParams.minCircularity.toFixed(2)})
+                                    </span>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={blobParams.minCircularity}
+                                        onChange={(event) =>
+                                            updateBlobParam(
+                                                'minCircularity',
+                                                Number(event.target.value),
+                                            )
+                                        }
+                                        disabled={!blobParams.filterByCircularity}
+                                    />
+                                </label>
+                                <label className="flex items-center justify-between gap-2">
+                                    <span>Filter by color</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={blobParams.filterByColor}
+                                        onChange={(event) =>
+                                            updateBlobParam('filterByColor', event.target.checked)
+                                        }
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span>Blob color ({blobParams.blobColor})</span>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={255}
+                                        step={5}
+                                        value={blobParams.blobColor}
+                                        onChange={(event) =>
+                                            updateBlobParam('blobColor', Number(event.target.value))
+                                        }
+                                        disabled={!blobParams.filterByColor}
+                                    />
+                                </label>
+                            </div>
+                        )}
                     </div>
                 </section>
             </div>
