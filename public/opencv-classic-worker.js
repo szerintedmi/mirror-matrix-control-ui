@@ -443,12 +443,7 @@ const handleProcessFrame = async (payload) => {
     const detectionRect = roi && roi.enabled ? buildRect(roi, width, height) : null;
     const detectionView = detectionRect ? claheResult.roi(detectionRect) : claheResult;
     const keypoints = runDetection
-        ? detectBlobs(
-              detectionView,
-              detectionRect,
-              blobParams,
-              Boolean(preferFallbackDetector),
-          )
+        ? detectBlobs(detectionView, detectionRect, blobParams, Boolean(preferFallbackDetector))
         : [];
     if (detectionRect && detectionView !== claheResult) {
         detectionView.delete();

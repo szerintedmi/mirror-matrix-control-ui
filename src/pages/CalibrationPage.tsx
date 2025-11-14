@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+    DEFAULT_BLOB_PARAMS,
+    DetectionSettingsProfile,
+    loadDetectionSettings,
+    loadSavedDetectionSettingsProfiles,
+    persistDetectionSettings,
+    saveDetectionSettingsProfile,
+} from '@/services/detectionSettingsStorage';
 import type {
     BlobDetectorParams,
     DetectedBlob,
@@ -36,25 +44,6 @@ const DEFAULT_ROI: NormalizedRoi = {
 const DEFAULT_CLAHE_CLIP_LIMIT = 2;
 const DEFAULT_CLAHE_TILE_GRID_SIZE = 8;
 
-const DEFAULT_BLOB_PARAMS: BlobDetectorParams = {
-    minThreshold: 30,
-    maxThreshold: 255,
-    thresholdStep: 10,
-    minDistBetweenBlobs: 10,
-    minRepeatability: 2,
-    filterByArea: true,
-    minArea: 1500,
-    maxArea: 15000,
-    filterByCircularity: false,
-    minCircularity: 0.5,
-    filterByConvexity: true,
-    minConvexity: 0.6,
-    filterByInertia: true,
-    minInertiaRatio: 0.6,
-    filterByColor: true,
-    blobColor: 255,
-};
-
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
@@ -71,11 +60,14 @@ const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
     };
 };
 
+const getLocalStorage = (): Storage | undefined =>
+    typeof window !== 'undefined' ? window.localStorage : undefined;
+
 const CalibrationPage: React.FC = () => {
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
     const [selectedDeviceId, setSelectedDeviceId] = useState<string>('default');
     const [selectedResolutionId, setSelectedResolutionId] = useState<string>('auto');
-    const [previewMode, setPreviewMode] = useState<'raw' | 'processed'>('raw');
+    const [previewMode, setPreviewMode] = useState<'raw' | 'processed'>('processed');
     const [brightness, setBrightness] = useState(0);
     const [contrast, setContrast] = useState(1);
     const [rotationDegrees, setRotationDegrees] = useState(0);
@@ -93,6 +85,10 @@ const CalibrationPage: React.FC = () => {
     const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number }>(
         () => ({ width: 0, height: 0 }),
     );
+    const [detectionSettingsLoaded, setDetectionSettingsLoaded] = useState(false);
+    const [savedProfiles, setSavedProfiles] = useState<DetectionSettingsProfile[]>([]);
+    const [selectedProfileId, setSelectedProfileId] = useState('');
+    const [profileNameInput, setProfileNameInput] = useState('');
     const [claheClipLimit, setClaheClipLimit] = useState(DEFAULT_CLAHE_CLIP_LIMIT);
     const [claheTileGridSize, setClaheTileGridSize] = useState(DEFAULT_CLAHE_TILE_GRID_SIZE);
     const [blobParams, setBlobParams] = useState<BlobDetectorParams>(() => ({
@@ -137,9 +133,7 @@ const CalibrationPage: React.FC = () => {
         return typeof Worker !== 'undefined' && typeof window.createImageBitmap === 'function';
     }, []);
 
-    const nativeBlobDetectorAvailable = Boolean(
-        opencvInfo?.capabilities?.hasNativeBlobDetector,
-    );
+    const nativeBlobDetectorAvailable = Boolean(opencvInfo?.capabilities?.hasNativeBlobDetector);
 
     const updateBlobParam = useCallback(
         <K extends keyof BlobDetectorParams>(key: K, value: BlobDetectorParams[K]) => {
@@ -155,6 +149,25 @@ const CalibrationPage: React.FC = () => {
         },
         [],
     );
+
+    const refreshSavedProfiles = useCallback(() => {
+        setSavedProfiles(loadSavedDetectionSettingsProfiles(getLocalStorage()));
+    }, []);
+
+    useEffect(() => {
+        refreshSavedProfiles();
+    }, [refreshSavedProfiles]);
+
+    useEffect(() => {
+        if (!selectedProfileId) {
+            setProfileNameInput('');
+            return;
+        }
+        const next = savedProfiles.find((profile) => profile.id === selectedProfileId);
+        if (next) {
+            setProfileNameInput(next.name);
+        }
+    }, [selectedProfileId, savedProfiles]);
 
     useEffect(() => {
         roiRef.current = roi;
@@ -252,10 +265,154 @@ const CalibrationPage: React.FC = () => {
         }
     }, [nativeBlobDetectorAvailable]);
 
+    useEffect(() => {
+        const storage = getLocalStorage();
+        const storedSettings = loadDetectionSettings(storage);
+        if (storedSettings) {
+            setSelectedDeviceId(storedSettings.camera.deviceId);
+            const resolutionOption = RESOLUTION_OPTIONS.find(
+                (option) => option.id === storedSettings.camera.resolutionId,
+            );
+            setSelectedResolutionId(resolutionOption ? storedSettings.camera.resolutionId : 'auto');
+            setBrightness(storedSettings.processing.brightness);
+            setContrast(storedSettings.processing.contrast);
+            setClaheClipLimit(storedSettings.processing.claheClipLimit);
+            setClaheTileGridSize(storedSettings.processing.claheTileGridSize);
+            setBlobParams(storedSettings.blobParams);
+            setRoi({
+                enabled: storedSettings.roi.enabled,
+                x: storedSettings.roi.x,
+                y: storedSettings.roi.y,
+                width: storedSettings.roi.width,
+                height: storedSettings.roi.height,
+            });
+            setRotationDegrees(storedSettings.processing.rotationDegrees);
+            userDetectorPreferenceRef.current = true;
+            setUseWasmDetectorState(storedSettings.useWasmDetector);
+        }
+        setDetectionSettingsLoaded(true);
+    }, []);
+
+    useEffect(() => {
+        if (!detectionSettingsLoaded) {
+            return;
+        }
+        const storage = getLocalStorage();
+        const lastCaptureWidth = videoDimensions.width > 0 ? videoDimensions.width : null;
+        const lastCaptureHeight = videoDimensions.height > 0 ? videoDimensions.height : null;
+        persistDetectionSettings(storage, {
+            camera: {
+                deviceId: selectedDeviceId,
+                resolutionId: selectedResolutionId,
+            },
+            roi: {
+                ...roi,
+                lastCaptureWidth,
+                lastCaptureHeight,
+            },
+            processing: {
+                brightness,
+                contrast,
+                claheClipLimit,
+                claheTileGridSize,
+                rotationDegrees,
+            },
+            blobParams,
+            useWasmDetector,
+        });
+    }, [
+        detectionSettingsLoaded,
+        selectedDeviceId,
+        selectedResolutionId,
+        roi,
+        brightness,
+        contrast,
+        claheClipLimit,
+        claheTileGridSize,
+        rotationDegrees,
+        blobParams,
+        useWasmDetector,
+        videoDimensions.width,
+        videoDimensions.height,
+    ]);
+
     const setUseWasmDetector = useCallback((next: boolean) => {
         userDetectorPreferenceRef.current = true;
         setUseWasmDetectorState(next);
     }, []);
+
+    const applySavedProfile = (profile: DetectionSettingsProfile) => {
+        setSelectedDeviceId(profile.settings.camera.deviceId);
+        const resolutionOption = RESOLUTION_OPTIONS.find(
+            (option) => option.id === profile.settings.camera.resolutionId,
+        );
+        setSelectedResolutionId(resolutionOption ? profile.settings.camera.resolutionId : 'auto');
+        setBrightness(profile.settings.processing.brightness);
+        setContrast(profile.settings.processing.contrast);
+        setClaheClipLimit(profile.settings.processing.claheClipLimit);
+        setClaheTileGridSize(profile.settings.processing.claheTileGridSize);
+        setRotationDegrees(profile.settings.processing.rotationDegrees);
+        setBlobParams(profile.settings.blobParams);
+        setRoi({
+            enabled: profile.settings.roi.enabled,
+            x: profile.settings.roi.x,
+            y: profile.settings.roi.y,
+            width: profile.settings.roi.width,
+            height: profile.settings.roi.height,
+        });
+        setUseWasmDetector(profile.settings.useWasmDetector);
+    };
+
+    const handleSaveProfile = () => {
+        const storage = getLocalStorage();
+        const lastCaptureWidth = videoDimensions.width > 0 ? videoDimensions.width : null;
+        const lastCaptureHeight = videoDimensions.height > 0 ? videoDimensions.height : null;
+        const saved = saveDetectionSettingsProfile(storage, {
+            id: selectedProfileId || undefined,
+            name: profileNameInput,
+            settings: {
+                camera: {
+                    deviceId: selectedDeviceId,
+                    resolutionId: selectedResolutionId,
+                },
+                roi: {
+                    ...roi,
+                    lastCaptureWidth,
+                    lastCaptureHeight,
+                },
+                processing: {
+                    brightness,
+                    contrast,
+                    claheClipLimit,
+                    claheTileGridSize,
+                    rotationDegrees,
+                },
+                blobParams,
+                useWasmDetector,
+            },
+        });
+        if (saved) {
+            setSelectedProfileId(saved.id);
+            setProfileNameInput(saved.name);
+            refreshSavedProfiles();
+        }
+    };
+
+    const handleLoadProfile = () => {
+        if (!selectedProfileId) {
+            return;
+        }
+        const profile = savedProfiles.find((entry) => entry.id === selectedProfileId);
+        if (profile) {
+            applySavedProfile(profile);
+            setProfileNameInput(profile.name);
+        }
+    };
+
+    const handleNewProfile = () => {
+        setSelectedProfileId('');
+        setProfileNameInput('');
+    };
 
     const handleRotationPointerDown = () => {
         setIsRotationAdjusting(true);
@@ -343,6 +500,9 @@ const CalibrationPage: React.FC = () => {
     }, [selectedDeviceId, selectedResolution.height, selectedResolution.width, stopCurrentStream]);
 
     useEffect(() => {
+        if (!detectionSettingsLoaded) {
+            return undefined;
+        }
         let cancelled = false;
         const trigger = () => {
             if (!cancelled) {
@@ -358,7 +518,7 @@ const CalibrationPage: React.FC = () => {
             cancelled = true;
             stopCurrentStream();
         };
-    }, [startStream, stopCurrentStream]);
+    }, [detectionSettingsLoaded, startStream, stopCurrentStream]);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -493,8 +653,7 @@ const CalibrationPage: React.FC = () => {
                         claheTileGridSize,
                         blobParams,
                         runDetection: true,
-                        preferFallbackDetector:
-                            !useWasmDetector || !nativeBlobDetectorAvailable,
+                        preferFallbackDetector: !useWasmDetector || !nativeBlobDetectorAvailable,
                     });
                     if (cancelled) {
                         result.frame.close();
@@ -873,7 +1032,11 @@ const CalibrationPage: React.FC = () => {
         const showFullFrame = !roiViewEnabled || !roi.enabled;
         const processedVisible =
             showFullFrame && previewMode === 'processed' && opencvStatus === 'ready';
-        const workerOverlayActive = previewMode === 'processed' && opencvStatus !== 'ready';
+        const rawVisible =
+            showFullFrame &&
+            (previewMode === 'raw' || (previewMode === 'processed' && opencvStatus !== 'ready'));
+        const workerOverlayActive =
+            previewMode === 'processed' && opencvStatus !== 'ready' && showFullFrame;
         const workerOverlayMessage =
             opencvStatus === 'loading'
                 ? 'OpenCV Worker: Loading…'
@@ -912,9 +1075,7 @@ const CalibrationPage: React.FC = () => {
                             muted
                             playsInline
                             className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                showFullFrame && previewMode === 'raw'
-                                    ? 'opacity-100'
-                                    : 'opacity-0 pointer-events-none'
+                                rawVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
                             }`}
                         />
                         <canvas
@@ -926,9 +1087,7 @@ const CalibrationPage: React.FC = () => {
                         <canvas
                             ref={detectionOverlayCanvasRef}
                             className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                showFullFrame && previewMode === 'processed'
-                                    ? 'opacity-100'
-                                    : 'opacity-0'
+                                showFullFrame && processedVisible ? 'opacity-100' : 'opacity-0'
                             }`}
                         />
                     </div>
@@ -1204,6 +1363,66 @@ const CalibrationPage: React.FC = () => {
                                 onBlur={handleRotationPointerUp}
                             />
                         </div>
+                    </div>
+                </section>
+
+                <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-gray-100">Detection Profiles</h2>
+                        <span className="text-xs text-gray-400">{savedProfiles.length} saved</span>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-3 text-sm text-gray-300">
+                        <label className="flex flex-col gap-2">
+                            <span>Profile name</span>
+                            <input
+                                type="text"
+                                value={profileNameInput}
+                                onChange={(event) => setProfileNameInput(event.target.value)}
+                                placeholder="e.g. Lab baseline"
+                                className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
+                            />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleSaveProfile}
+                                className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300 hover:border-emerald-400"
+                            >
+                                Save profile
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleNewProfile}
+                                className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-200 hover:border-gray-500"
+                            >
+                                New profile
+                            </button>
+                        </div>
+                        <label className="flex flex-col gap-2">
+                            <span>Saved settings</span>
+                            <div className="flex gap-2">
+                                <select
+                                    value={selectedProfileId}
+                                    onChange={(event) => setSelectedProfileId(event.target.value)}
+                                    className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
+                                >
+                                    <option value="">Select saved profile</option>
+                                    {savedProfiles.map((profile) => (
+                                        <option key={profile.id} value={profile.id}>
+                                            {profile.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={handleLoadProfile}
+                                    disabled={!selectedProfileId}
+                                    className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300 disabled:opacity-40"
+                                >
+                                    Load
+                                </button>
+                            </div>
+                        </label>
                     </div>
                 </section>
 
