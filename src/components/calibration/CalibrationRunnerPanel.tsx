@@ -1,17 +1,23 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
-import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
+import MotorActionButtons from '@/components/MotorActionButtons';
+import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
+import type { DriverView } from '@/context/StatusContext';
+import { useMotorController } from '@/hooks/useMotorController';
 import type {
     CalibrationRunnerSettings,
     CalibrationRunnerState,
+    CalibrationRunSummary,
     TileRunState,
 } from '@/services/calibrationRunner';
+import type { Motor, MotorTelemetry } from '@/types';
 
 interface CalibrationRunnerPanelProps {
     runnerState: CalibrationRunnerState;
     runnerSettings: CalibrationRunnerSettings;
     tileEntries: TileRunState[];
     detectionReady: boolean;
+    drivers: DriverView[];
     onUpdateSetting: <K extends keyof CalibrationRunnerSettings>(
         key: K,
         value: CalibrationRunnerSettings[K],
@@ -39,11 +45,69 @@ const getTileStatusClasses = (status: TileRunState['status']): string => {
     }
 };
 
+const formatPercent = (
+    value: number | null | undefined,
+    { signed = false }: { signed?: boolean } = {},
+): string => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return '—';
+    }
+    const percent = (value * 100).toFixed(2);
+    if (!signed) {
+        return `${percent}%`;
+    }
+    return value > 0 ? `+${percent}%` : `${percent}%`;
+};
+
+const formatPerKilostep = (value: number | null | undefined): string => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return '—';
+    }
+    const scaled = value * 1000;
+    const digits = Math.abs(scaled) >= 10 ? 1 : 2;
+    const formatted = scaled.toFixed(digits);
+    return scaled > 0 ? `+${formatted}` : formatted;
+};
+
+const clampSteps = (value: number): number =>
+    Math.min(MOTOR_MAX_POSITION_STEPS, Math.max(MOTOR_MIN_POSITION_STEPS, value));
+
+const convertNormalizedToSteps = (
+    value: number | null | undefined,
+    perStep: number | null | undefined,
+): number | null => {
+    if (
+        value === null ||
+        value === undefined ||
+        Number.isNaN(value) ||
+        perStep === null ||
+        perStep === undefined ||
+        perStep === 0 ||
+        Number.isNaN(perStep)
+    ) {
+        return null;
+    }
+    const steps = Math.round(value / perStep);
+    if (!Number.isFinite(steps)) {
+        return null;
+    }
+    return clampSteps(steps);
+};
+
+const formatStepValue = (value: number | null): string => {
+    if (value === null || Number.isNaN(value)) {
+        return '—';
+    }
+    const formatted = value.toLocaleString();
+    return value > 0 ? `+${formatted}` : formatted;
+};
+
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     runnerState,
     runnerSettings,
     tileEntries,
     detectionReady,
+    drivers,
     onUpdateSetting,
     onStart,
     onPause,
@@ -57,14 +121,45 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const isRunnerBusy =
         runnerState.phase === 'homing' ||
         runnerState.phase === 'staging' ||
-        runnerState.phase === 'measuring';
+        runnerState.phase === 'measuring' ||
+        runnerState.phase === 'aligning';
     const isRunnerPaused = runnerState.phase === 'paused';
     const canStartRunner = !isRunnerBusy && !isRunnerPaused;
     const canPauseRunner = isRunnerBusy;
     const canResumeRunner = isRunnerPaused;
     const canAbortRunner = isRunnerBusy || isRunnerPaused;
     const blueprint = runnerState.summary?.gridBlueprint;
+    const [showAlignmentOverlay, setShowAlignmentOverlay] = useState(false);
     const gapPercent = runnerSettings.gridGapNormalized * 100;
+
+    const telemetryMap = useMemo(() => {
+        const map = new Map<string, MotorTelemetry>();
+        drivers.forEach((driver) => {
+            const topicMac = driver.snapshot.topicMac;
+            Object.values(driver.snapshot.motors).forEach((motor) => {
+                map.set(`${topicMac}-${motor.id}`, {
+                    id: motor.id,
+                    position: motor.position,
+                    moving: motor.moving,
+                    awake: motor.awake,
+                    homed: motor.homed,
+                    stepsSinceHome: motor.stepsSinceHome,
+                });
+            });
+        });
+        return map;
+    }, [drivers]);
+
+    const getTelemetryForMotor = useCallback(
+        (motor: Motor | null): MotorTelemetry | undefined => {
+            if (!motor) {
+                return undefined;
+            }
+            return telemetryMap.get(`${motor.nodeMac}-${motor.motorIndex}`);
+        },
+        [telemetryMap],
+    );
+
 
     return (
         <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
@@ -216,12 +311,27 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
             </div>
             {blueprint && (
                 <div className="mt-4 rounded-md border border-emerald-600/40 bg-emerald-500/10 p-3 text-sm text-emerald-200">
-                    <p>
-                        Ideal footprint: {(blueprint.idealTileFootprint.width * 100).toFixed(2)}% ×{' '}
-                        {(blueprint.idealTileFootprint.height * 100).toFixed(2)}%
-                    </p>
-                    <p>Gap: {(blueprint.tileGap * 100).toFixed(2)}%</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <p>
+                                Ideal footprint:{' '}
+                                {(blueprint.idealTileFootprint.width * 100).toFixed(2)}% ×{' '}
+                                {(blueprint.idealTileFootprint.height * 100).toFixed(2)}%
+                            </p>
+                            <p>Gap: {(blueprint.tileGap * 100).toFixed(2)}%</p>
+                        </div>
+                        <button
+                            type="button"
+                            className={`rounded-md border border-emerald-500/70 px-3 py-1 text-xs font-semibold transition-colors ${showAlignmentOverlay ? 'bg-emerald-600/60 text-white' : 'bg-emerald-950/30 text-emerald-200 hover:bg-emerald-800/40'}`}
+                            onClick={() => setShowAlignmentOverlay((prev) => !prev)}
+                        >
+                            {showAlignmentOverlay ? 'Hide aligned map' : 'Show aligned map'}
+                        </button>
+                    </div>
                 </div>
+            )}
+            {showAlignmentOverlay && runnerState.summary && (
+                <CalibrationAlignmentOverlay summary={runnerState.summary} />
             )}
             <div className="mt-4">
                 <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">Tile statuses</p>
@@ -235,10 +345,79 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                 R{entry.tile.row + 1}C{entry.tile.col + 1}
                             </div>
                             <div className="capitalize">{entry.status}</div>
-                            {entry.status === 'completed' && entry.metrics?.home && (
-                                <div className="mt-1 text-[10px] text-gray-300">
-                                    home ({entry.metrics.home.x.toFixed(2)},{' '}
-                                    {entry.metrics.home.y.toFixed(2)})
+                            {entry.status === 'completed' &&
+                                entry.metrics &&
+                                (() => {
+                                    const metrics = entry.metrics;
+                                    const perStepX = metrics.stepToDisplacement?.x ?? null;
+                                    const perStepY = metrics.stepToDisplacement?.y ?? null;
+                                    const homeStepsX = convertNormalizedToSteps(
+                                        metrics.home?.x ?? null,
+                                        perStepX,
+                                    );
+                                    const homeStepsY = convertNormalizedToSteps(
+                                        metrics.home?.y ?? null,
+                                        perStepY,
+                                    );
+                                    const deltaStepsX = convertNormalizedToSteps(
+                                        metrics.homeOffset?.dx ?? null,
+                                        perStepX,
+                                    );
+                                    const deltaStepsY = convertNormalizedToSteps(
+                                        metrics.homeOffset?.dy ?? null,
+                                        perStepY,
+                                    );
+                                    return (
+                                        <div className="mt-2 space-y-1 text-[10px] text-gray-200">
+                                            <div>
+                                                home ({formatStepValue(homeStepsX)},{' '}
+                                                {formatStepValue(homeStepsY)})
+                                            </div>
+                                            <div>
+                                                Δ steps x {formatStepValue(deltaStepsX)} · y{' '}
+                                                {formatStepValue(deltaStepsY)}
+                                            </div>
+                                            <div>
+                                                size {formatPercent(metrics.home?.size ?? null)} · Δ{' '}
+                                                {formatPercent(
+                                                    metrics.sizeDeltaAtStepTest ?? null,
+                                                    {
+                                                        signed: true,
+                                                    },
+                                                )}
+                                            </div>
+                                            <div>
+                                                disp/1k x {formatPerKilostep(perStepX)} · y{' '}
+                                                {formatPerKilostep(perStepY)}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            {entry.error && (
+                                <div
+                                    className={`mt-2 text-[10px] ${
+                                        entry.status === 'failed'
+                                            ? 'text-rose-200'
+                                            : entry.status === 'skipped'
+                                              ? 'text-gray-400'
+                                              : 'text-amber-200'
+                                    }`}
+                                >
+                                    {entry.error}
+                                </div>
+                            )}
+                            {(entry.assignment.x || entry.assignment.y) && (
+                                <div className="mt-2 rounded-md border border-gray-800/80 bg-gray-950/50 p-2 text-[10px] text-gray-200">
+                                    <TileAxisAction
+                                        axis="x"
+                                        motor={entry.assignment.x}
+                                        telemetry={getTelemetryForMotor(entry.assignment.x)}
+                                    />
+                                    <TileAxisAction
+                                        axis="y"
+                                        motor={entry.assignment.y}
+                                        telemetry={getTelemetryForMotor(entry.assignment.y)}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -250,3 +429,119 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
 };
 
 export default CalibrationRunnerPanel;
+
+interface TileAxisActionProps {
+    axis: 'x' | 'y';
+    motor: Motor | null;
+    telemetry?: MotorTelemetry;
+}
+
+const TileAxisAction: React.FC<TileAxisActionProps> = ({ axis, motor, telemetry }) => {
+    const controller = useMotorController(motor, telemetry);
+    if (!motor) {
+        return <div className="text-[10px] text-gray-500">{axis.toUpperCase()}: Unassigned</div>;
+    }
+    return (
+        <div className="mt-1 first:mt-0">
+            <MotorActionButtons
+                motor={motor}
+                telemetry={telemetry}
+                controller={controller}
+                compact
+                showHome={false}
+                showStepsBadge={false}
+                dataTestIdPrefix={`calibration-runner-${motor.nodeMac}-${motor.motorIndex}-${axis}`}
+                label={axis.toUpperCase()}
+            />
+        </div>
+    );
+};
+
+interface CalibrationAlignmentOverlayProps {
+    summary: CalibrationRunSummary;
+}
+
+const CalibrationAlignmentOverlay: React.FC<CalibrationAlignmentOverlayProps> = ({ summary }) => {
+    const blueprint = summary.gridBlueprint;
+    if (!blueprint) {
+        return null;
+    }
+    const tileList = Object.values(summary.tiles);
+    if (tileList.length === 0) {
+        return null;
+    }
+    const cols =
+        tileList.reduce((max, entry) => (entry.tile.col > max ? entry.tile.col : max), 0) + 1;
+    const spacingX = blueprint.idealTileFootprint.width + blueprint.tileGap;
+    const spacingY = blueprint.idealTileFootprint.height + blueprint.tileGap;
+    const overlaySize = 260;
+    const padding = 16;
+    const innerSize = overlaySize - padding * 2;
+    const toPx = (value: number) => padding + value * innerSize;
+
+    const clampUnit = (value: number) => Math.max(0, Math.min(1, value));
+
+    return (
+        <div className="mt-3 rounded-lg border border-emerald-700/40 bg-gray-950/80 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                Aligned Tile Preview
+            </p>
+            <div
+                className="relative mt-3 rounded border border-gray-800 bg-black/40"
+                style={{ width: overlaySize, height: overlaySize }}
+            >
+                {tileList.map((entry) => {
+                    const mirroredCol = cols - 1 - entry.tile.col;
+                    const idealCenterX =
+                        blueprint.gridOrigin.x +
+                        mirroredCol * spacingX +
+                        blueprint.idealTileFootprint.width / 2;
+                    const idealCenterY =
+                        blueprint.gridOrigin.y +
+                        entry.tile.row * spacingY +
+                        blueprint.idealTileFootprint.height / 2;
+                    const widthPx = Math.max(4, blueprint.idealTileFootprint.width * innerSize);
+                    const heightPx = Math.max(4, blueprint.idealTileFootprint.height * innerSize);
+                    const left = toPx(idealCenterX - blueprint.idealTileFootprint.width / 2);
+                    const top = toPx(idealCenterY - blueprint.idealTileFootprint.height / 2);
+                    const homeMeasurement = entry.homeMeasurement;
+                    const measurementX = homeMeasurement
+                        ? toPx(clampUnit(homeMeasurement.x))
+                        : null;
+                    const measurementY = homeMeasurement
+                        ? toPx(clampUnit(homeMeasurement.y))
+                        : null;
+                    return (
+                        <div
+                            key={entry.tile.key}
+                            className="absolute"
+                            style={{ left, top, width: widthPx, height: heightPx }}
+                        >
+                            <div className="flex h-full w-full items-center justify-center rounded border border-emerald-400/60 bg-emerald-400/10 text-[10px] text-emerald-100">
+                                [{entry.tile.row + 1},{entry.tile.col + 1}]
+                            </div>
+                            {measurementX !== null && measurementY !== null && (
+                                <span
+                                    className="absolute -translate-x-1/2 -translate-y-1/2 text-[8px] text-cyan-200"
+                                    style={{ left: measurementX - left, top: measurementY - top }}
+                                >
+                                    ●
+                                </span>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            <div className="mt-2 flex gap-4 text-[10px] text-gray-400">
+                <span className="flex items-center gap-1">
+                    <span className="h-3 w-3 rounded-sm border border-emerald-400/70 bg-emerald-400/20" />
+                    Target square
+                </span>
+                <span className="flex items-center gap-1">
+                    <span className="text-cyan-300">●</span>
+                    Measured home
+                </span>
+            </div>
+        </div>
+    );
+};

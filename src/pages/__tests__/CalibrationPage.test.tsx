@@ -21,6 +21,31 @@ vi.mock('@/hooks/useMotorCommands', () => ({
     }),
 }));
 
+vi.mock('@/context/StatusContext', () => ({
+    useStatusStore: () => ({
+        drivers: [],
+        counts: {
+            totalDrivers: 0,
+            onlineDrivers: 0,
+            offlineDrivers: 0,
+            totalMotors: 0,
+            movingMotors: 0,
+            homedMotors: 0,
+            unhomedMotors: 0,
+            needsHomeWarningMotors: 0,
+            needsHomeCriticalMotors: 0,
+        },
+        discoveryCount: 0,
+        acknowledgeDriver: vi.fn(),
+        acknowledgeAll: vi.fn(),
+        schemaError: null,
+        brokerConnected: true,
+        connectionState: { status: 'connected' },
+        latestActivityAt: null,
+        staleThresholdMs: 2000,
+    }),
+}));
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const originalNavigator = globalThis.navigator;

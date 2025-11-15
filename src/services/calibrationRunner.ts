@@ -57,6 +57,7 @@ export interface BlobMeasurement {
 export type CaptureBlobMeasurement = (params: {
     timeoutMs: number;
     signal?: AbortSignal;
+    expectedPosition?: { x: number; y: number };
 }) => Promise<BlobMeasurement | null>;
 
 export type CalibrationRunnerPhase =
@@ -64,6 +65,7 @@ export type CalibrationRunnerPhase =
     | 'homing'
     | 'staging'
     | 'measuring'
+    | 'aligning'
     | 'paused'
     | 'aborted'
     | 'completed'
@@ -71,6 +73,8 @@ export type CalibrationRunnerPhase =
 
 export interface TileCalibrationMetrics {
     home?: BlobMeasurement;
+    homeOffset?: { dx: number; dy: number } | null;
+    idealTarget?: { x: number; y: number } | null;
     stepToDisplacement?: {
         x: number | null;
         y: number | null;
@@ -83,6 +87,7 @@ export interface TileRunState {
     status: 'pending' | 'staged' | 'measuring' | 'completed' | 'failed' | 'skipped';
     error?: string;
     metrics?: TileCalibrationMetrics;
+    assignment: MirrorAssignment;
 }
 
 export interface CalibrationGridBlueprint {
@@ -97,6 +102,7 @@ export interface TileCalibrationResult {
     error?: string;
     homeMeasurement?: BlobMeasurement;
     homeOffset?: { dx: number; dy: number };
+    idealTarget?: { x: number; y: number };
     stepToDisplacement?: { x: number | null; y: number | null };
     sizeDeltaAtStepTest?: number | null;
 }
@@ -136,6 +142,13 @@ export interface CalibrationRunnerParams {
 const clampSteps = (value: number): number =>
     Math.min(MOTOR_MAX_POSITION_STEPS, Math.max(MOTOR_MIN_POSITION_STEPS, value));
 
+const roundSteps = (value: number): number => {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+    return Math.round(value);
+};
+
 class RunnerAbortError extends Error {
     constructor(message = 'Calibration run aborted') {
         super(message);
@@ -169,7 +182,13 @@ const buildTileDescriptors = (
     for (let row = 0; row < gridSize.rows; row += 1) {
         for (let col = 0; col < gridSize.cols; col += 1) {
             const key = `${row}-${col}`;
-            const assignment = mirrorConfig.get(key) ?? { x: null, y: null };
+            const assignmentSource = mirrorConfig.get(key);
+            const assignment: MirrorAssignment = assignmentSource
+                ? {
+                      x: assignmentSource.x,
+                      y: assignmentSource.y,
+                  }
+                : { x: null, y: null };
             const calibratable = Boolean(assignment.x && assignment.y);
             descriptors.push({
                 row,
@@ -204,6 +223,7 @@ export const createBaselineRunnerState = (
                 col: descriptor.col,
                 key: descriptor.key,
             },
+            assignment: descriptor.assignment,
             status,
         };
     }
@@ -385,10 +405,18 @@ export class CalibrationRunner {
         }
 
         const summary = this.computeSummary();
+        this.applySummaryMetrics(summary);
+        this.updateState({
+            phase: summary.gridBlueprint ? 'aligning' : 'completed',
+            activeTile: null,
+            summary,
+        });
+        if (summary.gridBlueprint) {
+            await this.alignTilesToIdealGrid(summary);
+        }
         this.updateState({
             phase: 'completed',
             activeTile: null,
-            summary,
         });
     }
 
@@ -400,7 +428,9 @@ export class CalibrationRunner {
         await this.moveTileToPose(tile, 'home');
         await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
 
-        const homeMeasurement = await this.captureMeasurementWithRetries();
+        const previousResult = this.tileResults.get(tile.key);
+        const priorMeasurement = previousResult?.homeMeasurement ?? null;
+        const homeMeasurement = await this.captureMeasurementWithRetries(priorMeasurement);
         if (!homeMeasurement) {
             const errorMessage = 'Unable to detect blob at home position';
             this.markTileFailed(tile, errorMessage);
@@ -421,6 +451,8 @@ export class CalibrationRunner {
 
         const metrics: TileCalibrationMetrics = {
             home: homeMeasurement,
+            homeOffset: null,
+            idealTarget: null,
             stepToDisplacement: {
                 x: stepX?.perStep ?? null,
                 y: stepY?.perStep ?? null,
@@ -516,7 +548,8 @@ export class CalibrationRunner {
         if (!motor) {
             return;
         }
-        const clamped = clampSteps(target);
+        const roundedTarget = roundSteps(target);
+        const clamped = clampSteps(roundedTarget);
         const axisKey = `${motor.nodeMac}:${motor.motorIndex}`;
         const current = this.axisPositions.get(axisKey);
         if (current === clamped) {
@@ -530,12 +563,15 @@ export class CalibrationRunner {
         this.axisPositions.set(axisKey, clamped);
     }
 
-    private async captureMeasurementWithRetries(): Promise<BlobMeasurement | null> {
+    private async captureMeasurementWithRetries(
+        expectedPosition?: { x: number; y: number } | null,
+    ): Promise<BlobMeasurement | null> {
         for (let attempt = 0; attempt < this.settings.maxDetectionRetries; attempt += 1) {
             await this.checkContinue();
             const measurement = await this.captureMeasurement({
                 timeoutMs: this.settings.sampleTimeoutMs,
                 signal: this.abortController.signal,
+                expectedPosition: expectedPosition ?? undefined,
             });
             if (measurement) {
                 return measurement;
@@ -548,7 +584,7 @@ export class CalibrationRunner {
     private async runStepCharacterization(
         tile: TileDescriptor,
         axis: Axis,
-        homeMeasurement: BlobMeasurement,
+        referenceMeasurement: BlobMeasurement,
     ): Promise<{ perStep: number; sizeDelta: number } | null> {
         const motor = tile.assignment[axis];
         if (!motor) {
@@ -560,17 +596,99 @@ export class CalibrationRunner {
         const delta = clampSteps(this.settings.deltaSteps);
         await this.moveAxisToPosition(motor, delta);
         await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
-        const measurement = await this.captureMeasurementWithRetries();
+        const measurement = await this.captureMeasurementWithRetries(referenceMeasurement);
         await this.moveAxisToPosition(motor, 0);
         await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
         if (!measurement) {
             return null;
         }
         const displacement =
-            axis === 'x' ? measurement.x - homeMeasurement.x : measurement.y - homeMeasurement.y;
+            axis === 'x'
+                ? measurement.x - referenceMeasurement.x
+                : measurement.y - referenceMeasurement.y;
         const perStep = displacement / this.settings.deltaSteps;
-        const sizeDelta = measurement.size - homeMeasurement.size;
+        const sizeDelta = measurement.size - referenceMeasurement.size;
         return { perStep, sizeDelta };
+    }
+
+    private applySummaryMetrics(summary: CalibrationRunSummary): void {
+        Object.entries(summary.tiles).forEach(([key, result]) => {
+            const tileState = this.state.tiles[key];
+            if (!tileState || tileState.status !== 'completed') {
+                return;
+            }
+            const previousMetrics = tileState.metrics ?? {};
+            const homeMeasurement = previousMetrics.home ?? result.homeMeasurement;
+            const homeOffset = result.homeOffset ?? null;
+            const idealTarget =
+                homeMeasurement && homeOffset
+                    ? {
+                          x: homeMeasurement.x - homeOffset.dx,
+                          y: homeMeasurement.y - homeOffset.dy,
+                      }
+                    : (previousMetrics.idealTarget ?? null);
+            const metrics: TileCalibrationMetrics = {
+                ...previousMetrics,
+                home: homeMeasurement,
+                homeOffset,
+                idealTarget,
+                stepToDisplacement: result.stepToDisplacement ?? previousMetrics.stepToDisplacement,
+                sizeDeltaAtStepTest:
+                    result.sizeDeltaAtStepTest !== undefined
+                        ? result.sizeDeltaAtStepTest
+                        : (previousMetrics.sizeDeltaAtStepTest ?? null),
+            };
+            this.setTileState(key, { metrics });
+        });
+    }
+
+    private async alignTilesToIdealGrid(summary: CalibrationRunSummary): Promise<void> {
+        if (!summary.gridBlueprint) {
+            return;
+        }
+        for (const tile of this.calibratableTiles) {
+            await this.checkContinue();
+            const result = summary.tiles[tile.key];
+            if (!result || result.status !== 'completed' || !result.homeOffset) {
+                continue;
+            }
+            const targetX = this.computeAlignmentTargetSteps(
+                -result.homeOffset.dx,
+                result.stepToDisplacement?.x ?? null,
+            );
+            const targetY = this.computeAlignmentTargetSteps(
+                -result.homeOffset.dy,
+                result.stepToDisplacement?.y ?? null,
+            );
+            if (targetX !== null) {
+                await this.moveAxisToPosition(tile.assignment.x, targetX);
+            }
+            if (targetY !== null) {
+                await this.moveAxisToPosition(tile.assignment.y, targetY);
+            }
+            if (targetX !== null || targetY !== null) {
+                await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
+            }
+        }
+    }
+
+    private computeAlignmentTargetSteps(
+        displacement: number,
+        perStep: number | null,
+    ): number | null {
+        if (
+            perStep === null ||
+            perStep === 0 ||
+            !Number.isFinite(perStep) ||
+            Math.abs(perStep) < 1e-6
+        ) {
+            return null;
+        }
+        const rawSteps = displacement / perStep;
+        if (!Number.isFinite(rawSteps) || Math.abs(rawSteps) > MOTOR_MAX_POSITION_STEPS) {
+            return null;
+        }
+        return clampSteps(Math.round(rawSteps));
     }
 
     private async checkContinue(): Promise<void> {
@@ -707,9 +825,10 @@ export class CalibrationRunner {
                 continue;
             }
             const tile = result.tile;
+            const mirroredCol = this.gridSize.cols - 1 - tile.col;
             const idealCenterX =
                 gridBlueprint.gridOrigin.x +
-                tile.col * spacingX +
+                mirroredCol * spacingX +
                 gridBlueprint.idealTileFootprint.width / 2;
             const idealCenterY =
                 gridBlueprint.gridOrigin.y +
@@ -720,6 +839,7 @@ export class CalibrationRunner {
             summaryTiles[key] = {
                 ...result,
                 homeOffset: { dx, dy },
+                idealTarget: { x: idealCenterX, y: idealCenterY },
             };
         }
         return {

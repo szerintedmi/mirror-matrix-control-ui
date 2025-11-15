@@ -4,6 +4,7 @@ import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
+import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
 import { useCameraPipeline } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
@@ -16,6 +17,7 @@ interface CalibrationPageProps {
 }
 
 const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfig }) => {
+    const { drivers } = useStatusStore();
     const {
         detectionSettingsLoaded,
         selectedDeviceId,
@@ -122,6 +124,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 runnerSettings={runnerSettings}
                 tileEntries={tileEntries}
                 detectionReady={detectionReady}
+                drivers={drivers}
                 onUpdateSetting={updateRunnerSetting}
                 onStart={startRunner}
                 onPause={pauseRunner}

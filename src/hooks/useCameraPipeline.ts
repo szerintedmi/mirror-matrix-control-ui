@@ -182,27 +182,69 @@ export const useCameraPipeline = ({
         setRoi(DEFAULT_ROI);
     }, [setRoi]);
 
-    const readBestBlobMeasurement = useCallback(() => {
+    const readBestBlobMeasurement = useCallback((expectedPosition?: { x: number; y: number }) => {
         const meta = processedFrameMetaRef.current;
         const blobs = detectionResultsRef.current;
         if (!meta || !meta.sourceWidth || !meta.sourceHeight || blobs.length === 0) {
             return null;
         }
-        const best = blobs.reduce((top, blob) => (blob.response > top.response ? blob : top));
-        const normalizedX = best.x / meta.sourceWidth;
-        const normalizedY = best.y / meta.sourceHeight;
-        const normalizedSize = best.size / Math.max(meta.sourceWidth, meta.sourceHeight);
+        const normalized = blobs.map((blob) => {
+            const normalizedX = clamp01(blob.x / meta.sourceWidth);
+            const normalizedY = clamp01(blob.y / meta.sourceHeight);
+            const normalizedSize = blob.size / Math.max(meta.sourceWidth, meta.sourceHeight);
+            return {
+                blob,
+                normalizedX,
+                normalizedY,
+                normalizedSize: Math.max(0, normalizedSize),
+            };
+        });
+
+        const selectByDistance = (expected: { x: number; y: number }) => {
+            const EPS = 1e-6;
+            return normalized.reduce(
+                (closest, current) => {
+                    const currentDistance = Math.hypot(
+                        current.normalizedX - expected.x,
+                        current.normalizedY - expected.y,
+                    );
+                    if (!closest) {
+                        return { entry: current, distance: currentDistance };
+                    }
+                    if (currentDistance + EPS < closest.distance) {
+                        return { entry: current, distance: currentDistance };
+                    }
+                    if (Math.abs(currentDistance - closest.distance) <= EPS) {
+                        return current.blob.response > closest.entry.blob.response
+                            ? { entry: current, distance: currentDistance }
+                            : closest;
+                    }
+                    return closest;
+                },
+                null as null | { entry: (typeof normalized)[number]; distance: number },
+            );
+        };
+
+        const bestEntry = expectedPosition
+            ? selectByDistance(expectedPosition)?.entry
+            : normalized.reduce((top, candidate) =>
+                  candidate.blob.response > top.blob.response ? candidate : top,
+              );
+
+        if (!bestEntry) {
+            return null;
+        }
         return {
-            x: clamp01(normalizedX),
-            y: clamp01(normalizedY),
-            size: Math.max(0, normalizedSize),
-            response: best.response,
+            x: bestEntry.normalizedX,
+            y: bestEntry.normalizedY,
+            size: bestEntry.normalizedSize,
+            response: bestEntry.blob.response,
             capturedAt: detectionUpdatedAtRef.current || performance.now(),
         };
     }, []);
 
     const captureBlobMeasurement = useCallback<CaptureBlobMeasurement>(
-        async ({ timeoutMs, signal }) => {
+        async ({ timeoutMs, signal, expectedPosition }) => {
             const start = performance.now();
             let baselineSequence = detectionSequenceRef.current;
             while (performance.now() - start < timeoutMs) {
@@ -211,7 +253,7 @@ export const useCameraPipeline = ({
                 }
                 const sequenceChanged = detectionSequenceRef.current !== baselineSequence;
                 if (sequenceChanged) {
-                    const measurement = readBestBlobMeasurement();
+                    const measurement = readBestBlobMeasurement(expectedPosition);
                     baselineSequence = detectionSequenceRef.current;
                     if (measurement) {
                         return measurement;
