@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
@@ -54,6 +54,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     } = useDetectionSettingsController();
 
     const [isRotationAdjusting, setIsRotationAdjusting] = useState(false);
+    const [alignmentOverlayVisible, setAlignmentOverlayVisible] = useState(false);
 
     const cameraPipeline = useCameraPipeline({
         detectionSettingsLoaded,
@@ -70,6 +71,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         useWasmDetector,
         onNativeDetectorAvailability: handleNativeDetectorAvailability,
         onVideoDimensionsChange: setLastCaptureDimensions,
+        alignmentOverlayVisible,
     });
 
     const {
@@ -91,9 +93,11 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         captureBlobMeasurement,
         previewRefs,
         overlayHandlers,
-        toggleRoiEnabled,
         resetRoi,
         nativeBlobDetectorAvailable,
+        setAlignmentOverlaySummary,
+        blobsOverlayEnabled,
+        setBlobsOverlayEnabled,
     } = cameraPipeline;
 
     const motorCommands = useMotorCommands();
@@ -114,6 +118,13 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         captureMeasurement: captureBlobMeasurement,
         detectionReady,
     });
+
+    useEffect(() => {
+        setAlignmentOverlaySummary(runnerState.summary ?? null);
+    }, [runnerState.summary, setAlignmentOverlaySummary]);
+
+    const alignmentOverlayAvailable = Boolean(runnerState.summary?.gridBlueprint);
+    const displayedAlignmentOverlayEnabled = alignmentOverlayVisible && alignmentOverlayAvailable;
 
     const rotationOverlayVisible = isRotationAdjusting;
 
@@ -183,7 +194,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     onPreviewModeChange={setPreviewMode}
                     roi={roi}
                     roiViewEnabled={roiViewEnabled}
-                    onToggleRoiEnabled={toggleRoiEnabled}
                     onToggleRoiView={toggleRoiView}
                     onResetRoi={resetRoi}
                     previewRefs={previewRefs}
@@ -194,6 +204,11 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     opencvStatus={opencvStatus}
                     opencvError={opencvError}
                     videoDimensions={videoDimensions}
+                    blobsOverlayEnabled={blobsOverlayEnabled}
+                    onToggleBlobsOverlay={() => setBlobsOverlayEnabled(!blobsOverlayEnabled)}
+                    alignmentOverlayEnabled={displayedAlignmentOverlayEnabled}
+                    alignmentOverlayAvailable={alignmentOverlayAvailable}
+                    onToggleAlignmentOverlay={() => setAlignmentOverlayVisible((prev) => !prev)}
                 />
             </div>
         </div>

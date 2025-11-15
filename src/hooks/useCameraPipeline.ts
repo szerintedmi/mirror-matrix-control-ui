@@ -6,7 +6,7 @@ import {
     useRoiOverlayInteractions,
     type RoiEditingMode,
 } from '@/hooks/useRoiOverlayInteractions';
-import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
+import type { CalibrationRunSummary, CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type {
     BlobDetectorParams,
     DetectedBlob,
@@ -18,6 +18,55 @@ import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
 import type { NormalizedRoi } from '@/types';
 
 import type React from 'react';
+
+type CvMat = { delete: () => void };
+type CvPoint = unknown;
+type CvScalar = unknown;
+
+interface CvRuntime {
+    Mat: {
+        zeros: (rows: number, cols: number, type: number) => CvMat;
+    };
+    Scalar: new (b: number, g: number, r: number, a?: number) => CvScalar;
+    Point: new (x: number, y: number) => CvPoint;
+    circle: (
+        mat: CvMat,
+        center: CvPoint,
+        radius: number,
+        color: CvScalar,
+        thickness: number,
+        lineType: number,
+    ) => void;
+    rectangle: (
+        mat: CvMat,
+        pt1: CvPoint,
+        pt2: CvPoint,
+        color: CvScalar,
+        thickness?: number,
+        lineType?: number,
+    ) => void;
+    putText: (
+        mat: CvMat,
+        text: string,
+        org: CvPoint,
+        fontFace: number,
+        fontScale: number,
+        color: CvScalar,
+        thickness?: number,
+        lineType?: number,
+    ) => void;
+    imshow: (canvas: HTMLCanvasElement, mat: CvMat) => void;
+    CV_8UC4: number;
+    LINE_AA: number;
+    FILLED: number;
+    FONT_HERSHEY_SIMPLEX: number;
+}
+
+declare global {
+    interface Window {
+        cv?: CvRuntime;
+    }
+}
 
 export type {
     CameraPipelineOverlayHandlers,
@@ -42,6 +91,7 @@ interface UseCameraPipelineParams {
     useWasmDetector: boolean;
     onNativeDetectorAvailability: (hasNativeDetector: boolean) => void;
     onVideoDimensionsChange?: (dimensions: { width: number | null; height: number | null }) => void;
+    alignmentOverlayVisible?: boolean;
 }
 
 // CameraPipelineOverlayHandlers type re-exported above
@@ -52,6 +102,7 @@ export interface CameraPreviewRefs {
     processedCanvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
     detectionOverlayCanvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
     roiCanvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
+    roiOverlayCanvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
 }
 
 export interface CameraPipelineController {
@@ -73,9 +124,11 @@ export interface CameraPipelineController {
     captureBlobMeasurement: CaptureBlobMeasurement;
     previewRefs: CameraPreviewRefs;
     overlayHandlers: CameraPipelineOverlayHandlers;
-    toggleRoiEnabled: () => void;
     resetRoi: () => void;
     nativeBlobDetectorAvailable: boolean;
+    setAlignmentOverlaySummary: (summary: CalibrationRunSummary | null) => void;
+    blobsOverlayEnabled: boolean;
+    setBlobsOverlayEnabled: (enabled: boolean) => void;
 }
 
 const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
@@ -117,6 +170,7 @@ export const useCameraPipeline = ({
     useWasmDetector,
     onNativeDetectorAvailability,
     onVideoDimensionsChange,
+    alignmentOverlayVisible = false,
 }: UseCameraPipelineParams): CameraPipelineController => {
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
     const [previewMode, setPreviewMode] = useState<PreviewMode>('processed');
@@ -129,6 +183,7 @@ export const useCameraPipeline = ({
     const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
     const [opencvError, setOpenCvError] = useState<string | null>(null);
     const [opencvInfo, setOpenCvInfo] = useState<OpenCvReadyMessage | null>(null);
+    const [blobsOverlayEnabled, setBlobsOverlayEnabled] = useState(true);
 
     const nativeBlobDetectorStatus = opencvInfo?.capabilities?.hasNativeBlobDetector;
     const nativeBlobDetectorAvailable = nativeBlobDetectorStatus === true;
@@ -137,8 +192,10 @@ export const useCameraPipeline = ({
     const videoRef = useRef<HTMLVideoElement>(null);
     const processedCanvasRef = useRef<HTMLCanvasElement>(null);
     const roiCanvasRef = useRef<HTMLCanvasElement>(null);
+    const roiOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const detectionOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const rotatedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const rotatedOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const roiRef = useRef<NormalizedRoi>(roi);
     const detectionResultsRef = useRef<DetectedBlob[]>([]);
@@ -149,6 +206,10 @@ export const useCameraPipeline = ({
     } | null>(null);
     const detectionSequenceRef = useRef(0);
     const detectionUpdatedAtRef = useRef(0);
+    const alignmentOverlaySummaryRef = useRef<CalibrationRunSummary | null>(null);
+    const alignmentOverlayVisibleRef = useRef<boolean>(Boolean(alignmentOverlayVisible));
+    const blobsOverlayVisibleRef = useRef<boolean>(true);
+    const overlayCvRef = useRef<CvRuntime | null>(null);
 
     const reportVideoDimensions = useCallback(
         (width: number, height: number) => {
@@ -174,13 +235,60 @@ export const useCameraPipeline = ({
         setRoiViewEnabled((prev) => !prev);
     }, []);
 
-    const toggleRoiEnabled = useCallback(() => {
-        setRoi((prev) => ({ ...prev, enabled: !prev.enabled }));
-    }, [setRoi]);
-
     const resetRoi = useCallback(() => {
         setRoi(DEFAULT_ROI);
     }, [setRoi]);
+
+    useEffect(() => {
+        alignmentOverlayVisibleRef.current = Boolean(alignmentOverlayVisible);
+    }, [alignmentOverlayVisible]);
+
+    const setAlignmentOverlaySummary = useCallback((summary: CalibrationRunSummary | null) => {
+        alignmentOverlaySummaryRef.current = summary;
+    }, []);
+
+    useEffect(() => {
+        blobsOverlayVisibleRef.current = blobsOverlayEnabled;
+    }, [blobsOverlayEnabled]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const globalCv = window.cv;
+        if (globalCv) {
+            overlayCvRef.current = globalCv;
+            return;
+        }
+        let cancelled = false;
+        const existing = document.querySelector<HTMLScriptElement>('script[data-overlay-cv]');
+        if (existing) {
+            existing.addEventListener('load', () => {
+                if (!cancelled && window.cv) {
+                    overlayCvRef.current = window.cv;
+                }
+            });
+            return () => {
+                cancelled = true;
+            };
+        }
+        const script = document.createElement('script');
+        script.src = '/opencv_js.js';
+        script.async = true;
+        script.dataset.overlayCv = 'true';
+        script.onload = () => {
+            if (!cancelled && window.cv) {
+                overlayCvRef.current = window.cv;
+            }
+        };
+        script.onerror = (error) => {
+            console.error('Failed to load OpenCV overlay bundle', error);
+        };
+        document.body.appendChild(script);
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const readBestBlobMeasurement = useCallback((expectedPosition?: { x: number; y: number }) => {
         const meta = processedFrameMetaRef.current;
@@ -451,19 +559,20 @@ export const useCameraPipeline = ({
         [previewMode, roi.enabled, roiViewEnabled, rotationDegrees],
     );
 
-    const drawBlobOverlay = useCallback(
+    const renderDetectionOverlay = useCallback(
         (
-            ctx: CanvasRenderingContext2D | null,
+            canvas: HTMLCanvasElement,
             width: number,
             height: number,
             displayRectOverride?: { x: number; y: number; width: number; height: number },
         ) => {
+            const meta = processedFrameMetaRef.current;
+            const ctx = canvas.getContext('2d');
             if (!ctx) {
                 return;
             }
-            const meta = processedFrameMetaRef.current;
-            const blobs = detectionResultsRef.current;
-            if (!meta || blobs.length === 0) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!meta) {
                 return;
             }
             const baseRect = displayRectOverride ??
@@ -478,28 +587,303 @@ export const useCameraPipeline = ({
             }
             const scaleX = width / baseRect.width;
             const scaleY = height / baseRect.height;
-            ctx.save();
-            ctx.strokeStyle = 'rgba(52, 211, 153, 0.9)';
-            ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.003);
-            blobs.forEach((blob) => {
-                const adjustedX = blob.x - baseRect.x;
-                const adjustedY = blob.y - baseRect.y;
-                if (
-                    adjustedX < 0 ||
-                    adjustedY < 0 ||
-                    adjustedX > baseRect.width ||
-                    adjustedY > baseRect.height
-                ) {
+            const summary = alignmentOverlaySummaryRef.current;
+            const blobEntries = detectionResultsRef.current;
+
+            const drawBlobsCanvas = () => {
+                if (!blobsOverlayVisibleRef.current || !blobEntries.length) {
                     return;
                 }
-                const drawX = adjustedX * scaleX;
-                const drawY = adjustedY * scaleY;
-                const radius = Math.max(2, (blob.size / 2) * ((scaleX + scaleY) / 2));
-                ctx.beginPath();
-                ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
-                ctx.stroke();
-            });
-            ctx.restore();
+                ctx.save();
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+                ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.003);
+                blobEntries.forEach((blob) => {
+                    const adjustedX = blob.x - baseRect.x;
+                    const adjustedY = blob.y - baseRect.y;
+                    if (
+                        adjustedX < 0 ||
+                        adjustedY < 0 ||
+                        adjustedX > baseRect.width ||
+                        adjustedY > baseRect.height
+                    ) {
+                        return;
+                    }
+                    const drawX = adjustedX * scaleX;
+                    const drawY = adjustedY * scaleY;
+                    const radius = Math.max(2, (blob.size / 2) * ((scaleX + scaleY) / 2));
+                    ctx.beginPath();
+                    ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                });
+                ctx.restore();
+            };
+
+            const drawAlignmentCanvas = () => {
+                if (!alignmentOverlayVisibleRef.current || !summary?.gridBlueprint) {
+                    return;
+                }
+                const blueprint = summary.gridBlueprint;
+                const tileEntries = Object.values(summary.tiles);
+                if (!tileEntries.length) {
+                    return;
+                }
+                const cols =
+                    tileEntries.reduce(
+                        (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
+                        0,
+                    ) + 1;
+                const spacingX = blueprint.idealTileFootprint.width + blueprint.tileGap;
+                const spacingY = blueprint.idealTileFootprint.height + blueprint.tileGap;
+                const sourceWidth = meta.sourceWidth || width;
+                const sourceHeight = meta.sourceHeight || height;
+                ctx.save();
+                ctx.lineWidth = 2;
+                tileEntries.forEach((entry) => {
+                    const mirroredCol = cols - 1 - entry.tile.col;
+                    const idealCenterX =
+                        blueprint.gridOrigin.x +
+                        mirroredCol * spacingX +
+                        blueprint.idealTileFootprint.width / 2;
+                    const idealCenterY =
+                        blueprint.gridOrigin.y +
+                        entry.tile.row * spacingY +
+                        blueprint.idealTileFootprint.height / 2;
+                    const normalizedLeft = idealCenterX - blueprint.idealTileFootprint.width / 2;
+                    const normalizedTop = idealCenterY - blueprint.idealTileFootprint.height / 2;
+                    const pxLeft = normalizedLeft * sourceWidth;
+                    const pxTop = normalizedTop * sourceHeight;
+                    const pxWidth = blueprint.idealTileFootprint.width * sourceWidth;
+                    const pxHeight = blueprint.idealTileFootprint.height * sourceHeight;
+                    const localLeft = (pxLeft - baseRect.x) * scaleX;
+                    const localTop = (pxTop - baseRect.y) * scaleY;
+                    const rectWidth = pxWidth * scaleX;
+                    const rectHeight = pxHeight * scaleY;
+                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+                    ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+                    ctx.beginPath();
+                    ctx.rect(localLeft, localTop, rectWidth, rectHeight);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = '#ccf0f0';
+                    ctx.font = '10px monospace';
+                    ctx.fillText(
+                        `[${entry.tile.row},${entry.tile.col}]`,
+                        localLeft + 4,
+                        localTop + 12,
+                    );
+                    const measurement = entry.homeMeasurement;
+                    if (measurement) {
+                        const measurementX = (measurement.x * sourceWidth - baseRect.x) * scaleX;
+                        const measurementY = (measurement.y * sourceHeight - baseRect.y) * scaleY;
+                        ctx.fillStyle = '#facc15';
+                        ctx.beginPath();
+                        ctx.arc(measurementX, measurementY, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillRect(8, height - 34, 180, 28);
+                ctx.fillStyle = '#ccf0f0';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('■ Target square', 14, height - 20);
+                ctx.fillText('● Measured home', 14, height - 8);
+                ctx.restore();
+            };
+
+            if (!blobsOverlayVisibleRef.current && !alignmentOverlayVisibleRef.current) {
+                return;
+            }
+
+            const cvImpl = overlayCvRef.current;
+            const cvRuntimeReady = Boolean(
+                cvImpl &&
+                    cvImpl.Mat &&
+                    typeof cvImpl.Mat.zeros === 'function' &&
+                    typeof cvImpl.Scalar === 'function' &&
+                    typeof cvImpl.Point === 'function' &&
+                    typeof cvImpl.imshow === 'function'
+            );
+            if (!cvRuntimeReady || !cvImpl) {
+                drawBlobsCanvas();
+                drawAlignmentCanvas();
+                return;
+            }
+
+            const runtime = cvImpl;
+            const overlayMat = runtime.Mat.zeros(height, width, runtime.CV_8UC4);
+            const drawBlobsCv = () => {
+                if (!blobsOverlayVisibleRef.current || !blobEntries.length) {
+                    return;
+                }
+                const circleColor = new runtime.Scalar(68, 68, 239, 230);
+                const thickness = Math.max(1, Math.round(Math.min(width, height) * 0.003));
+                blobEntries.forEach((blob) => {
+                    const adjustedX = blob.x - baseRect.x;
+                    const adjustedY = blob.y - baseRect.y;
+                    if (
+                        adjustedX < 0 ||
+                        adjustedY < 0 ||
+                        adjustedX > baseRect.width ||
+                        adjustedY > baseRect.height
+                    ) {
+                        return;
+                    }
+                    const drawX = Math.round(adjustedX * scaleX);
+                    const drawY = Math.round(adjustedY * scaleY);
+                    const radius = Math.max(
+                        2,
+                        Math.round((blob.size / 2) * ((scaleX + scaleY) / 2)),
+                    );
+                    runtime.circle(
+                        overlayMat,
+                        new runtime.Point(drawX, drawY),
+                        radius,
+                        circleColor,
+                        thickness,
+                        runtime.LINE_AA,
+                    );
+                });
+            };
+
+            const drawAlignmentCv = () => {
+                if (!alignmentOverlayVisibleRef.current || !summary?.gridBlueprint) {
+                    return;
+                }
+                const blueprint = summary.gridBlueprint;
+                const tileEntries = Object.values(summary.tiles);
+                if (!tileEntries.length) {
+                    return;
+                }
+                const cols =
+                    tileEntries.reduce(
+                        (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
+                        0,
+                    ) + 1;
+                const spacingX = blueprint.idealTileFootprint.width + blueprint.tileGap;
+                const spacingY = blueprint.idealTileFootprint.height + blueprint.tileGap;
+                const sourceWidth = meta.sourceWidth || width;
+                const sourceHeight = meta.sourceHeight || height;
+                const squareColor = new runtime.Scalar(64, 203, 153, 150);
+                const labelColor = new runtime.Scalar(240, 255, 255, 255);
+                const measurementColor = new runtime.Scalar(255, 255, 0, 255);
+                tileEntries.forEach((entry) => {
+                    const mirroredCol = cols - 1 - entry.tile.col;
+                    const idealCenterX =
+                        blueprint.gridOrigin.x +
+                        mirroredCol * spacingX +
+                        blueprint.idealTileFootprint.width / 2;
+                    const idealCenterY =
+                        blueprint.gridOrigin.y +
+                        entry.tile.row * spacingY +
+                        blueprint.idealTileFootprint.height / 2;
+                    const normalizedLeft = idealCenterX - blueprint.idealTileFootprint.width / 2;
+                    const normalizedTop = idealCenterY - blueprint.idealTileFootprint.height / 2;
+                    const pxLeft = normalizedLeft * sourceWidth;
+                    const pxTop = normalizedTop * sourceHeight;
+                    const pxWidth = blueprint.idealTileFootprint.width * sourceWidth;
+                    const pxHeight = blueprint.idealTileFootprint.height * sourceHeight;
+                    const localLeft = (pxLeft - baseRect.x) * scaleX;
+                    const localTop = (pxTop - baseRect.y) * scaleY;
+                    const localRight = localLeft + pxWidth * scaleX;
+                    const localBottom = localTop + pxHeight * scaleY;
+                    if (
+                        localRight < 0 ||
+                        localBottom < 0 ||
+                        localLeft > width ||
+                        localTop > height
+                    ) {
+                        return;
+                    }
+                    const topLeft = new runtime.Point(Math.round(localLeft), Math.round(localTop));
+                    const bottomRight = new runtime.Point(
+                        Math.round(localRight),
+                        Math.round(localBottom),
+                    );
+                    runtime.rectangle(
+                        overlayMat,
+                        topLeft,
+                        bottomRight,
+                        squareColor,
+                        2,
+                        runtime.LINE_AA,
+                    );
+                    const label = `[${entry.tile.row},${entry.tile.col}]`;
+                    const textOrigin = new cvImpl.Point(
+                        Math.round(localLeft + 4),
+                        Math.round(localTop + 14),
+                    );
+                    runtime.putText(
+                        overlayMat,
+                        label,
+                        textOrigin,
+                        runtime.FONT_HERSHEY_SIMPLEX,
+                        0.35,
+                        labelColor,
+                        1,
+                        runtime.LINE_AA,
+                    );
+                    const measurement = entry.homeMeasurement;
+                    if (measurement) {
+                        const measurementX = (measurement.x * sourceWidth - baseRect.x) * scaleX;
+                        const measurementY = (measurement.y * sourceHeight - baseRect.y) * scaleY;
+                        runtime.circle(
+                            overlayMat,
+                            new runtime.Point(Math.round(measurementX), Math.round(measurementY)),
+                            4,
+                            measurementColor,
+                            runtime.FILLED,
+                            runtime.LINE_AA,
+                        );
+                    }
+                });
+                const legendBaseY = height - 12;
+                const squareLegendTopLeft = new runtime.Point(10, legendBaseY - 12);
+                const squareLegendBottomRight = new runtime.Point(24, legendBaseY + 2);
+                runtime.rectangle(
+                    overlayMat,
+                    squareLegendTopLeft,
+                    squareLegendBottomRight,
+                    squareColor,
+                    runtime.FILLED,
+                    runtime.LINE_AA,
+                );
+                runtime.putText(
+                    overlayMat,
+                    'Target square',
+                    new runtime.Point(30, legendBaseY),
+                    runtime.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    labelColor,
+                    1,
+                    runtime.LINE_AA,
+                );
+                runtime.circle(
+                    overlayMat,
+                    new runtime.Point(12, legendBaseY - 20),
+                    4,
+                    measurementColor,
+                    runtime.FILLED,
+                    runtime.LINE_AA,
+                );
+                runtime.putText(
+                    overlayMat,
+                    'Measured home',
+                    new runtime.Point(30, legendBaseY - 16),
+                    runtime.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    labelColor,
+                    1,
+                    runtime.LINE_AA,
+                );
+            };
+
+            try {
+                drawBlobsCv();
+                drawAlignmentCv();
+                runtime.imshow(canvas, overlayMat);
+            } finally {
+                overlayMat.delete();
+            }
         },
         [],
     );
@@ -693,29 +1077,86 @@ export const useCameraPipeline = ({
             const currentRoi = roiRef.current;
             const showFullFrame = !roiViewEnabled || !currentRoi.enabled;
             const overlayCanvas = detectionOverlayCanvasRef.current;
-            if (overlayCanvas) {
-                const overlayCtx = overlayCanvas.getContext('2d');
-                if (showFullFrame && previewMode === 'processed') {
-                    if (overlayCanvas.width !== baseWidth || overlayCanvas.height !== baseHeight) {
-                        overlayCanvas.width = baseWidth;
-                        overlayCanvas.height = baseHeight;
-                    }
-                    overlayCtx?.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-                    drawBlobOverlay(overlayCtx, baseWidth, baseHeight);
-                } else if (overlayCtx) {
-                    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-                }
-            }
-            if (zoomCanvas && currentRoi.enabled) {
-                const roiPixels =
+            const roiOverlayCanvas = roiOverlayCanvasRef.current;
+            const rotatedOverlayCanvas = rotatedOverlayCanvasRef.current;
+            const metaSnapshot = processedFrameMetaRef.current;
+            let roiPixels: { width: number; height: number } | null = null;
+            let roiSourceRect: { x: number; y: number; width: number; height: number } | null =
+                null;
+            if (!showFullFrame && currentRoi.enabled) {
+                roiPixels =
                     shouldUseWorkerRoi && processedSourceAvailable
                         ? { width: baseWidth, height: baseHeight }
                         : {
                               width: Math.max(1, Math.round(currentRoi.width * baseWidth)),
                               height: Math.max(1, Math.round(currentRoi.height * baseHeight)),
                           };
-                const targetWidth = showFullFrame ? baseWidth : roiPixels.width;
-                const targetHeight = showFullFrame ? baseHeight : roiPixels.height;
+                if (shouldUseWorkerRoi && processedSourceAvailable) {
+                    roiSourceRect = metaSnapshot?.appliedRoi ?? null;
+                } else {
+                    const sourceWidth = metaSnapshot?.sourceWidth ?? baseWidth;
+                    const sourceHeight = metaSnapshot?.sourceHeight ?? baseHeight;
+                    roiSourceRect = {
+                        x: Math.max(0, currentRoi.x * sourceWidth),
+                        y: Math.max(0, currentRoi.y * sourceHeight),
+                        width: Math.max(1, currentRoi.width * sourceWidth),
+                        height: Math.max(1, currentRoi.height * sourceHeight),
+                    };
+                }
+            }
+            if (overlayCanvas) {
+                const overlayCtx = overlayCanvas.getContext('2d');
+                if (previewMode === 'processed' && opencvStatus === 'ready') {
+                    if (overlayCanvas.width !== baseWidth || overlayCanvas.height !== baseHeight) {
+                        overlayCanvas.width = baseWidth;
+                        overlayCanvas.height = baseHeight;
+                    }
+                    renderDetectionOverlay(overlayCanvas, baseWidth, baseHeight);
+                } else {
+                    overlayCtx?.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                }
+            }
+            if (rotationDegrees !== 0) {
+                let rotatedOverlay = rotatedOverlayCanvas;
+                if (!rotatedOverlay && typeof document !== 'undefined') {
+                    rotatedOverlay = document.createElement('canvas');
+                    rotatedOverlayCanvasRef.current = rotatedOverlay;
+                }
+                if (rotatedOverlay && overlayCanvas) {
+                    if (
+                        rotatedOverlay.width !== baseWidth ||
+                        rotatedOverlay.height !== baseHeight
+                    ) {
+                        rotatedOverlay.width = baseWidth;
+                        rotatedOverlay.height = baseHeight;
+                    }
+                    const rotatedOverlayCtx = rotatedOverlay.getContext('2d');
+                    if (rotatedOverlayCtx) {
+                        rotatedOverlayCtx.save();
+                        rotatedOverlayCtx.clearRect(0, 0, baseWidth, baseHeight);
+                        rotatedOverlayCtx.translate(baseWidth / 2, baseHeight / 2);
+                        rotatedOverlayCtx.rotate((rotationDegrees * Math.PI) / 180);
+                        rotatedOverlayCtx.translate(-baseWidth / 2, -baseHeight / 2);
+                        rotatedOverlayCtx.drawImage(overlayCanvas, 0, 0, baseWidth, baseHeight);
+                        rotatedOverlayCtx.restore();
+                    }
+                }
+            } else if (rotatedOverlayCanvasRef.current) {
+                const rotatedOverlayCtx = rotatedOverlayCanvasRef.current.getContext('2d');
+                rotatedOverlayCtx?.clearRect(
+                    0,
+                    0,
+                    rotatedOverlayCanvasRef.current.width,
+                    rotatedOverlayCanvasRef.current.height,
+                );
+            }
+            if (zoomCanvas && currentRoi.enabled) {
+                const roiSize = roiPixels ?? {
+                    width: baseWidth,
+                    height: baseHeight,
+                };
+                const targetWidth = showFullFrame ? baseWidth : roiSize.width;
+                const targetHeight = showFullFrame ? baseHeight : roiSize.height;
                 if (zoomCanvas.width !== targetWidth || zoomCanvas.height !== targetHeight) {
                     zoomCanvas.width = targetWidth;
                     zoomCanvas.height = targetHeight;
@@ -765,6 +1206,70 @@ export const useCameraPipeline = ({
                 zoomCanvas.getContext('2d')?.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
             }
 
+            if (roiOverlayCanvas) {
+                const roiOverlayCtx = roiOverlayCanvas.getContext('2d');
+                const overlaySourceForRoi =
+                    rotationDegrees !== 0 && rotatedOverlayCanvasRef.current
+                        ? rotatedOverlayCanvasRef.current
+                        : overlayCanvas;
+                const shouldRenderOverlay =
+                    overlaySourceForRoi &&
+                    !showFullFrame &&
+                    currentRoi.enabled &&
+                    previewMode === 'processed' &&
+                    opencvStatus === 'ready' &&
+                    blobsOverlayEnabled;
+                if (shouldRenderOverlay && overlaySourceForRoi) {
+                    const roiSize = roiPixels ?? {
+                        width: baseWidth,
+                        height: baseHeight,
+                    };
+                    const targetWidth = roiSize.width;
+                    const targetHeight = roiSize.height;
+                    if (
+                        roiOverlayCanvas.width !== targetWidth ||
+                        roiOverlayCanvas.height !== targetHeight
+                    ) {
+                        roiOverlayCanvas.width = targetWidth;
+                        roiOverlayCanvas.height = targetHeight;
+                    }
+                    if (roiOverlayCtx) {
+                        roiOverlayCtx.clearRect(0, 0, targetWidth, targetHeight);
+                        if (shouldUseWorkerRoi && processedSourceAvailable && roiSourceRect) {
+                            roiOverlayCtx.drawImage(
+                                overlaySourceForRoi,
+                                roiSourceRect.x,
+                                roiSourceRect.y,
+                                roiSourceRect.width,
+                                roiSourceRect.height,
+                                0,
+                                0,
+                                targetWidth,
+                                targetHeight,
+                            );
+                        } else {
+                            const sx = currentRoi.x * baseWidth;
+                            const sy = currentRoi.y * baseHeight;
+                            const sWidth = Math.max(1, currentRoi.width * baseWidth);
+                            const sHeight = Math.max(1, currentRoi.height * baseHeight);
+                            roiOverlayCtx.drawImage(
+                                overlaySourceForRoi,
+                                sx,
+                                sy,
+                                sWidth,
+                                sHeight,
+                                0,
+                                0,
+                                targetWidth,
+                                targetHeight,
+                            );
+                        }
+                    }
+                } else if (roiOverlayCtx) {
+                    roiOverlayCtx.clearRect(0, 0, roiOverlayCanvas.width, roiOverlayCanvas.height);
+                }
+            }
+
             animationFrameId = requestAnimationFrame(render);
         };
 
@@ -772,7 +1277,15 @@ export const useCameraPipeline = ({
         return () => {
             cancelAnimationFrame(animationFrameId);
         };
-    }, [drawBlobOverlay, previewMode, roiViewEnabled, rotationDegrees, shouldUseWorkerRoi]);
+    }, [
+        renderDetectionOverlay,
+        previewMode,
+        roiViewEnabled,
+        rotationDegrees,
+        shouldUseWorkerRoi,
+        blobsOverlayEnabled,
+        opencvStatus,
+    ]);
 
     const detectionReady = cameraStatus === 'ready' && opencvStatus === 'ready';
 
@@ -806,10 +1319,13 @@ export const useCameraPipeline = ({
             processedCanvasRef,
             detectionOverlayCanvasRef,
             roiCanvasRef,
+            roiOverlayCanvasRef,
         },
         overlayHandlers,
-        toggleRoiEnabled,
         resetRoi,
         nativeBlobDetectorAvailable,
+        setAlignmentOverlaySummary,
+        blobsOverlayEnabled,
+        setBlobsOverlayEnabled,
     };
 };

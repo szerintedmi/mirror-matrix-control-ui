@@ -14,7 +14,6 @@ interface CalibrationPreviewProps {
     onPreviewModeChange: (mode: PreviewMode) => void;
     roi: NormalizedRoi;
     roiViewEnabled: boolean;
-    onToggleRoiEnabled: () => void;
     onToggleRoiView: () => void;
     onResetRoi: () => void;
     previewRefs: CameraPreviewRefs;
@@ -25,6 +24,11 @@ interface CalibrationPreviewProps {
     opencvStatus: OpenCvWorkerStatus;
     opencvError: string | null;
     videoDimensions: { width: number; height: number };
+    blobsOverlayEnabled: boolean;
+    onToggleBlobsOverlay: () => void;
+    alignmentOverlayEnabled: boolean;
+    alignmentOverlayAvailable: boolean;
+    onToggleAlignmentOverlay: () => void;
 }
 
 const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
@@ -32,7 +36,6 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     onPreviewModeChange,
     roi,
     roiViewEnabled,
-    onToggleRoiEnabled,
     onToggleRoiView,
     onResetRoi,
     previewRefs,
@@ -43,6 +46,11 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     opencvStatus,
     opencvError,
     videoDimensions,
+    blobsOverlayEnabled,
+    onToggleBlobsOverlay,
+    alignmentOverlayEnabled,
+    alignmentOverlayAvailable,
+    onToggleAlignmentOverlay,
 }) => {
     const roiAspectRatio = useMemo(() => {
         if (!roiViewEnabled || !roi.enabled) {
@@ -66,6 +74,8 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         videoDimensions.width,
     ]);
 
+    const overlayButtonActive = alignmentOverlayEnabled && alignmentOverlayAvailable;
+
     const previewAspectRatio = useMemo(() => {
         if (roiAspectRatio) {
             return roiAspectRatio;
@@ -82,14 +92,21 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     const rawVisible =
         showFullFrame &&
         (previewMode === 'raw' || (previewMode === 'processed' && opencvStatus !== 'ready'));
+    const processedFeedReady = previewMode === 'processed' && opencvStatus === 'ready';
     const workerOverlayActive = previewMode === 'processed' && opencvStatus !== 'ready';
     const workerOverlayMessage =
         opencvStatus === 'error'
             ? (opencvError ?? 'OpenCV initialization failed.')
             : 'Launching OpenCV…';
 
-    const { overlayRef, videoRef, processedCanvasRef, detectionOverlayCanvasRef, roiCanvasRef } =
-        previewRefs;
+    const {
+        overlayRef,
+        videoRef,
+        processedCanvasRef,
+        detectionOverlayCanvasRef,
+        roiCanvasRef,
+        roiOverlayCanvasRef,
+    } = previewRefs;
 
     const bindOverlayRef = useCallback(
         (node: HTMLDivElement | null) => {
@@ -97,6 +114,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         },
         [overlayRef],
     );
+
     const bindVideoRef = useCallback(
         (node: HTMLVideoElement | null) => {
             videoRef.current = node;
@@ -121,6 +139,12 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         },
         [roiCanvasRef],
     );
+    const bindRoiOverlayRef = useCallback(
+        (node: HTMLCanvasElement | null) => {
+            roiOverlayCanvasRef.current = node;
+        },
+        [roiOverlayCanvasRef],
+    );
 
     return (
         <section className="flex-1 min-w-0 rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
@@ -143,17 +167,6 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                 </div>
                 <button
                     type="button"
-                    onClick={onToggleRoiEnabled}
-                    className={`rounded-md border px-3 py-1 text-sm ${
-                        roi.enabled
-                            ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                            : 'border-gray-700 bg-gray-900 text-gray-400'
-                    }`}
-                >
-                    ROI {roi.enabled ? 'Enabled' : 'Disabled'}
-                </button>
-                <button
-                    type="button"
                     onClick={onToggleRoiView}
                     disabled={!roi.enabled}
                     className={`rounded-md border px-3 py-1 text-sm ${
@@ -161,11 +174,41 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                             ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
                             : 'border-gray-700 bg-gray-900 text-gray-400'
                     } ${!roi.enabled ? 'opacity-50' : ''}`}
-                    title={
-                        roi.enabled ? 'Toggle cropped ROI preview' : 'Enable ROI to use this view'
-                    }
+                    title="Toggle cropped ROI preview"
+                    aria-pressed={roiViewEnabled}
                 >
-                    ROI view {roiViewEnabled ? 'On' : 'Off'}
+                    ROI View
+                </button>
+                <button
+                    type="button"
+                    onClick={onToggleBlobsOverlay}
+                    className={`rounded-md border px-3 py-1 text-sm transition ${
+                        blobsOverlayEnabled
+                            ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
+                            : 'border-gray-700 bg-gray-900 text-gray-400'
+                    }`}
+                    aria-pressed={blobsOverlayEnabled}
+                    title="Toggle detected blob overlay"
+                >
+                    Blobs
+                </button>
+                <button
+                    type="button"
+                    onClick={onToggleAlignmentOverlay}
+                    disabled={!alignmentOverlayAvailable}
+                    className={`rounded-md border px-3 py-1 text-sm transition ${
+                        overlayButtonActive
+                            ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
+                            : 'border-gray-700 bg-gray-900 text-gray-400'
+                    } ${!alignmentOverlayAvailable ? 'cursor-not-allowed opacity-50' : ''}`}
+                    title={
+                        alignmentOverlayAvailable
+                            ? 'Overlay calibration grid on the processed feed'
+                            : 'Complete a calibration run to unlock the calibration view'
+                    }
+                    aria-pressed={overlayButtonActive}
+                >
+                    Calibration View
                 </button>
                 <button
                     type="button"
@@ -209,7 +252,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         <canvas
                             ref={bindDetectionOverlayRef}
                             className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                showFullFrame && processedVisible ? 'opacity-100' : 'opacity-0'
+                                processedFeedReady ? 'opacity-100' : 'opacity-0'
                             }`}
                         />
                     </div>
@@ -217,6 +260,12 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         ref={bindRoiCanvasRef}
                         className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
                             showFullFrame ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                        }`}
+                    />
+                    <canvas
+                        ref={bindRoiOverlayRef}
+                        className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
+                            showFullFrame ? 'opacity-0' : 'opacity-100'
                         }`}
                     />
                     {showFullFrame && roi.enabled && (

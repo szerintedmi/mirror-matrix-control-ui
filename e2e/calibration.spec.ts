@@ -40,9 +40,13 @@ test.describe('Calibration page smoke checks', () => {
 
         await expect(page.getByLabel('Camera Device')).toBeVisible();
 
-        const roiViewBtn = page.getByRole('button', { name: /ROI view Off/i });
+        const roiViewBtn = page.getByRole('button', { name: 'ROI View' });
+        const initialPressed = await roiViewBtn.getAttribute('aria-pressed');
         await roiViewBtn.click();
-        await expect(page.getByRole('button', { name: /ROI view On/i })).toBeVisible();
+        await expect(roiViewBtn).toHaveAttribute(
+            'aria-pressed',
+            initialPressed === 'true' ? 'false' : 'true',
+        );
 
         const rotationSlider = page.locator('#calibration-rotation');
         await rotationSlider.evaluate((el) => {

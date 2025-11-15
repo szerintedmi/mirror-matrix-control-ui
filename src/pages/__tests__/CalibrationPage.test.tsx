@@ -161,25 +161,14 @@ const clickButtonByText = async (container: HTMLElement, text: string) => {
 };
 
 describe('CalibrationPage interactions', () => {
-    it('disables ROI view when ROI is disabled', async () => {
+    it('toggles ROI view highlighting', async () => {
         const { container, root } = await renderPage();
 
-        const roiViewButton = await clickButtonByText(container, 'roi view off');
-        expect(roiViewButton.textContent).toMatch(/roi view on/i);
+        const roiViewButton = await clickButtonByText(container, 'roi view');
+        const initialState = roiViewButton.getAttribute('aria-pressed');
 
-        const roiToggle = await clickButtonByText(container, 'roi enabled');
-        expect(roiToggle.textContent).toMatch(/roi disabled/i);
-
-        await act(async () => {
-            await Promise.resolve();
-        });
-
-        const updatedButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-            btn.textContent?.toLowerCase().includes('roi view'),
-        );
-        expect(updatedButton).toBeDefined();
-        expect(updatedButton?.textContent).toMatch(/roi view off/i);
-        expect((updatedButton as HTMLButtonElement).disabled).toBe(true);
+        await clickButtonByText(container, 'roi view');
+        expect(roiViewButton.getAttribute('aria-pressed')).not.toBe(initialState);
 
         await act(() => {
             root.unmount();
