@@ -6,6 +6,8 @@ interface ModalProps {
     onClose: () => void;
     title?: string;
     children: React.ReactNode;
+    contentClassName?: string;
+    bodyClassName?: string;
 }
 
 const modalRootId = 'modal-root';
@@ -24,7 +26,14 @@ const ensureModalRoot = (): HTMLElement | null => {
     return node;
 };
 
-const Modal: React.FC<ModalProps> = ({ open, onClose, title, children }) => {
+const Modal: React.FC<ModalProps> = ({
+    open,
+    onClose,
+    title,
+    children,
+    contentClassName,
+    bodyClassName,
+}) => {
     const modalRoot = ensureModalRoot();
 
     useEffect(() => {
@@ -57,7 +66,9 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, title, children }) => {
                 className="absolute inset-0 h-full w-full bg-black/60"
                 onClick={onClose}
             />
-            <div className="relative z-10 w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900 shadow-lg">
+            <div
+                className={`relative z-10 w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900 shadow-lg ${contentClassName ?? ''}`.trim()}
+            >
                 {title ? (
                     <header className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
                         <h2 id="modal-title" className="text-lg font-semibold text-gray-100">
@@ -72,7 +83,7 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, title, children }) => {
                         </button>
                     </header>
                 ) : null}
-                <div className="px-5 py-6">{children}</div>
+                <div className={`px-5 py-6 ${bodyClassName ?? ''}`.trim()}>{children}</div>
             </div>
         </div>,
         modalRoot,

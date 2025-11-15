@@ -30,6 +30,8 @@ export interface BlobMeasurement {
     size: number;
     response: number;
     capturedAt: number;
+    sourceWidth?: number;
+    sourceHeight?: number;
 }
 
 export type CaptureBlobMeasurement = (params: {
@@ -70,7 +72,7 @@ export interface TileRunState {
 
 export interface CalibrationGridBlueprint {
     idealTileFootprint: { width: number; height: number };
-    tileGap: number;
+    tileGap: { x: number; y: number };
     gridOrigin: { x: number; y: number };
 }
 
@@ -449,6 +451,7 @@ export class CalibrationRunner {
             stepToDisplacement: metrics.stepToDisplacement,
             sizeDeltaAtStepTest,
         });
+        this.publishSummarySnapshot();
         this.bumpProgress('completed');
 
         await this.moveTileToPose(tile, 'measured');
@@ -706,6 +709,7 @@ export class CalibrationRunner {
             status: 'failed',
             error: message,
         });
+        this.publishSummarySnapshot();
         this.bumpProgress('failed');
     }
 
@@ -766,33 +770,71 @@ export class CalibrationRunner {
                 const size = entry.homeMeasurement?.size ?? 0;
                 return size > max ? size : max;
             }, 0);
-            let tileGap = Math.max(0, Math.min(1, this.settings.gridGapNormalized));
-            let tileWidth = largestSize;
-            let tileHeight = largestSize;
-            const totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * tileGap;
-            const totalHeight =
-                this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * tileGap;
+            const referenceMeasurement =
+                completedTiles.find((entry) => entry.homeMeasurement)?.homeMeasurement ?? null;
+            const referenceWidth = referenceMeasurement?.sourceWidth ?? 1;
+            const referenceHeight = referenceMeasurement?.sourceHeight ?? 1;
+            const dominantDimension = Math.max(referenceWidth, referenceHeight, 1);
+            const normalizeX = referenceWidth > 0 ? dominantDimension / referenceWidth : 1;
+            const normalizeY = referenceHeight > 0 ? dominantDimension / referenceHeight : 1;
+            const baseGap = Math.max(0, Math.min(1, this.settings.gridGapNormalized));
+            let tileWidth = largestSize * normalizeX;
+            let tileHeight = largestSize * normalizeY;
+            let gapX = baseGap * normalizeX;
+            let gapY = baseGap * normalizeY;
+            let spacingX = tileWidth + gapX;
+            let spacingY = tileHeight + gapY;
+            const totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * gapX;
+            const totalHeight = this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * gapY;
             if (totalWidth > 1 || totalHeight > 1) {
                 const scale = 1 / Math.max(totalWidth, totalHeight);
                 tileWidth *= scale;
                 tileHeight *= scale;
-                tileGap *= scale;
+                gapX *= scale;
+                gapY *= scale;
+                spacingX = tileWidth + gapX;
+                spacingY = tileHeight + gapY;
+            }
+            let originX = 0;
+            let originY = 0;
+            let minOriginX = Number.POSITIVE_INFINITY;
+            let minOriginY = Number.POSITIVE_INFINITY;
+            completedTiles.forEach((entry) => {
+                const measurement = entry.homeMeasurement;
+                if (!measurement) {
+                    return;
+                }
+                const mirroredCol = this.gridSize.cols - 1 - entry.tile.col;
+                const candidateX = measurement.x - (mirroredCol * spacingX + tileWidth / 2);
+                const candidateY = measurement.y - (entry.tile.row * spacingY + tileHeight / 2);
+                if (candidateX < minOriginX) {
+                    minOriginX = candidateX;
+                }
+                if (candidateY < minOriginY) {
+                    minOriginY = candidateY;
+                }
+            });
+            if (Number.isFinite(minOriginX)) {
+                originX = minOriginX;
+            }
+            if (Number.isFinite(minOriginY)) {
+                originY = minOriginY;
             }
             gridBlueprint = {
                 idealTileFootprint: {
                     width: tileWidth,
                     height: tileHeight,
                 },
-                tileGap,
-                gridOrigin: { x: 0, y: 0 },
+                tileGap: { x: gapX, y: gapY },
+                gridOrigin: { x: originX, y: originY },
             };
         }
 
         const spacingX = gridBlueprint
-            ? gridBlueprint.idealTileFootprint.width + gridBlueprint.tileGap
+            ? gridBlueprint.idealTileFootprint.width + gridBlueprint.tileGap.x
             : 0;
         const spacingY = gridBlueprint
-            ? gridBlueprint.idealTileFootprint.height + gridBlueprint.tileGap
+            ? gridBlueprint.idealTileFootprint.height + gridBlueprint.tileGap.y
             : 0;
 
         const summaryTiles: Record<string, TileCalibrationResult> = {};
@@ -827,5 +869,10 @@ export class CalibrationRunner {
             },
             tiles: summaryTiles,
         };
+    }
+
+    private publishSummarySnapshot(): void {
+        const summary = this.computeSummary();
+        this.updateState({ summary });
     }
 }

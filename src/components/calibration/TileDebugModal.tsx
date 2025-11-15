@@ -121,354 +121,339 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
 
     const idealXFormula =
         idealTarget && home && homeOffset
-            ? `idealTarget.x = home.x - homeOffset.dx = ${formatDecimal(home.x)} - ${formatDecimal(
+            ? `\`home.x - homeOffset.dx = ${formatDecimal(home.x)} - ${formatDecimal(
                   homeOffset.dx,
                   {
                       digits: 4,
                       signed: true,
                   },
-              )} = ${formatDecimal(idealTarget.x)}`
-            : 'idealTarget.x = home.x - homeOffset.dx';
+              )}\``
+            : '`home.x - homeOffset.dx`';
     const idealYFormula =
         idealTarget && home && homeOffset
-            ? `idealTarget.y = home.y - homeOffset.dy = ${formatDecimal(home.y)} - ${formatDecimal(
+            ? `\`home.y - homeOffset.dy = ${formatDecimal(home.y)} - ${formatDecimal(
                   homeOffset.dy,
                   {
                       digits: 4,
                       signed: true,
                   },
-              )} = ${formatDecimal(idealTarget.y)}`
-            : 'idealTarget.y = home.y - homeOffset.dy';
+              )}\``
+            : '`home.y - homeOffset.dy`';
     const offsetXFormula =
         homeOffset && home && idealTarget
-            ? `homeOffset.dx = home.x - idealTarget.x = ${formatDecimal(home.x)} - ${formatDecimal(idealTarget.x)} = ${formatDecimal(
-                  homeOffset.dx,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )}`
-            : 'homeOffset.dx = home.x - idealTarget.x';
+            ? `\`home.x - idealTarget.x = ${formatDecimal(home.x)} - ${formatDecimal(idealTarget.x)}\``
+            : '`home.x - idealTarget.x`';
     const offsetYFormula =
         homeOffset && home && idealTarget
-            ? `homeOffset.dy = home.y - idealTarget.y = ${formatDecimal(home.y)} - ${formatDecimal(idealTarget.y)} = ${formatDecimal(
-                  homeOffset.dy,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )}`
-            : 'homeOffset.dy = home.y - idealTarget.y';
+            ? `\`home.y - idealTarget.y = ${formatDecimal(home.y)} - ${formatDecimal(idealTarget.y)}\``
+            : '`home.y - idealTarget.y`';
 
     const homeStepsFormulaX =
         home?.x !== null && home?.x !== undefined && perStepX
-            ? `homeSteps.x = home.x ÷ stepToDisplacement.x = ${formatDecimal(home.x)} ÷ ${formatDecimal(
+            ? `\`home.x ÷ stepToDisplacement.x = ${formatDecimal(home.x)} ÷ ${formatDecimal(
                   perStepX,
                   {
                       digits: 6,
                   },
-              )} = ${formatStepValue(homeStepsX)}`
-            : 'homeSteps.x = home.x ÷ stepToDisplacement.x';
+              )}\``
+            : '`home.x ÷ stepToDisplacement.x`';
     const homeStepsFormulaY =
         home?.y !== null && home?.y !== undefined && perStepY
-            ? `homeSteps.y = home.y ÷ stepToDisplacement.y = ${formatDecimal(home.y)} ÷ ${formatDecimal(
+            ? `\`home.y ÷ stepToDisplacement.y = ${formatDecimal(home.y)} ÷ ${formatDecimal(
                   perStepY,
                   {
                       digits: 6,
                   },
-              )} = ${formatStepValue(homeStepsY)}`
-            : 'homeSteps.y = home.y ÷ stepToDisplacement.y';
+              )}\``
+            : '`home.y ÷ stepToDisplacement.y`';
     const offsetStepsFormulaX =
         homeOffset && perStepX
-            ? `offsetSteps.x = homeOffset.dx ÷ stepToDisplacement.x = ${formatDecimal(
-                  homeOffset.dx,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )} ÷ ${formatDecimal(perStepX, { digits: 6 })} = ${formatStepValue(offsetStepsX)}`
-            : 'offsetSteps.x = homeOffset.dx ÷ stepToDisplacement.x';
+            ? `\`homeOffset.dx ÷ stepToDisplacement.x = ${formatDecimal(homeOffset.dx, {
+                  digits: 4,
+                  signed: true,
+              })} ÷ ${formatDecimal(perStepX, { digits: 6 })}\``
+            : '`homeOffset.dx ÷ stepToDisplacement.x`';
     const offsetStepsFormulaY =
         homeOffset && perStepY
-            ? `offsetSteps.y = homeOffset.dy ÷ stepToDisplacement.y = ${formatDecimal(
-                  homeOffset.dy,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )} ÷ ${formatDecimal(perStepY, { digits: 6 })} = ${formatStepValue(offsetStepsY)}`
-            : 'offsetSteps.y = homeOffset.dy ÷ stepToDisplacement.y';
+            ? `\`homeOffset.dy ÷ stepToDisplacement.y = ${formatDecimal(homeOffset.dy, {
+                  digits: 4,
+                  signed: true,
+              })} ÷ ${formatDecimal(perStepY, { digits: 6 })}\``
+            : '`homeOffset.dy ÷ stepToDisplacement.y`';
     const alignmentStepsFormulaX =
         homeOffset && perStepX
-            ? `alignmentSteps.x = -homeOffset.dx ÷ stepToDisplacement.x = ${formatDecimal(
-                  -homeOffset.dx,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )} ÷ ${formatDecimal(perStepX, { digits: 6 })} = ${formatStepValue(alignmentStepsX)}`
-            : 'alignmentSteps.x = -homeOffset.dx ÷ stepToDisplacement.x';
+            ? `\`-homeOffset.dx ÷ stepToDisplacement.x = ${formatDecimal(-homeOffset.dx, {
+                  digits: 4,
+                  signed: true,
+              })} ÷ ${formatDecimal(perStepX, { digits: 6 })}\``
+            : '`-homeOffset.dx ÷ stepToDisplacement.x`';
     const alignmentStepsFormulaY =
         homeOffset && perStepY
-            ? `alignmentSteps.y = -homeOffset.dy ÷ stepToDisplacement.y = ${formatDecimal(
-                  -homeOffset.dy,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )} ÷ ${formatDecimal(perStepY, { digits: 6 })} = ${formatStepValue(alignmentStepsY)}`
-            : 'alignmentSteps.y = -homeOffset.dy ÷ stepToDisplacement.y';
+            ? `\`-homeOffset.dy ÷ stepToDisplacement.y = ${formatDecimal(-homeOffset.dy, {
+                  digits: 4,
+                  signed: true,
+              })} ÷ ${formatDecimal(perStepY, { digits: 6 })}\``
+            : '`-homeOffset.dy ÷ stepToDisplacement.y`';
 
     const perStepFormulaX =
         perStepX && measuredShiftX
-            ? `stepToDisplacement.x = Δnorm_x ÷ deltaSteps = ${formatDecimal(measuredShiftX, {
+            ? `\`Δnorm_x ÷ deltaSteps = ${formatDecimal(measuredShiftX, {
                   digits: 4,
                   signed: true,
-              })} ÷ ${stepTestSettings.deltaSteps} = ${formatDecimal(perStepX, {
-                  digits: 6,
-              })}`
-            : 'stepToDisplacement.x = Δnorm_x ÷ deltaSteps';
+              })} ÷ ${stepTestSettings.deltaSteps}\``
+            : '`Δnorm_x ÷ deltaSteps`';
     const perStepFormulaY =
         perStepY && measuredShiftY
-            ? `stepToDisplacement.y = Δnorm_y ÷ deltaSteps = ${formatDecimal(measuredShiftY, {
+            ? `\`Δnorm_y ÷ deltaSteps = ${formatDecimal(measuredShiftY, {
                   digits: 4,
                   signed: true,
-              })} ÷ ${stepTestSettings.deltaSteps} = ${formatDecimal(perStepY, {
-                  digits: 6,
-              })}`
-            : 'stepToDisplacement.y = Δnorm_y ÷ deltaSteps';
+              })} ÷ ${stepTestSettings.deltaSteps}\``
+            : '`Δnorm_y ÷ deltaSteps`';
     const measuredShiftFormulaX =
         perStepX && measuredShiftX
-            ? `Δnorm_x = stepToDisplacement.x × deltaSteps = ${formatDecimal(perStepX, {
+            ? `\`stepToDisplacement.x × deltaSteps = ${formatDecimal(perStepX, {
                   digits: 6,
-              })} × ${stepTestSettings.deltaSteps} = ${formatDecimal(measuredShiftX, {
-                  digits: 4,
-                  signed: true,
-              })}`
-            : 'Δnorm_x = stepToDisplacement.x × deltaSteps';
+              })} × ${stepTestSettings.deltaSteps}\``
+            : '`stepToDisplacement.x × deltaSteps`';
     const measuredShiftFormulaY =
         perStepY && measuredShiftY
-            ? `Δnorm_y = stepToDisplacement.y × deltaSteps = ${formatDecimal(perStepY, {
+            ? `\`stepToDisplacement.y × deltaSteps = ${formatDecimal(perStepY, {
                   digits: 6,
-              })} × ${stepTestSettings.deltaSteps} = ${formatDecimal(measuredShiftY, {
-                  digits: 4,
-                  signed: true,
-              })}`
-            : 'Δnorm_y = stepToDisplacement.y × deltaSteps';
+              })} × ${stepTestSettings.deltaSteps}\``
+            : '`stepToDisplacement.y × deltaSteps`';
     const sizeDeltaFormula =
         sizeDeltaAtStepTest !== null && home?.size !== undefined && home?.size !== null
-            ? `sizeDeltaAtStepTest = size_after_step - home.size = ${formatDecimal(sizeAfterStep, {
+            ? `\`size_after_step - home.size = ${formatDecimal(sizeAfterStep, {
                   digits: 4,
-              })} - ${formatDecimal(home.size)} = ${formatDecimal(sizeDeltaAtStepTest, {
-                  digits: 4,
-                  signed: true,
-              })}`
-            : 'sizeDeltaAtStepTest = size_after_step - home.size';
+              })} - ${formatDecimal(home.size)}\``
+            : '`size_after_step - home.size`';
+    const sizeAfterStepFormula =
+        sizeDeltaAtStepTest !== null && home?.size !== undefined && home?.size !== null
+            ? `\`home.size + sizeDeltaAtStepTest = ${formatDecimal(home.size)} + ${formatDecimal(
+                  sizeDeltaAtStepTest,
+                  { digits: 4, signed: true },
+              )}\``
+            : '`home.size + sizeDeltaAtStepTest`';
 
     const telemetryX = getTelemetryForMotor(entry.assignment.x);
     const telemetryY = getTelemetryForMotor(entry.assignment.y);
 
     return (
-        <Modal open={open} onClose={onClose} title={`Tile ${tileLabel} – debug metrics`}>
-            <div className="space-y-6 text-sm text-gray-200">
-                <section>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Status</p>
-                    <p className="mt-1 font-semibold text-gray-100">
-                        {entry.status}
-                        {entry.error ? ` — ${entry.error}` : ''}
-                    </p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-md border border-gray-800/70 bg-gray-950/40 p-3">
-                            <p className="text-xs uppercase tracking-wide text-gray-500">X axis</p>
-                            <p className="mt-1 font-mono text-gray-100">
-                                {axisAssignmentLabel('x')}
-                            </p>
+        <Modal
+            open={open}
+            onClose={onClose}
+            title={`Tile ${tileLabel} – debug metrics`}
+            contentClassName="w-auto max-w-4xl resize overflow-auto"
+            bodyClassName="px-0 py-0 max-h-[80vh] overflow-y-auto"
+        >
+            <div className="px-5 py-6">
+                <div className="space-y-5 text-sm text-gray-200">
+                    <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                            <span className="font-mono text-lg text-gray-100">{tileLabel}</span>
+                            <span className="text-xs uppercase tracking-wide text-gray-400">
+                                Status:{' '}
+                                <span className="text-gray-100 capitalize">{entry.status}</span>
+                            </span>
                         </div>
-                        <div className="rounded-md border border-gray-800/70 bg-gray-950/40 p-3">
-                            <p className="text-xs uppercase tracking-wide text-gray-500">Y axis</p>
-                            <p className="mt-1 font-mono text-gray-100">
-                                {axisAssignmentLabel('y')}
-                            </p>
+                        {entry.error && (
+                            <p className="mt-1 text-xs text-amber-200">{entry.error}</p>
+                        )}
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div className="rounded-md border border-gray-800/70 bg-gray-950/60 p-3">
+                                <div className="flex flex-wrap items-center justify-start gap-2">
+                                    <TileAxisAction
+                                        axis="x"
+                                        motor={entry.assignment.x}
+                                        telemetry={telemetryX}
+                                        layout="inline"
+                                        className="text-[10px]"
+                                    />
+                                </div>
+                                <p className="mt-1 font-mono text-xs text-gray-100">
+                                    {axisAssignmentLabel('x')}
+                                </p>
+                            </div>
+                            <div className="rounded-md border border-gray-800/70 bg-gray-950/60 p-3">
+                                <div className="flex flex-wrap items-center justify-start gap-2">
+                                    <TileAxisAction
+                                        axis="y"
+                                        motor={entry.assignment.y}
+                                        telemetry={telemetryY}
+                                        layout="inline"
+                                        className="text-[10px]"
+                                    />
+                                </div>
+                                <p className="mt-1 font-mono text-xs text-gray-100">
+                                    {axisAssignmentLabel('y')}
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    {homeTimestamp && (
-                        <p className="mt-2 text-xs text-gray-400">
-                            Last capture: {formatTimestamp(homeTimestamp)}
-                        </p>
+                        {homeTimestamp && (
+                            <p className="mt-2 text-xs text-gray-400">
+                                Last capture: {formatTimestamp(homeTimestamp)}
+                            </p>
+                        )}
+                    </section>
+                    {hasMetrics ? (
+                        <>
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        Measured values (normalized)
+                                    </p>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <DebugStat
+                                            label="home.x"
+                                            value={formatDecimal(home?.x ?? null)}
+                                            formula="`home.x` comes directly from the detected blob center in normalized preview space."
+                                        />
+                                        <DebugStat
+                                            label="home.y"
+                                            value={formatDecimal(home?.y ?? null)}
+                                            formula="`home.y` comes directly from the detected blob center in normalized preview space."
+                                        />
+                                        <DebugStat
+                                            label="home.size"
+                                            value={formatDecimal(home?.size ?? null)}
+                                            formula="`home.size` is the normalized blob diameter reported by OpenCV."
+                                        />
+                                        <DebugStat
+                                            label="home.response"
+                                            value={formatDecimal(home?.response ?? null, {
+                                                digits: 3,
+                                            })}
+                                            formula="Detector confidence (KeyPoint.response). Always zero with WASM and not reliable with JS fallback."
+                                        />
+                                        <DebugStat
+                                            label="idealTarget.x"
+                                            value={formatDecimal(idealTarget?.x ?? null)}
+                                            formula={idealXFormula}
+                                        />
+                                        <DebugStat
+                                            label="idealTarget.y"
+                                            value={formatDecimal(idealTarget?.y ?? null)}
+                                            formula={idealYFormula}
+                                        />
+                                        <DebugStat
+                                            label="homeOffset.dx"
+                                            value={formatDecimal(homeOffset?.dx ?? null, {
+                                                digits: 4,
+                                                signed: true,
+                                            })}
+                                            formula={offsetXFormula}
+                                        />
+                                        <DebugStat
+                                            label="homeOffset.dy"
+                                            value={formatDecimal(homeOffset?.dy ?? null, {
+                                                digits: 4,
+                                                signed: true,
+                                            })}
+                                            formula={offsetYFormula}
+                                        />
+                                    </div>
+                                </section>
+                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        Step conversions
+                                    </p>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <DebugStat
+                                            label="homeSteps.x"
+                                            value={formatStepValue(homeStepsX)}
+                                            formula={homeStepsFormulaX}
+                                        />
+                                        <DebugStat
+                                            label="homeSteps.y"
+                                            value={formatStepValue(homeStepsY)}
+                                            formula={homeStepsFormulaY}
+                                        />
+                                        <DebugStat
+                                            label="offsetSteps.x"
+                                            value={formatStepValue(offsetStepsX)}
+                                            formula={offsetStepsFormulaX}
+                                        />
+                                        <DebugStat
+                                            label="offsetSteps.y"
+                                            value={formatStepValue(offsetStepsY)}
+                                            formula={offsetStepsFormulaY}
+                                        />
+                                        <DebugStat
+                                            label="alignmentSteps.x"
+                                            value={formatStepValue(alignmentStepsX)}
+                                            formula={alignmentStepsFormulaX}
+                                        />
+                                        <DebugStat
+                                            label="alignmentSteps.y"
+                                            value={formatStepValue(alignmentStepsY)}
+                                            formula={alignmentStepsFormulaY}
+                                        />
+                                    </div>
+                                </section>
+                            </div>
+                            <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                    Step test snapshot
+                                </p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <DebugStat
+                                        label="stepToDisplacement.x"
+                                        value={formatDecimal(perStepX, { digits: 6 })}
+                                        formula={perStepFormulaX}
+                                    />
+                                    <DebugStat
+                                        label="stepToDisplacement.y"
+                                        value={formatDecimal(perStepY, { digits: 6 })}
+                                        formula={perStepFormulaY}
+                                    />
+                                    <DebugStat
+                                        label="Δnorm_x"
+                                        value={formatDecimal(measuredShiftX, {
+                                            digits: 4,
+                                            signed: true,
+                                        })}
+                                        formula={measuredShiftFormulaX}
+                                    />
+                                    <DebugStat
+                                        label="Δnorm_y"
+                                        value={formatDecimal(measuredShiftY, {
+                                            digits: 4,
+                                            signed: true,
+                                        })}
+                                        formula={measuredShiftFormulaY}
+                                    />
+                                    <DebugStat
+                                        label="sizeDeltaAtStepTest"
+                                        value={`${formatDecimal(sizeDeltaAtStepTest, { digits: 4, signed: true })} (${formatPercent(sizeDeltaAtStepTest, { signed: true })})`}
+                                        formula={sizeDeltaFormula}
+                                    />
+                                    <DebugStat
+                                        label="size_after_step"
+                                        value={formatDecimal(sizeAfterStep, { digits: 4 })}
+                                        formula={sizeAfterStepFormula}
+                                    />
+                                    <DebugStat
+                                        label="deltaSteps"
+                                        value={`${stepTestSettings.deltaSteps} steps`}
+                                        formula="`deltaSteps` is the fixed step magnitude used during characterization."
+                                    />
+                                    <DebugStat
+                                        label="dwellMs"
+                                        value={`${stepTestSettings.dwellMs} ms`}
+                                        formula="`dwellMs` is the wait duration after each move before sampling measurements."
+                                    />
+                                </div>
+                            </section>
+                        </>
+                    ) : (
+                        <section className="rounded-lg border border-amber-600/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+                            <p>
+                                This tile has not produced any measurements yet.
+                                {entry.error ? ` Error: ${entry.error}` : ''}
+                            </p>
+                        </section>
                     )}
-                </section>
-                <section>
-                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                        Motor controls
-                    </p>
-                    <div className="rounded-md border border-gray-800/70 bg-gray-950/40 p-3 text-[10px] text-gray-200">
-                        <TileAxisAction
-                            axis="x"
-                            motor={entry.assignment.x}
-                            telemetry={telemetryX}
-                        />
-                        <TileAxisAction
-                            axis="y"
-                            motor={entry.assignment.y}
-                            telemetry={telemetryY}
-                        />
-                    </div>
-                </section>
-                {hasMetrics ? (
-                    <>
-                        <section>
-                            <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                Measured values (normalized)
-                            </p>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                <DebugStat
-                                    label="home.x"
-                                    value={formatDecimal(home?.x ?? null)}
-                                    formula="home.x comes directly from the detected blob center in normalized preview space."
-                                />
-                                <DebugStat
-                                    label="home.y"
-                                    value={formatDecimal(home?.y ?? null)}
-                                    formula="home.y comes directly from the detected blob center in normalized preview space."
-                                />
-                                <DebugStat
-                                    label="home.size"
-                                    value={formatDecimal(home?.size ?? null)}
-                                    formula="home.size is the normalized blob diameter reported by OpenCV."
-                                />
-                                <DebugStat
-                                    label="home.response"
-                                    value={formatDecimal(home?.response ?? null, { digits: 3 })}
-                                    formula="home.response = detector confidence (KeyPoint.response)."
-                                />
-                                <DebugStat
-                                    label="idealTarget.x"
-                                    value={formatDecimal(idealTarget?.x ?? null)}
-                                    formula={idealXFormula}
-                                />
-                                <DebugStat
-                                    label="idealTarget.y"
-                                    value={formatDecimal(idealTarget?.y ?? null)}
-                                    formula={idealYFormula}
-                                />
-                                <DebugStat
-                                    label="homeOffset.dx"
-                                    value={formatDecimal(homeOffset?.dx ?? null, {
-                                        digits: 4,
-                                        signed: true,
-                                    })}
-                                    formula={offsetXFormula}
-                                />
-                                <DebugStat
-                                    label="homeOffset.dy"
-                                    value={formatDecimal(homeOffset?.dy ?? null, {
-                                        digits: 4,
-                                        signed: true,
-                                    })}
-                                    formula={offsetYFormula}
-                                />
-                            </div>
-                        </section>
-                        <section>
-                            <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                Step conversions
-                            </p>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                <DebugStat
-                                    label="homeSteps.x"
-                                    value={formatStepValue(homeStepsX)}
-                                    formula={homeStepsFormulaX}
-                                />
-                                <DebugStat
-                                    label="homeSteps.y"
-                                    value={formatStepValue(homeStepsY)}
-                                    formula={homeStepsFormulaY}
-                                />
-                                <DebugStat
-                                    label="offsetSteps.x"
-                                    value={formatStepValue(offsetStepsX)}
-                                    formula={offsetStepsFormulaX}
-                                />
-                                <DebugStat
-                                    label="offsetSteps.y"
-                                    value={formatStepValue(offsetStepsY)}
-                                    formula={offsetStepsFormulaY}
-                                />
-                                <DebugStat
-                                    label="alignmentSteps.x"
-                                    value={formatStepValue(alignmentStepsX)}
-                                    formula={alignmentStepsFormulaX}
-                                />
-                                <DebugStat
-                                    label="alignmentSteps.y"
-                                    value={formatStepValue(alignmentStepsY)}
-                                    formula={alignmentStepsFormulaY}
-                                />
-                            </div>
-                        </section>
-                        <section>
-                            <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                Step test snapshot
-                            </p>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                <DebugStat
-                                    label="stepToDisplacement.x"
-                                    value={formatDecimal(perStepX, { digits: 6 })}
-                                    formula={perStepFormulaX}
-                                />
-                                <DebugStat
-                                    label="stepToDisplacement.y"
-                                    value={formatDecimal(perStepY, { digits: 6 })}
-                                    formula={perStepFormulaY}
-                                />
-                                <DebugStat
-                                    label="Δnorm_x"
-                                    value={formatDecimal(measuredShiftX, {
-                                        digits: 4,
-                                        signed: true,
-                                    })}
-                                    formula={measuredShiftFormulaX}
-                                />
-                                <DebugStat
-                                    label="Δnorm_y"
-                                    value={formatDecimal(measuredShiftY, {
-                                        digits: 4,
-                                        signed: true,
-                                    })}
-                                    formula={measuredShiftFormulaY}
-                                />
-                                <DebugStat
-                                    label="sizeDeltaAtStepTest"
-                                    value={`${formatDecimal(sizeDeltaAtStepTest, {
-                                        digits: 4,
-                                        signed: true,
-                                    })} (${formatPercent(sizeDeltaAtStepTest, { signed: true })})`}
-                                    formula={sizeDeltaFormula}
-                                />
-                                <DebugStat
-                                    label="size_after_step"
-                                    value={formatDecimal(sizeAfterStep, { digits: 4 })}
-                                    formula="size_after_step = home.size + sizeDeltaAtStepTest"
-                                />
-                                <DebugStat
-                                    label="deltaSteps"
-                                    value={`${stepTestSettings.deltaSteps} steps`}
-                                    formula="deltaSteps = fixed step test magnitude used during characterization."
-                                />
-                                <DebugStat
-                                    label="dwellMs"
-                                    value={`${stepTestSettings.dwellMs} ms`}
-                                    formula="dwellMs = wait duration after each move before sampling measurements."
-                                />
-                            </div>
-                        </section>
-                    </>
-                ) : (
-                    <p className="text-sm text-gray-300">
-                        This tile has not produced any measurements yet.
-                        {entry.error ? ` Error: ${entry.error}` : ''}
-                    </p>
-                )}
+                </div>
             </div>
         </Modal>
     );
@@ -477,15 +462,35 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
 interface DebugStatProps {
     label: string;
     value: string;
-    formula?: string;
+    formula?: React.ReactNode;
 }
 
-const DebugStat: React.FC<DebugStatProps> = ({ label, value, formula }) => (
-    <div className="rounded-md border border-gray-800/70 bg-gray-950/50 p-3">
-        <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-        <p className="mt-1 font-mono text-base text-gray-100">{value}</p>
-        {formula ? <p className="mt-1 text-xs text-gray-400">{formula}</p> : null}
-    </div>
-);
+const DebugStat: React.FC<DebugStatProps> = ({ label, value, formula }) => {
+    const renderFormula = (content: React.ReactNode) => {
+        if (typeof content === 'string') {
+            const segments = content.split(/`([^`]+)`/g);
+            return segments.map((segment, index) =>
+                index % 2 === 1 ? (
+                    <code key={`${segment}-${index}`} className="font-mono text-emerald-200">
+                        {segment}
+                    </code>
+                ) : (
+                    <span key={index}>{segment}</span>
+                ),
+            );
+        }
+        return content;
+    };
+
+    return (
+        <div className="rounded-md border border-gray-800/70 bg-gray-950/50 p-3">
+            <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+            <p className="mt-1 font-mono text-base text-gray-100">{value}</p>
+            {formula ? (
+                <p className="mt-1 text-xs text-gray-400">{renderFormula(formula)}</p>
+            ) : null}
+        </div>
+    );
+};
 
 export default TileDebugModal;

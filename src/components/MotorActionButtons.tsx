@@ -14,6 +14,7 @@ interface MotorActionButtonsProps {
     layout?: LayoutMode;
     compact?: boolean;
     label?: React.ReactNode;
+    showLabel?: boolean;
     dataTestIdPrefix?: string;
     showStepsBadge?: boolean;
     showHome?: boolean;
@@ -81,6 +82,7 @@ export const MotorActionButtons: React.FC<MotorActionButtonsProps> = ({
     layout = 'horizontal',
     compact = false,
     label,
+    showLabel = true,
     dataTestIdPrefix,
     showStepsBadge = true,
     showHome = true,
@@ -111,7 +113,7 @@ export const MotorActionButtons: React.FC<MotorActionButtonsProps> = ({
     return (
         <div className="space-y-2">
             <div className={containerClass}>
-                {label && <div className="text-xs text-gray-300">{label}</div>}
+                {label && showLabel && <div className="text-xs text-gray-300">{label}</div>}
                 {showStepsBadge && (
                     <span
                         className={`inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wide ${badge.className} ${badgePaddingClass}`}

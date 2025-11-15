@@ -124,7 +124,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     }, [runnerState.summary, setAlignmentOverlaySummary]);
 
     const alignmentOverlayAvailable = Boolean(runnerState.summary?.gridBlueprint);
-    const displayedAlignmentOverlayEnabled = alignmentOverlayVisible && alignmentOverlayAvailable;
+    const displayedAlignmentOverlayEnabled = alignmentOverlayVisible;
 
     const rotationOverlayVisible = isRotationAdjusting;
 

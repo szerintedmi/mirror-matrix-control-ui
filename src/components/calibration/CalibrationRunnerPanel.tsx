@@ -319,7 +319,10 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     {(blueprint.idealTileFootprint.width * 100).toFixed(2)}% ×{' '}
                                     {(blueprint.idealTileFootprint.height * 100).toFixed(2)}%
                                 </p>
-                                <p>Gap: {(blueprint.tileGap * 100).toFixed(2)}%</p>
+                                <p>
+                                    Gap: X {(blueprint.tileGap.x * 100).toFixed(2)}% · Y{' '}
+                                    {(blueprint.tileGap.y * 100).toFixed(2)}%
+                                </p>
                                 <p className="mt-2 text-xs text-emerald-300">
                                     Use the “Calibration View” toggle in the preview to draw this
                                     grid.
@@ -353,15 +356,19 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                 aria-label={`Inspect calibration metrics for tile [${entry.tile.row},${entry.tile.col}]`}
                                 onClick={(event) => handleTileCardClick(event, entry.tile.key)}
                                 onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
-                                className={`rounded-md border px-2 py-2 text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'}`}
+                                className={`rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'}`}
                             >
-                                <div className="font-semibold">
-                                    [{entry.tile.row},{entry.tile.col}]
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] font-semibold">
+                                    <span className="font-mono">
+                                        [{entry.tile.row},{entry.tile.col}]
+                                    </span>
+                                    <span className="text-xs capitalize font-medium">
+                                        {entry.status}
+                                    </span>
                                 </div>
-                                <div className="capitalize">{entry.status}</div>
                                 {entry.error && (
                                     <div
-                                        className={`mt-2 text-[10px] ${
+                                        className={`mt-1 text-[10px] leading-tight ${
                                             entry.status === 'failed'
                                                 ? 'text-rose-200'
                                                 : entry.status === 'skipped'
@@ -373,17 +380,27 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     </div>
                                 )}
                                 {(entry.assignment.x || entry.assignment.y) && (
-                                    <div className="mt-2 rounded-md border border-gray-800/80 bg-gray-950/50 p-2 text-[10px] text-gray-200">
-                                        <TileAxisAction
-                                            axis="x"
-                                            motor={entry.assignment.x}
-                                            telemetry={getTelemetryForMotor(entry.assignment.x)}
-                                        />
-                                        <TileAxisAction
-                                            axis="y"
-                                            motor={entry.assignment.y}
-                                            telemetry={getTelemetryForMotor(entry.assignment.y)}
-                                        />
+                                    <div className="mt-2 rounded-md border border-gray-800/70 bg-gray-950/60 p-1.5 text-[10px] text-gray-200">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <TileAxisAction
+                                                axis="x"
+                                                motor={entry.assignment.x}
+                                                telemetry={getTelemetryForMotor(entry.assignment.x)}
+                                                layout="inline"
+                                                className="flex-1 min-w-[120px]"
+                                                showLabel={false}
+                                                showHomeButton
+                                            />
+                                            <TileAxisAction
+                                                axis="y"
+                                                motor={entry.assignment.y}
+                                                telemetry={getTelemetryForMotor(entry.assignment.y)}
+                                                layout="inline"
+                                                className="flex-1 min-w-[120px]"
+                                                showLabel={false}
+                                                showHomeButton
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>

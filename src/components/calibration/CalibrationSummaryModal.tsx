@@ -28,18 +28,21 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
 
     const widthPercent = blueprint.idealTileFootprint.width * 100;
     const heightPercent = blueprint.idealTileFootprint.height * 100;
-    const gapPercent = blueprint.tileGap * 100;
-    const spacingXPercent = (blueprint.idealTileFootprint.width + blueprint.tileGap) * 100;
-    const spacingYPercent = (blueprint.idealTileFootprint.height + blueprint.tileGap) * 100;
+    const gapPercentX = (blueprint.tileGap.x ?? 0) * 100;
+    const gapPercentY = (blueprint.tileGap.y ?? 0) * 100;
+    const spacingXPercent = (blueprint.idealTileFootprint.width + (blueprint.tileGap.x ?? 0)) * 100;
+    const spacingYPercent =
+        (blueprint.idealTileFootprint.height + (blueprint.tileGap.y ?? 0)) * 100;
     const tileCount = Object.values(summary.tiles).filter(
         (tile) => tile.status === 'completed',
     ).length;
 
     const widthFormula = `width% = idealTileFootprint.width × 100 = ${formatDecimal(blueprint.idealTileFootprint.width)} × 100 = ${formatDecimal(widthPercent / 100)} × 100`;
     const heightFormula = `height% = idealTileFootprint.height × 100 = ${formatDecimal(blueprint.idealTileFootprint.height)} × 100 = ${formatDecimal(heightPercent / 100)} × 100`;
-    const gapFormula = `gap% = tileGap × 100 = ${formatDecimal(blueprint.tileGap)} × 100`;
-    const spacingXFormula = `spacingX% = width% + gap% = ${widthPercent.toFixed(2)} + ${gapPercent.toFixed(2)}`;
-    const spacingYFormula = `spacingY% = height% + gap% = ${heightPercent.toFixed(2)} + ${gapPercent.toFixed(2)}`;
+    const gapFormulaX = `gapX% = tileGap.x × 100 = ${formatDecimal(blueprint.tileGap.x ?? 0)} × 100`;
+    const gapFormulaY = `gapY% = tileGap.y × 100 = ${formatDecimal(blueprint.tileGap.y ?? 0)} × 100`;
+    const spacingXFormula = `spacingX% = width% + gapX% = ${widthPercent.toFixed(2)} + ${gapPercentX.toFixed(2)}`;
+    const spacingYFormula = `spacingY% = height% + gapY% = ${heightPercent.toFixed(2)} + ${gapPercentY.toFixed(2)}`;
 
     return (
         <Modal open={open} onClose={onClose} title="Calibration summary – debug">
@@ -58,9 +61,14 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
                             formula={heightFormula}
                         />
                         <SummaryStat
-                            label="Tile gap"
-                            value={`${gapPercent.toFixed(2)}%`}
-                            formula={gapFormula}
+                            label="Tile gap – X axis"
+                            value={`${gapPercentX.toFixed(2)}%`}
+                            formula={gapFormulaX}
+                        />
+                        <SummaryStat
+                            label="Tile gap – Y axis"
+                            value={`${gapPercentY.toFixed(2)}%`}
+                            formula={gapFormulaY}
                         />
                         <SummaryStat
                             label="Spacing X"

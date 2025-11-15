@@ -195,6 +195,7 @@ export const useCameraPipeline = ({
     const roiOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const detectionOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const rotatedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const overlayBitmapCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const rotatedOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const roiRef = useRef<NormalizedRoi>(roi);
@@ -348,6 +349,8 @@ export const useCameraPipeline = ({
             size: bestEntry.normalizedSize,
             response: bestEntry.blob.response,
             capturedAt: detectionUpdatedAtRef.current || performance.now(),
+            sourceWidth: meta.sourceWidth,
+            sourceHeight: meta.sourceHeight,
         };
     }, []);
 
@@ -564,7 +567,11 @@ export const useCameraPipeline = ({
             canvas: HTMLCanvasElement,
             width: number,
             height: number,
-            displayRectOverride?: { x: number; y: number; width: number; height: number },
+            options?: {
+                displayRectOverride?: { x: number; y: number; width: number; height: number };
+                rotation?: { radians: number; originX: number; originY: number } | null;
+                calibrationOverlayCounterRotationRadians?: number;
+            },
         ) => {
             const meta = processedFrameMetaRef.current;
             const ctx = canvas.getContext('2d');
@@ -575,7 +582,7 @@ export const useCameraPipeline = ({
             if (!meta) {
                 return;
             }
-            const baseRect = displayRectOverride ??
+            const baseRect = options?.displayRectOverride ??
                 meta.appliedRoi ?? {
                     x: 0,
                     y: 0,
@@ -589,6 +596,23 @@ export const useCameraPipeline = ({
             const scaleY = height / baseRect.height;
             const summary = alignmentOverlaySummaryRef.current;
             const blobEntries = detectionResultsRef.current;
+            const counterRotationRadians = options?.calibrationOverlayCounterRotationRadians ?? 0;
+            const shouldCounterRotateNarrative = Math.abs(counterRotationRadians) > 1e-3;
+            const rotatePoint = (point: { x: number; y: number }) => {
+                const rotation = options?.rotation;
+                if (!rotation || Math.abs(rotation.radians) < 1e-6) {
+                    return point;
+                }
+                const { radians, originX, originY } = rotation;
+                const translatedX = point.x - originX;
+                const translatedY = point.y - originY;
+                const cos = Math.cos(radians);
+                const sin = Math.sin(radians);
+                return {
+                    x: translatedX * cos - translatedY * sin + originX,
+                    y: translatedX * sin + translatedY * cos + originY,
+                };
+            };
 
             const drawBlobsCanvas = () => {
                 if (!blobsOverlayVisibleRef.current || !blobEntries.length) {
@@ -598,8 +622,9 @@ export const useCameraPipeline = ({
                 ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
                 ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.003);
                 blobEntries.forEach((blob) => {
-                    const adjustedX = blob.x - baseRect.x;
-                    const adjustedY = blob.y - baseRect.y;
+                    const rotatedPoint = rotatePoint(blob);
+                    const adjustedX = rotatedPoint.x - baseRect.x;
+                    const adjustedY = rotatedPoint.y - baseRect.y;
                     if (
                         adjustedX < 0 ||
                         adjustedY < 0 ||
@@ -632,8 +657,8 @@ export const useCameraPipeline = ({
                         (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
                         0,
                     ) + 1;
-                const spacingX = blueprint.idealTileFootprint.width + blueprint.tileGap;
-                const spacingY = blueprint.idealTileFootprint.height + blueprint.tileGap;
+                const spacingX = blueprint.idealTileFootprint.width + (blueprint.tileGap?.x ?? 0);
+                const spacingY = blueprint.idealTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 ctx.save();
@@ -658,20 +683,33 @@ export const useCameraPipeline = ({
                     const localTop = (pxTop - baseRect.y) * scaleY;
                     const rectWidth = pxWidth * scaleX;
                     const rectHeight = pxHeight * scaleY;
+                    const rectCenterX = localLeft + rectWidth / 2;
+                    const rectCenterY = localTop + rectHeight / 2;
+                    ctx.save();
+                    ctx.translate(rectCenterX, rectCenterY);
                     ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
                     ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
                     ctx.beginPath();
-                    ctx.rect(localLeft, localTop, rectWidth, rectHeight);
+                    ctx.rect(-rectWidth / 2, -rectHeight / 2, rectWidth, rectHeight);
                     ctx.fill();
                     ctx.stroke();
+                    ctx.restore();
+                    ctx.save();
+                    ctx.translate(rectCenterX, rectCenterY);
+                    if (shouldCounterRotateNarrative) {
+                        ctx.rotate(-counterRotationRadians);
+                    }
                     ctx.fillStyle = '#ccf0f0';
                     ctx.font = '10px monospace';
                     ctx.fillText(
                         `[${entry.tile.row},${entry.tile.col}]`,
-                        localLeft + 4,
-                        localTop + 12,
+                        -rectWidth / 2 + 4,
+                        -rectHeight / 2 + 12,
                     );
-                    const measurement = entry.homeMeasurement;
+                    ctx.restore();
+                    const measurement = entry.homeMeasurement
+                        ? rotatePoint(entry.homeMeasurement)
+                        : undefined;
                     if (measurement) {
                         const measurementX = (measurement.x * sourceWidth - baseRect.x) * scaleX;
                         const measurementY = (measurement.y * sourceHeight - baseRect.y) * scaleY;
@@ -679,14 +717,17 @@ export const useCameraPipeline = ({
                         ctx.beginPath();
                         ctx.arc(measurementX, measurementY, 4, 0, Math.PI * 2);
                         ctx.fill();
+                        ctx.save();
+                        ctx.translate(measurementX, measurementY);
+                        if (shouldCounterRotateNarrative) {
+                            ctx.rotate(-counterRotationRadians);
+                        }
+                        ctx.fillStyle = '#facc15';
+                        ctx.font = '10px monospace';
+                        ctx.fillText(`[${entry.tile.row},${entry.tile.col}]`, 6, -6);
+                        ctx.restore();
                     }
                 });
-                ctx.fillStyle = 'rgba(0,0,0,0.65)';
-                ctx.fillRect(8, height - 34, 180, 28);
-                ctx.fillStyle = '#ccf0f0';
-                ctx.font = '10px sans-serif';
-                ctx.fillText('■ Target square', 14, height - 20);
-                ctx.fillText('● Measured home', 14, height - 8);
                 ctx.restore();
             };
 
@@ -695,14 +736,16 @@ export const useCameraPipeline = ({
             }
 
             const cvImpl = overlayCvRef.current;
-            const cvRuntimeReady = Boolean(
-                cvImpl &&
-                    cvImpl.Mat &&
-                    typeof cvImpl.Mat.zeros === 'function' &&
-                    typeof cvImpl.Scalar === 'function' &&
-                    typeof cvImpl.Point === 'function' &&
-                    typeof cvImpl.imshow === 'function'
-            );
+            const cvRuntimeReady =
+                Math.abs(counterRotationRadians) < 1e-3 &&
+                Boolean(
+                    cvImpl &&
+                        cvImpl.Mat &&
+                        typeof cvImpl.Mat.zeros === 'function' &&
+                        typeof cvImpl.Scalar === 'function' &&
+                        typeof cvImpl.Point === 'function' &&
+                        typeof cvImpl.imshow === 'function',
+                );
             if (!cvRuntimeReady || !cvImpl) {
                 drawBlobsCanvas();
                 drawAlignmentCanvas();
@@ -718,8 +761,9 @@ export const useCameraPipeline = ({
                 const circleColor = new runtime.Scalar(68, 68, 239, 230);
                 const thickness = Math.max(1, Math.round(Math.min(width, height) * 0.003));
                 blobEntries.forEach((blob) => {
-                    const adjustedX = blob.x - baseRect.x;
-                    const adjustedY = blob.y - baseRect.y;
+                    const rotatedPoint = rotatePoint(blob);
+                    const adjustedX = rotatedPoint.x - baseRect.x;
+                    const adjustedY = rotatedPoint.y - baseRect.y;
                     if (
                         adjustedX < 0 ||
                         adjustedY < 0 ||
@@ -759,8 +803,8 @@ export const useCameraPipeline = ({
                         (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
                         0,
                     ) + 1;
-                const spacingX = blueprint.idealTileFootprint.width + blueprint.tileGap;
-                const spacingY = blueprint.idealTileFootprint.height + blueprint.tileGap;
+                const spacingX = blueprint.idealTileFootprint.width + (blueprint.tileGap?.x ?? 0);
+                const spacingY = blueprint.idealTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 const squareColor = new runtime.Scalar(64, 203, 153, 150);
@@ -822,7 +866,9 @@ export const useCameraPipeline = ({
                         1,
                         runtime.LINE_AA,
                     );
-                    const measurement = entry.homeMeasurement;
+                    const measurement = entry.homeMeasurement
+                        ? rotatePoint(entry.homeMeasurement)
+                        : undefined;
                     if (measurement) {
                         const measurementX = (measurement.x * sourceWidth - baseRect.x) * scaleX;
                         const measurementY = (measurement.y * sourceHeight - baseRect.y) * scaleY;
@@ -834,47 +880,22 @@ export const useCameraPipeline = ({
                             runtime.FILLED,
                             runtime.LINE_AA,
                         );
+                        const measurementLabel = `[${entry.tile.row},${entry.tile.col}]`;
+                        runtime.putText(
+                            overlayMat,
+                            measurementLabel,
+                            new runtime.Point(
+                                Math.round(measurementX + 6),
+                                Math.round(measurementY - 6),
+                            ),
+                            runtime.FONT_HERSHEY_SIMPLEX,
+                            0.35,
+                            measurementColor,
+                            1,
+                            runtime.LINE_AA,
+                        );
                     }
                 });
-                const legendBaseY = height - 12;
-                const squareLegendTopLeft = new runtime.Point(10, legendBaseY - 12);
-                const squareLegendBottomRight = new runtime.Point(24, legendBaseY + 2);
-                runtime.rectangle(
-                    overlayMat,
-                    squareLegendTopLeft,
-                    squareLegendBottomRight,
-                    squareColor,
-                    runtime.FILLED,
-                    runtime.LINE_AA,
-                );
-                runtime.putText(
-                    overlayMat,
-                    'Target square',
-                    new runtime.Point(30, legendBaseY),
-                    runtime.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    labelColor,
-                    1,
-                    runtime.LINE_AA,
-                );
-                runtime.circle(
-                    overlayMat,
-                    new runtime.Point(12, legendBaseY - 20),
-                    4,
-                    measurementColor,
-                    runtime.FILLED,
-                    runtime.LINE_AA,
-                );
-                runtime.putText(
-                    overlayMat,
-                    'Measured home',
-                    new runtime.Point(30, legendBaseY - 16),
-                    runtime.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    labelColor,
-                    1,
-                    runtime.LINE_AA,
-                );
             };
 
             try {
@@ -886,6 +907,29 @@ export const useCameraPipeline = ({
             }
         },
         [],
+    );
+
+    const drawOverlayBitmap = useCallback(
+        (width: number, height: number): HTMLCanvasElement | null => {
+            if (!width || !height) {
+                return null;
+            }
+            if (typeof document === 'undefined') {
+                return null;
+            }
+            let canvas = overlayBitmapCanvasRef.current;
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                overlayBitmapCanvasRef.current = canvas;
+            }
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+            renderDetectionOverlay(canvas, width, height);
+            return canvas;
+        },
+        [renderDetectionOverlay],
     );
 
     useEffect(() => {
@@ -1046,6 +1090,9 @@ export const useCameraPipeline = ({
                 return;
             }
 
+            const calibrationOverlayCounterRotationRadians =
+                rotationDegrees === 0 ? 0 : (rotationDegrees * Math.PI) / 180;
+
             let rotatedCanvas = rotatedCanvasRef.current;
             if (!rotatedCanvas && typeof document !== 'undefined') {
                 rotatedCanvas = document.createElement('canvas');
@@ -1111,7 +1158,9 @@ export const useCameraPipeline = ({
                         overlayCanvas.width = baseWidth;
                         overlayCanvas.height = baseHeight;
                     }
-                    renderDetectionOverlay(overlayCanvas, baseWidth, baseHeight);
+                    renderDetectionOverlay(overlayCanvas, baseWidth, baseHeight, {
+                        calibrationOverlayCounterRotationRadians,
+                    });
                 } else {
                     overlayCtx?.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
                 }
@@ -1278,6 +1327,7 @@ export const useCameraPipeline = ({
             cancelAnimationFrame(animationFrameId);
         };
     }, [
+        drawOverlayBitmap,
         renderDetectionOverlay,
         previewMode,
         roiViewEnabled,

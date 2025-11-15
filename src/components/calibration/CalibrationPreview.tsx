@@ -74,7 +74,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         videoDimensions.width,
     ]);
 
-    const overlayButtonActive = alignmentOverlayEnabled && alignmentOverlayAvailable;
+    const overlayButtonActive = alignmentOverlayEnabled;
 
     const previewAspectRatio = useMemo(() => {
         if (roiAspectRatio) {
@@ -195,16 +195,15 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                 <button
                     type="button"
                     onClick={onToggleAlignmentOverlay}
-                    disabled={!alignmentOverlayAvailable}
                     className={`rounded-md border px-3 py-1 text-sm transition ${
                         overlayButtonActive
                             ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
                             : 'border-gray-700 bg-gray-900 text-gray-400'
-                    } ${!alignmentOverlayAvailable ? 'cursor-not-allowed opacity-50' : ''}`}
+                    }`}
                     title={
                         alignmentOverlayAvailable
                             ? 'Overlay calibration grid on the processed feed'
-                            : 'Complete a calibration run to unlock the calibration view'
+                            : 'Toggle on to watch calibration points appear as soon as measurements are captured'
                     }
                     aria-pressed={overlayButtonActive}
                 >
@@ -329,6 +328,12 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     )}
                 </div>
             </div>
+            {alignmentOverlayEnabled && (
+                <p className="mt-3 text-center text-xs text-gray-500">
+                    Calibration overlay: teal squares show target footprints, yellow dots mark
+                    measured homes.
+                </p>
+            )}
         </section>
     );
 };

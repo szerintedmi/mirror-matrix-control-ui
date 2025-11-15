@@ -148,17 +148,6 @@ Exposed, with reasonable defaults:
   - Default: ~**0.6**.
   - Exposed in **advanced**.
 
-#### 3.4.3 Confidence / Response Threshold
-
-- Use `KeyPoint.response` as the **confidence level**.
-- Expose a **“Minimum Confidence”** slider:
-  - Interpret as a threshold on `response`.
-  - UI can present this as a **0–100%** slider, internally mapped to response units.
-  - Default: “20%” (exact mapping to be defined during implementation).
-- Only blobs with `response >= minConfidence` are:
-  - Overlaid on the preview.
-  - Considered in calibration.
-
 #### 3.4.4 Advanced Parameters
 
 - Provide an **“Advanced” section** that exposes **all** SimpleBlobDetector parameters:
@@ -317,7 +306,7 @@ For each profile:
   - **Timestamp** (auto-added on save).
   - **Grid blueprint** derived from the completion step in §3.7:
     - `idealTileFootprint`: normalized width/height computed from the **largest** captured tile at home.
-    - `tileGap`: normalized space between tile footprints (records the advanced gap setting so playback honors installer intent).
+    - `tileGap`: normalized space between tile footprints, stored per axis (`x`, `y`) so we can translate installer intent across aspect ratios.
     - `gridOrigin`: normalized offset applied when pushing tiles to the aligned grid (defaults to `(0, 0)` but stored so future firmware uploads stay deterministic).
   - **Step-test settings** actually used during the run (so advanced overrides persist with the data):
     - `deltaSteps` per axis (default ±400 from §3.7.2.3.4).
@@ -343,7 +332,7 @@ For each profile:
   - The pattern editor/grid (`0–1` canvas coordinates per axis) and
   - The projection/planner math (`reflectionSolver`).
 - During calibration runs, any pixel or world-space measurements must be converted into this normalized frame **before** persisting.
-- `gridBlueprint.tileGap` and `idealTileFootprint` live in this normalized frame as well so playback and previews can reconstruct the aligned layout without recomputing Section 3.7 math client-side.
+- `gridBlueprint.tileGap.{x,y}` and `idealTileFootprint` live in this normalized frame as well so playback and previews can reconstruct the aligned layout without recomputing Section 3.7 math client-side.
 - The requirement is **one shared, consistent coordinate system** for:
   - Pattern pixels on the wall.
   - Measured blob positions.
@@ -517,7 +506,7 @@ type CalibrationProfile = {
   coordinateSystem: 'normalized-playback'; // explicit reference frame tag
   gridBlueprint: {
     idealTileFootprint: { width: number; height: number }; // normalized dims derived from largest tile
-    tileGap: number; // normalized spacing between footprints
+    tileGap: { x: number; y: number }; // normalized spacing between footprints per axis
     gridOrigin: { x: number; y: number }; // normalized offset applied after calibration (usually 0,0)
   };
   stepTestSettings: {

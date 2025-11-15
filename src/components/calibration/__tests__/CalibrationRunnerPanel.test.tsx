@@ -62,7 +62,7 @@ const completedTile: TileRunState = {
 const summary: CalibrationRunSummary = {
     gridBlueprint: {
         idealTileFootprint: { width: 0.2, height: 0.2 },
-        tileGap: 0.05,
+        tileGap: { x: 0.05, y: 0.05 },
         gridOrigin: { x: 0, y: 0 },
     },
     stepTestSettings: {
@@ -101,9 +101,12 @@ const drivers: DriverView[] = [];
 const noop = () => {};
 
 const handleUpdateSetting = <K extends keyof CalibrationRunnerSettings>(
-    _key: K,
-    _value: CalibrationRunnerSettings[K],
-) => {};
+    key: K,
+    value: CalibrationRunnerSettings[K],
+) => {
+    void key;
+    void value;
+};
 
 const renderPanel = async () => {
     const container = document.createElement('div');
