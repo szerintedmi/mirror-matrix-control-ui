@@ -271,7 +271,7 @@ For each mirror tile, measure how its reflection behaves and store that as calib
         - `stepToDisplacementX` (e.g. pixels per step or normalized units/step)
         - `stepToDisplacementY`
         - `sizeDeltaAtStepTest`: +/- compared to the home size so installers can audit hotspotting
-      - Default delta: **±400 steps** per axis with ~250 ms dwell before sampling; expose both values in an "Advanced" settings section so installers can adjust safely for different hardware envelopes.
+      - Default delta: **±400 steps** per axis; expose it in an "Advanced" settings section so installers can adjust safely for different hardware envelopes.
       - This data is for:
         - Checking consistency between tiles.
         - Driving the new playback mapping.
@@ -310,7 +310,6 @@ For each profile:
     - `gridOrigin`: normalized offset applied when pushing tiles to the aligned grid (defaults to `(0, 0)` but stored so future firmware uploads stay deterministic).
   - **Step-test settings** actually used during the run (so advanced overrides persist with the data):
     - `deltaSteps` per axis (default ±400 from §3.7.2.3.4).
-    - `dwellMs` before sampling (default ~250 ms).
 
 - Per-tile data (for every mirror tile):
   - **Home displacement** in the **normalized playback coordinate system**:
@@ -511,7 +510,6 @@ type CalibrationProfile = {
   };
   stepTestSettings: {
     deltaSteps: number; // absolute steps used during measurement (default 400)
-    dwellMs: number; // wait before sampling (default ~250)
   };
   // optional additional metadata if needed
 };

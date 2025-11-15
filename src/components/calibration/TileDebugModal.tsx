@@ -19,7 +19,7 @@ interface TileDebugModalProps {
     entry: TileRunState | null;
     summaryTile: TileCalibrationResult | null;
     onClose: () => void;
-    stepTestSettings: { deltaSteps: number; dwellMs: number };
+    stepTestSettings: { deltaSteps: number };
     getTelemetryForMotor: (motor: Motor | null) => MotorTelemetry | undefined;
 }
 
@@ -436,11 +436,6 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                         label="deltaSteps"
                                         value={`${stepTestSettings.deltaSteps} steps`}
                                         formula="`deltaSteps` is the fixed step magnitude used during characterization."
-                                    />
-                                    <DebugStat
-                                        label="dwellMs"
-                                        value={`${stepTestSettings.dwellMs} ms`}
-                                        formula="`dwellMs` is the wait duration after each move before sampling measurements."
                                     />
                                 </div>
                             </section>

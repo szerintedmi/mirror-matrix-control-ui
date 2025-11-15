@@ -109,16 +109,11 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
                         <p className="text-xs uppercase tracking-wide text-gray-500">
                             Step test settings
                         </p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div className="mt-2 grid gap-2 sm:grid-cols-1">
                             <SummaryStat
                                 label="Delta steps"
                                 value={`${stepSettings.deltaSteps}`}
                                 formula="deltaSteps = ± steps used during characterization."
-                            />
-                            <SummaryStat
-                                label="Dwell"
-                                value={`${stepSettings.dwellMs} ms`}
-                                formula="dwell = wait time after each move before sampling blobs."
                             />
                         </div>
                     </section>

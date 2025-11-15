@@ -91,7 +91,6 @@ export interface CalibrationRunSummary {
     gridBlueprint: CalibrationGridBlueprint | null;
     stepTestSettings: {
         deltaSteps: number;
-        dwellMs: number;
     };
     tiles: Record<string, TileCalibrationResult>;
 }
@@ -406,7 +405,6 @@ export class CalibrationRunner {
         this.updateState({ activeTile: tileAddress });
 
         await this.moveTileToPose(tile, 'home');
-        await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
 
         const previousResult = this.tileResults.get(tile.key);
         const priorMeasurement = previousResult?.homeMeasurement ?? null;
@@ -480,15 +478,16 @@ export class CalibrationRunner {
         for (const axis of this.axisDescriptors) {
             this.axisPositions.set(axis.key, 0);
         }
-        await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
     }
 
     private async stageAllTilesToSide(): Promise<void> {
-        for (const tile of this.calibratableTiles) {
-            await this.moveTileToPose(tile, 'aside');
-            this.setTileState(tile.key, { status: 'staged' });
-            await this.checkContinue();
-        }
+        await Promise.all(
+            this.calibratableTiles.map(async (tile) => {
+                await this.checkContinue();
+                await this.moveTileToPose(tile, 'aside');
+                this.setTileState(tile.key, { status: 'staged' });
+            }),
+        );
     }
 
     private async moveTileToPose(
@@ -496,9 +495,10 @@ export class CalibrationRunner {
         pose: 'home' | 'aside' | 'measured',
     ): Promise<void> {
         const targets = this.computePoseTargets(tile, pose);
-        await this.moveAxisToPosition(tile.assignment.x, targets.x);
-        await this.moveAxisToPosition(tile.assignment.y, targets.y);
-        await waitWithSignal(Math.max(100, this.settings.dwellMs / 2), this.abortController.signal);
+        await Promise.all([
+            this.moveAxisToPosition(tile.assignment.x, targets.x),
+            this.moveAxisToPosition(tile.assignment.y, targets.y),
+        ]);
     }
 
     private computePoseTargets(
@@ -575,10 +575,8 @@ export class CalibrationRunner {
         }
         const delta = clampSteps(this.settings.deltaSteps);
         await this.moveAxisToPosition(motor, delta);
-        await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
         const measurement = await this.captureMeasurementWithRetries(referenceMeasurement);
         await this.moveAxisToPosition(motor, 0);
-        await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
         if (!measurement) {
             return null;
         }
@@ -645,9 +643,6 @@ export class CalibrationRunner {
             }
             if (targetY !== null) {
                 await this.moveAxisToPosition(tile.assignment.y, targetY);
-            }
-            if (targetX !== null || targetY !== null) {
-                await waitWithSignal(this.settings.dwellMs, this.abortController.signal);
             }
         }
     }
@@ -865,7 +860,6 @@ export class CalibrationRunner {
             gridBlueprint,
             stepTestSettings: {
                 deltaSteps: this.settings.deltaSteps,
-                dwellMs: this.settings.dwellMs,
             },
             tiles: summaryTiles,
         };

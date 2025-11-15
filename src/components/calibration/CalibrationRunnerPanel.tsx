@@ -88,7 +88,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
         runnerState.summary?.stepTestSettings ??
         ({
             deltaSteps: runnerSettings.deltaSteps,
-            dwellMs: runnerSettings.dwellMs,
         } as const);
 
     const telemetryMap = useMemo(() => {
@@ -249,7 +248,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         </p>
                     </div>
                 </div>
-                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <label className="text-sm text-gray-300">
                         <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
                             Step delta (steps)
@@ -265,25 +264,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     return;
                                 }
                                 onUpdateSetting('deltaSteps', Math.round(next));
-                            }}
-                            className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
-                        />
-                    </label>
-                    <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
-                            Dwell (ms)
-                        </span>
-                        <input
-                            type="number"
-                            min={100}
-                            max={2000}
-                            value={runnerSettings.dwellMs}
-                            onChange={(event) => {
-                                const next = Number(event.target.value);
-                                if (Number.isNaN(next)) {
-                                    return;
-                                }
-                                onUpdateSetting('dwellMs', Math.round(next));
                             }}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
                         />

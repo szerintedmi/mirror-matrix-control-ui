@@ -67,7 +67,6 @@ const summary: CalibrationRunSummary = {
     },
     stepTestSettings: {
         deltaSteps: DEFAULT_CALIBRATION_RUNNER_SETTINGS.deltaSteps,
-        dwellMs: DEFAULT_CALIBRATION_RUNNER_SETTINGS.dwellMs,
     },
     tiles: {
         '0-1': {

@@ -45,7 +45,6 @@ export const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
 
 export interface CalibrationRunnerSettings {
     deltaSteps: number;
-    dwellMs: number;
     gridGapNormalized: number;
     moveAsideBaseSteps: number;
     moveAsideRowSpreadSteps: number;
@@ -57,7 +56,6 @@ export interface CalibrationRunnerSettings {
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 300,
-    dwellMs: 250,
     gridGapNormalized: 0.02,
     moveAsideBaseSteps: MOTOR_MAX_POSITION_STEPS,
     moveAsideRowSpreadSteps: 40,
