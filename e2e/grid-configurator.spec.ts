@@ -12,6 +12,41 @@ const getAxisCount = async (locator: Locator): Promise<number> => {
     return match ? Number(match[1]) : 0;
 };
 
+const performDrag = async (page: Page, sourceId: string, targetId: string) => {
+    await page.evaluate(
+        ({ sourceId: s, targetId: t }) => {
+            const source = document.querySelector(`[data-testid="${s}"]`) as HTMLElement | null;
+            const target = document.querySelector(`[data-testid="${t}"]`) as HTMLElement | null;
+            if (!source || !target) {
+                throw new Error(`Missing drag handles for ${s} -> ${t}`);
+            }
+            const dataTransfer = new DataTransfer();
+            dataTransfer.effectAllowed = 'move';
+            source.dispatchEvent(
+                new DragEvent('dragstart', {
+                    dataTransfer,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            );
+            target.dispatchEvent(
+                new DragEvent('dragover', {
+                    dataTransfer,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            );
+            target.dispatchEvent(
+                new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }),
+            );
+            source.dispatchEvent(
+                new DragEvent('dragend', { dataTransfer, bubbles: true, cancelable: true }),
+            );
+        },
+        { sourceId, targetId },
+    );
+};
+
 test.describe('Grid configurator interactions', () => {
     test('assigns, unassigns, and confirms shrink operations', async ({ page }) => {
         await page.goto('/');
@@ -40,52 +75,13 @@ test.describe('Grid configurator interactions', () => {
 
         const firstAxisSlot = page.getByTestId('mirror-slot-x-0-0');
 
-        const performDrag = async (sourceId: string, targetId: string) => {
-            await page.evaluate(
-                ({ sourceId: s, targetId: t }) => {
-                    const source = document.querySelector(
-                        `[data-testid="${s}"]`,
-                    ) as HTMLElement | null;
-                    const target = document.querySelector(
-                        `[data-testid="${t}"]`,
-                    ) as HTMLElement | null;
-                    if (!source || !target) {
-                        throw new Error(`Missing drag handles for ${s} -> ${t}`);
-                    }
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.effectAllowed = 'move';
-                    source.dispatchEvent(
-                        new DragEvent('dragstart', {
-                            dataTransfer,
-                            bubbles: true,
-                            cancelable: true,
-                        }),
-                    );
-                    target.dispatchEvent(
-                        new DragEvent('dragover', {
-                            dataTransfer,
-                            bubbles: true,
-                            cancelable: true,
-                        }),
-                    );
-                    target.dispatchEvent(
-                        new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }),
-                    );
-                    source.dispatchEvent(
-                        new DragEvent('dragend', { dataTransfer, bubbles: true, cancelable: true }),
-                    );
-                },
-                { sourceId, targetId },
-            );
-        };
-
-        await performDrag(firstMotorTestId, 'mirror-slot-x-0-0');
+        await performDrag(page, firstMotorTestId, 'mirror-slot-x-0-0');
 
         await expect(firstAxisSlot).toContainText(':');
         const afterAssignAxes = await getAxisCount(axisSummaryLocator);
         expect(afterAssignAxes).toBe(initialAxes - 1);
 
-        await performDrag('mirror-slot-x-0-0', unassignedTrayTestId);
+        await performDrag(page, 'mirror-slot-x-0-0', unassignedTrayTestId);
 
         await expect(firstAxisSlot.getByText('--')).toBeVisible();
         const afterUnassignAxes = await getAxisCount(axisSummaryLocator);
@@ -99,7 +95,7 @@ test.describe('Grid configurator interactions', () => {
             throw new Error('Unable to locate second motor test id');
         }
         const deepAxisSlotId = 'mirror-slot-x-2-0';
-        await performDrag(targetMotor, deepAxisSlotId);
+        await performDrag(page, targetMotor, deepAxisSlotId);
 
         const axesBeforeShrink = await getAxisCount(axisSummaryLocator);
         expect(axesBeforeShrink).toBe(initialAxes - 1);
@@ -115,5 +111,47 @@ test.describe('Grid configurator interactions', () => {
         await expect(page.getByTestId('mirror-cell-2-0')).toHaveCount(0);
         const axesAfterShrink = await getAxisCount(axisSummaryLocator);
         expect(axesAfterShrink).toBe(initialAxes);
+    });
+
+    test('saves and loads grid configuration snapshots', async ({ page }) => {
+        await page.goto('/');
+        await page.evaluate(() => localStorage.clear());
+        await page.reload();
+
+        await connectMockTransport(page);
+        await page.getByRole('button', { name: /array config/i }).click();
+
+        const unassignedTray = page.getByRole('region', { name: /unassigned motors tray/i });
+        await expect(unassignedTray).toBeVisible();
+        const firstMotor = unassignedTray.locator('[data-testid^="unassigned-motor-"]').first();
+        const motorTestId = await firstMotor.getAttribute('data-testid');
+        if (!motorTestId) {
+            throw new Error('Missing motor test id');
+        }
+
+        await performDrag(page, motorTestId, 'mirror-slot-x-0-0');
+        await expect(page.getByTestId('mirror-slot-x-0-0')).toContainText(':');
+
+        const snapshotName = 'Test Snapshot';
+        await page.getByTestId('array-config-name-input').fill(snapshotName);
+        await page.getByTestId('array-save-config').click();
+        await expect(page.getByTestId('array-persistence-status')).toContainText('Saved config', {
+            timeout: 5_000,
+        });
+
+        await performDrag(page, 'mirror-slot-x-0-0', 'unassigned-motor-tray');
+        await expect(page.getByTestId('array-unsaved-indicator')).toBeVisible();
+
+        await page.getByTestId('array-saved-config-select').selectOption(snapshotName);
+        await page.getByTestId('array-load-config').click();
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toContainText(/load saved config/i);
+        await dialog.getByRole('button', { name: /load config/i }).click();
+
+        await expect(page.getByTestId('mirror-slot-x-0-0')).toContainText(':');
+        await expect(page.getByTestId('array-persistence-status')).toContainText('Loaded config', {
+            timeout: 5_000,
+        });
     });
 });

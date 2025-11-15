@@ -160,7 +160,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
         [telemetryMap],
     );
 
-
     return (
         <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
             <div className="flex flex-wrap items-center justify-between gap-4">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AppTopBar, { type AppTopBarBreadcrumb } from './components/AppTopBar';
 import ConnectionSettingsContent from './components/ConnectionSettingsContent';
@@ -24,7 +24,14 @@ import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
 import PlaybackPage from './pages/PlaybackPage';
 import SimulationPage from './pages/SimulationPage';
-import { loadGridState, persistGridState } from './services/gridStorage';
+import {
+    bootstrapGridSnapshots,
+    getGridStateFingerprint,
+    listGridSnapshotMetadata,
+    loadNamedGridSnapshot,
+    persistLastSelectedSnapshotName,
+    persistNamedGridSnapshot,
+} from './services/gridStorage';
 import { loadPatterns, persistPatterns } from './services/patternStorage';
 import {
     getInitialProjectionSettings,
@@ -33,6 +40,7 @@ import {
 import { validateProjectionSettings } from './utils/geometryValidation';
 
 import type { MirrorConfig, Pattern, ProjectionSettings } from './types';
+import type { SnapshotPersistenceStatus } from './types/persistence';
 
 export type Page =
     | 'library'
@@ -48,6 +56,10 @@ export interface NavigationControls {
     editPattern: (patternId: string | null) => void;
 }
 
+type PersistenceStatus =
+    | { kind: 'idle' }
+    | (SnapshotPersistenceStatus & { kind: 'success' | 'error' });
+
 const App: React.FC = () => {
     const [page, setPage] = useState<Page>('playback');
     const [editingPatternId, setEditingPatternId] = useState<string | null>(null);
@@ -60,17 +72,20 @@ const App: React.FC = () => {
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
         [],
     );
-    const persistedState = useMemo(() => loadGridState(resolvedStorage), [resolvedStorage]);
+    const snapshotBootstrap = useMemo(
+        () => bootstrapGridSnapshots(resolvedStorage),
+        [resolvedStorage],
+    );
 
     const [gridSize, setGridSize] = useState(() => ({
-        rows: persistedState?.gridSize.rows ?? 8,
-        cols: persistedState?.gridSize.cols ?? 8,
+        rows: snapshotBootstrap.snapshot?.gridSize.rows ?? 8,
+        cols: snapshotBootstrap.snapshot?.gridSize.cols ?? 8,
     }));
     const persistedPatterns = useMemo(() => loadPatterns(resolvedStorage), [resolvedStorage]);
 
     const [patterns, setPatterns] = useState<Pattern[]>(persistedPatterns);
     const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(
-        () => new Map(persistedState?.mirrorConfig ?? []),
+        () => new Map(snapshotBootstrap.snapshot?.mirrorConfig ?? []),
     );
     const initialProjectionSettings = useMemo(() => {
         const hydrated = getInitialProjectionSettings(resolvedStorage);
@@ -82,6 +97,36 @@ const App: React.FC = () => {
     const [activePatternId, setActivePatternId] = useState<string | null>(
         persistedPatterns[0]?.id ?? null,
     );
+    const [snapshotMetadata, setSnapshotMetadata] = useState(snapshotBootstrap.metadata);
+    const [activeSnapshotName, setActiveSnapshotName] = useState<string | null>(
+        snapshotBootstrap.selectedName,
+    );
+    const [lastSavedFingerprint, setLastSavedFingerprint] = useState<string | null>(() =>
+        snapshotBootstrap.snapshot ? getGridStateFingerprint(snapshotBootstrap.snapshot) : null,
+    );
+
+    const currentGridSnapshot = useMemo(
+        () => ({
+            gridSize,
+            mirrorConfig,
+        }),
+        [gridSize, mirrorConfig],
+    );
+    const currentGridFingerprint = useMemo(
+        () => getGridStateFingerprint(currentGridSnapshot),
+        [currentGridSnapshot],
+    );
+    const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>({ kind: 'idle' });
+    const hasUnsavedGridChanges =
+        !activeSnapshotName || lastSavedFingerprint !== currentGridFingerprint;
+
+    const refreshSnapshotMetadata = useCallback(() => {
+        if (!resolvedStorage) {
+            setSnapshotMetadata([]);
+            return;
+        }
+        setSnapshotMetadata(listGridSnapshotMetadata(resolvedStorage));
+    }, [resolvedStorage]);
 
     const simulationPatterns = useMemo(() => [...BUILTIN_PATTERNS, ...patterns], [patterns]);
 
@@ -89,13 +134,6 @@ const App: React.FC = () => {
         setPage(targetPage);
         setIsMobileNavOpen(false);
     };
-
-    useEffect(() => {
-        persistGridState(resolvedStorage, {
-            gridSize,
-            mirrorConfig,
-        });
-    }, [gridSize, mirrorConfig, resolvedStorage]);
 
     useEffect(() => {
         persistPatterns(resolvedStorage, patterns);
@@ -125,6 +163,99 @@ const App: React.FC = () => {
         setEditingPatternId(patternId);
         setPage('editor');
     };
+
+    const handleSaveSnapshot = useCallback(
+        (name: string) => {
+            if (!resolvedStorage) {
+                setPersistenceStatus({
+                    kind: 'error',
+                    tone: 'error',
+                    action: 'save',
+                    message: 'Local storage unavailable; cannot save array configuration.',
+                    timestamp: Date.now(),
+                });
+                return;
+            }
+            const trimmed = name.trim();
+            if (!trimmed) {
+                setPersistenceStatus({
+                    kind: 'error',
+                    tone: 'error',
+                    action: 'save',
+                    message: 'Config name cannot be empty.',
+                    timestamp: Date.now(),
+                });
+                return;
+            }
+            persistNamedGridSnapshot(resolvedStorage, trimmed, currentGridSnapshot);
+            setActiveSnapshotName(trimmed);
+            setLastSavedFingerprint(currentGridFingerprint);
+            refreshSnapshotMetadata();
+            setPersistenceStatus({
+                kind: 'success',
+                tone: 'success',
+                action: 'save',
+                message: `Saved config "${trimmed}".`,
+                timestamp: Date.now(),
+            });
+        },
+        [currentGridFingerprint, currentGridSnapshot, refreshSnapshotMetadata, resolvedStorage],
+    );
+
+    const handleLoadSnapshot = useCallback(
+        (name: string) => {
+            if (!resolvedStorage) {
+                setPersistenceStatus({
+                    kind: 'error',
+                    tone: 'error',
+                    action: 'load',
+                    message: 'Local storage unavailable; cannot load saved configuration.',
+                    timestamp: Date.now(),
+                });
+                return;
+            }
+            const trimmed = name.trim();
+            if (!trimmed) {
+                setPersistenceStatus({
+                    kind: 'error',
+                    tone: 'error',
+                    action: 'load',
+                    message: 'Select a config to load.',
+                    timestamp: Date.now(),
+                });
+                return;
+            }
+            const snapshot = loadNamedGridSnapshot(resolvedStorage, trimmed);
+            if (!snapshot) {
+                setPersistenceStatus({
+                    kind: 'error',
+                    tone: 'error',
+                    action: 'load',
+                    message: 'Saved config not found; it may have been removed.',
+                    timestamp: Date.now(),
+                });
+                return;
+            }
+            setGridSize({ rows: snapshot.gridSize.rows, cols: snapshot.gridSize.cols });
+            const normalizedConfig = new Map(snapshot.mirrorConfig);
+            setMirrorConfig(normalizedConfig);
+            const fingerprint = getGridStateFingerprint({
+                gridSize: snapshot.gridSize,
+                mirrorConfig: normalizedConfig,
+            });
+            setLastSavedFingerprint(fingerprint);
+            setActiveSnapshotName(trimmed);
+            persistLastSelectedSnapshotName(resolvedStorage, trimmed);
+            setPersistenceStatus({
+                kind: 'success',
+                tone: 'success',
+                action: 'load',
+                message: `Loaded config "${trimmed}".`,
+                timestamp: Date.now(),
+            });
+        },
+        [resolvedStorage, setGridSize, setMirrorConfig],
+    );
 
     const navigationControls: NavigationControls = { navigateTo, editPattern };
     const effectiveNavPage: Page = page === 'editor' ? 'library' : page;
@@ -232,6 +363,26 @@ const App: React.FC = () => {
                         onGridSizeChange={(rows, cols) => setGridSize({ rows, cols })}
                         mirrorConfig={mirrorConfig}
                         setMirrorConfig={setMirrorConfig}
+                        persistenceControls={{
+                            canUseStorage: Boolean(resolvedStorage),
+                            availableSnapshots: snapshotMetadata,
+                            activeSnapshotName,
+                            hasUnsavedChanges: hasUnsavedGridChanges,
+                            onSaveSnapshot: handleSaveSnapshot,
+                            onLoadSnapshot: handleLoadSnapshot,
+                            status:
+                                persistenceStatus.kind === 'idle'
+                                    ? null
+                                    : {
+                                          action: persistenceStatus.action,
+                                          tone: persistenceStatus.tone,
+                                          message: persistenceStatus.message,
+                                          timestamp: persistenceStatus.timestamp,
+                                      },
+                            storageUnavailableMessage: resolvedStorage
+                                ? null
+                                : 'Local storage is unavailable in this environment.',
+                        }}
                     />
                 );
             case 'simulation':

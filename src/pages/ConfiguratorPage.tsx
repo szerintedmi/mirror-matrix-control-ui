@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
+import ArrayPersistenceControls from '../components/ArrayPersistenceControls';
 import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
@@ -9,6 +10,7 @@ import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import { normalizeCommandError } from '../utils/commandErrors';
 
+import type { GridSnapshotMetadata } from '../services/gridStorage';
 import type {
     Motor,
     MotorTelemetry,
@@ -19,6 +21,7 @@ import type {
     Axis,
     DriverStatusSnapshot,
 } from '../types';
+import type { SnapshotPersistenceStatus } from '../types/persistence';
 
 type DiscoveryFilter = 'online' | 'all' | 'new' | 'offline' | 'unassigned';
 
@@ -32,11 +35,23 @@ interface ModalState {
     cancelLabel?: string;
 }
 
+interface SnapshotPersistenceControlsProps {
+    canUseStorage: boolean;
+    availableSnapshots: GridSnapshotMetadata[];
+    activeSnapshotName: string | null;
+    hasUnsavedChanges: boolean;
+    status: SnapshotPersistenceStatus | null;
+    storageUnavailableMessage: string | null;
+    onSaveSnapshot: (name: string) => void;
+    onLoadSnapshot: (name: string) => void;
+}
+
 interface ConfiguratorPageProps {
     gridSize: { rows: number; cols: number };
     onGridSizeChange: (rows: number, cols: number) => void;
     mirrorConfig: MirrorConfig;
     setMirrorConfig: React.Dispatch<React.SetStateAction<MirrorConfig>>;
+    persistenceControls: SnapshotPersistenceControlsProps;
 }
 
 const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
@@ -44,6 +59,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     onGridSizeChange,
     mirrorConfig,
     setMirrorConfig,
+    persistenceControls,
 }) => {
     const { homeAll } = useMotorCommands();
     const globalHomeFeedback = useCommandFeedback();
@@ -525,6 +541,53 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             : null;
     }, [discoveredNodes, selectedNodeMac]);
 
+    const handleSaveSnapshotRequest = (name: string) => {
+        if (!persistenceControls.canUseStorage) {
+            persistenceControls.onSaveSnapshot(name);
+            return;
+        }
+        const trimmed = name.trim();
+        if (!trimmed) {
+            persistenceControls.onSaveSnapshot(name);
+            return;
+        }
+        const existing = persistenceControls.availableSnapshots.some(
+            (snapshot) => snapshot.name === trimmed,
+        );
+        if (existing) {
+            confirmAction(
+                `Overwrite "${trimmed}"?`,
+                'A saved config with this name already exists. Overwrite it?',
+                () => persistenceControls.onSaveSnapshot(trimmed),
+                {
+                    confirmLabel: 'Overwrite',
+                    cancelLabel: 'Keep current',
+                },
+            );
+            return;
+        }
+        persistenceControls.onSaveSnapshot(trimmed);
+    };
+
+    const handleLoadSnapshotRequest = (name: string) => {
+        const performLoad = () => {
+            persistenceControls.onLoadSnapshot(name);
+        };
+        if (persistenceControls.hasUnsavedChanges) {
+            confirmAction(
+                'Load saved config?',
+                'This will discard your current assignments and restore the selected config.',
+                performLoad,
+                {
+                    confirmLabel: 'Load config',
+                    cancelLabel: 'Keep editing',
+                },
+            );
+            return;
+        }
+        performLoad();
+    };
+
     return (
         <>
             {modalState.isOpen && (
@@ -577,40 +640,55 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             )}
             <div className="flex flex-col gap-6 p-4 text-gray-200 sm:p-6 lg:p-8">
                 <section className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center justify-end gap-3">
-                        <button
-                            onClick={handleHomeAllDrivers}
-                            className="flex items-center gap-2 rounded-md border border-emerald-600/70 bg-emerald-900/40 px-4 py-2 text-sm text-emerald-200 transition-colors hover:bg-emerald-700/40"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <ArrayPersistenceControls
+                            canUseStorage={persistenceControls.canUseStorage}
+                            hasUnsavedChanges={persistenceControls.hasUnsavedChanges}
+                            availableSnapshots={persistenceControls.availableSnapshots}
+                            activeSnapshotName={persistenceControls.activeSnapshotName}
+                            defaultSnapshotName={persistenceControls.activeSnapshotName ?? ''}
+                            status={persistenceControls.status}
+                            storageUnavailableMessage={
+                                persistenceControls.storageUnavailableMessage
+                            }
+                            onSave={handleSaveSnapshotRequest}
+                            onLoad={handleLoadSnapshotRequest}
+                        />
+                        <div className="flex flex-wrap items-center justify-end gap-3">
+                            <button
+                                onClick={handleHomeAllDrivers}
+                                className="flex items-center gap-2 rounded-md border border-emerald-600/70 bg-emerald-900/40 px-4 py-2 text-sm text-emerald-200 transition-colors hover:bg-emerald-700/40"
                             >
-                                <path d="M10 2a1 1 0 01.894.553l5 10A1 1 0 0115 14H5a1 1 0 01-.894-1.447l5-10A1 1 0 0110 2zM10 6.118L6.764 12h6.472L10 6.118z" />
-                            </svg>
-                            Home All
-                        </button>
-                        <button
-                            onClick={handleResetAll}
-                            className="flex items-center gap-2 rounded-md border border-red-600/80 bg-red-800/70 px-4 py-2 text-sm text-red-200 transition-colors hover:bg-red-700/80"
-                            title="Reset all assignments"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path d="M10 2a1 1 0 01.894.553l5 10A1 1 0 0115 14H5a1 1 0 01-.894-1.447l5-10A1 1 0 0110 2zM10 6.118L6.764 12h6.472L10 6.118z" />
+                                </svg>
+                                Home All
+                            </button>
+                            <button
+                                onClick={handleResetAll}
+                                className="flex items-center gap-2 rounded-md border border-red-600/80 bg-red-800/70 px-4 py-2 text-sm text-red-200 transition-colors hover:bg-red-700/80"
+                                title="Reset all assignments"
                             >
-                                <path
-                                    fillRule="evenodd"
-                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                                    clipRule="evenodd"
-                                />
-                            </svg>
-                            Reset All
-                        </button>
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                        clipRule="evenodd"
+                                    />
+                                </svg>
+                                Reset All
+                            </button>
+                        </div>
                     </div>
                     {globalHomeFeedback.feedback.state !== 'idle' &&
                     globalHomeFeedback.feedback.message ? (
