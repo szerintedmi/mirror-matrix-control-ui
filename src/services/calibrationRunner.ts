@@ -1,3 +1,7 @@
+import {
+    DEFAULT_CALIBRATION_RUNNER_SETTINGS,
+    type CalibrationRunnerSettings,
+} from '@/constants/calibration';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import type { MirrorAssignment, MirrorConfig, Motor } from '@/types';
@@ -19,32 +23,6 @@ interface AxisDescriptor {
     key: string;
     motor: Motor;
 }
-
-export interface CalibrationRunnerSettings {
-    deltaSteps: number;
-    dwellMs: number;
-    gridGapNormalized: number;
-    moveAsideBaseSteps: number;
-    moveAsideRowSpreadSteps: number;
-    moveAsideColSpreadSteps: number;
-    measuredBaseSteps: number;
-    sampleTimeoutMs: number;
-    maxDetectionRetries: number;
-    retryDelayMs: number;
-}
-
-export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
-    deltaSteps: 400,
-    dwellMs: 250,
-    gridGapNormalized: 0.02,
-    moveAsideBaseSteps: 850,
-    moveAsideRowSpreadSteps: 40,
-    moveAsideColSpreadSteps: 35,
-    measuredBaseSteps: 850,
-    sampleTimeoutMs: 1_500,
-    maxDetectionRetries: 5,
-    retryDelayMs: 150,
-};
 
 export interface BlobMeasurement {
     x: number;
@@ -531,8 +509,7 @@ export class CalibrationRunner {
             return { x: 0, y: 0 };
         }
         const direction = pose === 'aside' ? 1 : -1;
-        const base =
-            pose === 'aside' ? this.settings.moveAsideBaseSteps : this.settings.measuredBaseSteps;
+        const base = this.settings.moveAsideBaseSteps;
         const xOffset = clampSteps(
             direction * (base + tile.row * this.settings.moveAsideRowSpreadSteps),
         );

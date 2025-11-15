@@ -1,11 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
 import MotorActionButtons from '@/components/MotorActionButtons';
+import type { CalibrationRunnerSettings } from '@/constants/calibration';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { DriverView } from '@/context/StatusContext';
 import { useMotorController } from '@/hooks/useMotorController';
 import type {
-    CalibrationRunnerSettings,
     CalibrationRunnerState,
     CalibrationRunSummary,
     TileRunState,

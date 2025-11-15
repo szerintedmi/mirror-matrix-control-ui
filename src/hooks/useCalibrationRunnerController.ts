@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+    DEFAULT_CALIBRATION_RUNNER_SETTINGS,
+    type CalibrationRunnerSettings,
+} from '@/constants/calibration';
 import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import {
     CalibrationRunner,
-    DEFAULT_CALIBRATION_RUNNER_SETTINGS,
-    type CalibrationRunnerSettings,
     type CalibrationRunnerState,
     type TileRunState,
     type CaptureBlobMeasurement,

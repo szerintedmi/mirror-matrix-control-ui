@@ -20,33 +20,61 @@ const PATTERN_STORAGE = {
     ],
 };
 
+const MQTT_SETTINGS = {
+    scheme: 'mock',
+    host: 'localhost',
+    port: 9001,
+    path: '/',
+    username: 'mirror',
+    password: 'steelthread',
+};
+
 const GRID_STORAGE = {
     version: 1,
-    gridSize: { rows: 1, cols: 1 },
+    gridSize: { rows: 2, cols: 2 },
     assignments: {
         '0-0': {
             x: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 0 },
             y: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 1 },
+        },
+        '0-1': {
+            x: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 2 },
+            y: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 3 },
+        },
+        '1-0': {
+            x: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 4 },
+            y: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 5 },
+        },
+        '1-1': {
+            x: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 6 },
+            y: { nodeMac: 'AA:11:BB:22:CC:33', motorIndex: 7 },
         },
     },
 };
 
 const setupLocalState = async (page: Page) => {
     await page.addInitScript(
-        ({ patternStorage, gridStorage }) => {
+        ({ patternStorage, gridStorage, mqttSettings }) => {
             window.localStorage.setItem('mirror:patterns', JSON.stringify(patternStorage));
-            window.localStorage.setItem('mirror:grid-config', JSON.stringify(gridStorage));
+            const collection = {
+                version: 1,
+                snapshots: {
+                    'Playwright Snapshot': {
+                        savedAt: new Date().toISOString(),
+                        state: gridStorage,
+                    },
+                },
+                lastSelected: 'Playwright Snapshot',
+            };
+            window.localStorage.setItem('mirror:grid-config', JSON.stringify(collection));
+            window.localStorage.setItem('mirror:mqtt:settings', JSON.stringify(mqttSettings));
         },
-        { patternStorage: PATTERN_STORAGE, gridStorage: GRID_STORAGE },
+        {
+            patternStorage: PATTERN_STORAGE,
+            gridStorage: GRID_STORAGE,
+            mqttSettings: MQTT_SETTINGS,
+        },
     );
-};
-
-const connectMockTransport = async (page: Page) => {
-    await page.getByRole('button', { name: /^Connection$/i }).click();
-    await page.getByRole('button', { name: 'Mock Transport' }).click();
-    await page.getByRole('button', { name: 'Connect', exact: true }).click();
-    await expect(page.getByText('Connected', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: /^Playback$/i }).click();
 };
 
 test.describe('Playback conversion & commands', () => {
@@ -56,15 +84,18 @@ test.describe('Playback conversion & commands', () => {
         await setupLocalState(page);
         await page.reload();
 
-        await connectMockTransport(page);
-
+        await page.getByRole('button', { name: 'Playback Pattern' }).click();
+        const patternDialog = page.getByRole('dialog', { name: 'Select Pattern' });
+        await expect(patternDialog).toBeVisible();
+        await patternDialog.getByRole('button', { name: 'Close', exact: true }).click();
+        await expect(patternDialog).toBeHidden();
         const previewButton = page.getByRole('button', { name: 'Preview Commands' });
         await expect(previewButton).toBeEnabled();
-        await expect(page.getByText(/\d+\s+axis commands ready/i)).toBeVisible();
         await previewButton.click();
         const previewDialog = page.getByRole('dialog', { name: 'Command Preview' });
         await expect(previewDialog).toBeVisible();
-        await expect(previewDialog.getByText(/MOVE commands ready/i)).toBeVisible();
+        const commandRows = previewDialog.locator('tbody tr');
+        await expect(commandRows.first()).toBeVisible();
         await previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
 
         const playButton = page.getByRole('button', { name: /^Play$/i });
