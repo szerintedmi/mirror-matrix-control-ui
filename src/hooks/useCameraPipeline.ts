@@ -203,7 +203,6 @@ export const useCameraPipeline = ({
     const processedFrameMetaRef = useRef<{
         sourceWidth: number;
         sourceHeight: number;
-        appliedRoi: { x: number; y: number; width: number; height: number } | null;
     } | null>(null);
     const detectionSequenceRef = useRef(0);
     const detectionUpdatedAtRef = useRef(0);
@@ -543,11 +542,6 @@ export const useCameraPipeline = ({
         }
     }, [workerSupported]);
 
-    const shouldUseWorkerRoi = useMemo(
-        () => roi.enabled && roiViewEnabled && previewMode === 'processed' && rotationDegrees === 0,
-        [previewMode, roi.enabled, roiViewEnabled, rotationDegrees],
-    );
-
     const renderDetectionOverlay = useCallback(
         (
             canvas: HTMLCanvasElement,
@@ -568,13 +562,12 @@ export const useCameraPipeline = ({
             if (!meta) {
                 return;
             }
-            const baseRect = options?.displayRectOverride ??
-                meta.appliedRoi ?? {
-                    x: 0,
-                    y: 0,
-                    width: meta.sourceWidth || width,
-                    height: meta.sourceHeight || height,
-                };
+            const baseRect = options?.displayRectOverride ?? {
+                x: 0,
+                y: 0,
+                width: meta.sourceWidth || width,
+                height: meta.sourceHeight || height,
+            };
             if (!baseRect.width || !baseRect.height) {
                 return;
             }
@@ -972,7 +965,6 @@ export const useCameraPipeline = ({
                         brightness,
                         contrast,
                         roi: roiSnapshot,
-                        applyRoi: shouldUseWorkerRoi,
                         claheClipLimit,
                         claheTileGridSize,
                         blobParams,
@@ -997,7 +989,6 @@ export const useCameraPipeline = ({
                     processedFrameMetaRef.current = {
                         sourceWidth: result.sourceWidth ?? width,
                         sourceHeight: result.sourceHeight ?? height,
-                        appliedRoi: result.appliedRoi,
                     };
                     detectionSequenceRef.current += 1;
                     detectionUpdatedAtRef.current = performance.now();
@@ -1041,7 +1032,6 @@ export const useCameraPipeline = ({
         nativeBlobDetectorAvailable,
         opencvStatus,
         previewMode,
-        shouldUseWorkerRoi,
         useWasmDetector,
         workerSupported,
     ]);
@@ -1112,30 +1102,12 @@ export const useCameraPipeline = ({
             const overlayCanvas = detectionOverlayCanvasRef.current;
             const roiOverlayCanvas = roiOverlayCanvasRef.current;
             const rotatedOverlayCanvas = rotatedOverlayCanvasRef.current;
-            const metaSnapshot = processedFrameMetaRef.current;
             let roiPixels: { width: number; height: number } | null = null;
-            let roiSourceRect: { x: number; y: number; width: number; height: number } | null =
-                null;
             if (!showFullFrame && currentRoi.enabled) {
-                roiPixels =
-                    shouldUseWorkerRoi && processedSourceAvailable
-                        ? { width: baseWidth, height: baseHeight }
-                        : {
-                              width: Math.max(1, Math.round(currentRoi.width * baseWidth)),
-                              height: Math.max(1, Math.round(currentRoi.height * baseHeight)),
-                          };
-                if (shouldUseWorkerRoi && processedSourceAvailable) {
-                    roiSourceRect = metaSnapshot?.appliedRoi ?? null;
-                } else {
-                    const sourceWidth = metaSnapshot?.sourceWidth ?? baseWidth;
-                    const sourceHeight = metaSnapshot?.sourceHeight ?? baseHeight;
-                    roiSourceRect = {
-                        x: Math.max(0, currentRoi.x * sourceWidth),
-                        y: Math.max(0, currentRoi.y * sourceHeight),
-                        width: Math.max(1, currentRoi.width * sourceWidth),
-                        height: Math.max(1, currentRoi.height * sourceHeight),
-                    };
-                }
+                roiPixels = {
+                    width: Math.max(1, Math.round(currentRoi.width * baseWidth)),
+                    height: Math.max(1, Math.round(currentRoi.height * baseHeight)),
+                };
             }
             if (overlayCanvas) {
                 const overlayCtx = overlayCanvas.getContext('2d');
@@ -1206,35 +1178,21 @@ export const useCameraPipeline = ({
                               ? processedCanvas
                               : video;
                     if (roiSource) {
-                        if (shouldUseWorkerRoi && processedSourceAvailable) {
-                            zoomCtx.drawImage(
-                                roiSource,
-                                0,
-                                0,
-                                baseWidth,
-                                baseHeight,
-                                0,
-                                0,
-                                targetWidth,
-                                targetHeight,
-                            );
-                        } else {
-                            const sx = currentRoi.x * baseWidth;
-                            const sy = currentRoi.y * baseHeight;
-                            const sWidth = Math.max(1, currentRoi.width * baseWidth);
-                            const sHeight = Math.max(1, currentRoi.height * baseHeight);
-                            zoomCtx.drawImage(
-                                roiSource,
-                                sx,
-                                sy,
-                                sWidth,
-                                sHeight,
-                                showFullFrame ? sx : 0,
-                                showFullFrame ? sy : 0,
-                                targetWidth,
-                                targetHeight,
-                            );
-                        }
+                        const sx = currentRoi.x * baseWidth;
+                        const sy = currentRoi.y * baseHeight;
+                        const sWidth = Math.max(1, currentRoi.width * baseWidth);
+                        const sHeight = Math.max(1, currentRoi.height * baseHeight);
+                        zoomCtx.drawImage(
+                            roiSource,
+                            sx,
+                            sy,
+                            sWidth,
+                            sHeight,
+                            showFullFrame ? sx : 0,
+                            showFullFrame ? sy : 0,
+                            targetWidth,
+                            targetHeight,
+                        );
                     }
                 }
             } else if (zoomCanvas) {
@@ -1270,35 +1228,21 @@ export const useCameraPipeline = ({
                     }
                     if (roiOverlayCtx) {
                         roiOverlayCtx.clearRect(0, 0, targetWidth, targetHeight);
-                        if (shouldUseWorkerRoi && processedSourceAvailable && roiSourceRect) {
-                            roiOverlayCtx.drawImage(
-                                overlaySourceForRoi,
-                                roiSourceRect.x,
-                                roiSourceRect.y,
-                                roiSourceRect.width,
-                                roiSourceRect.height,
-                                0,
-                                0,
-                                targetWidth,
-                                targetHeight,
-                            );
-                        } else {
-                            const sx = currentRoi.x * baseWidth;
-                            const sy = currentRoi.y * baseHeight;
-                            const sWidth = Math.max(1, currentRoi.width * baseWidth);
-                            const sHeight = Math.max(1, currentRoi.height * baseHeight);
-                            roiOverlayCtx.drawImage(
-                                overlaySourceForRoi,
-                                sx,
-                                sy,
-                                sWidth,
-                                sHeight,
-                                0,
-                                0,
-                                targetWidth,
-                                targetHeight,
-                            );
-                        }
+                        const sx = currentRoi.x * baseWidth;
+                        const sy = currentRoi.y * baseHeight;
+                        const sWidth = Math.max(1, currentRoi.width * baseWidth);
+                        const sHeight = Math.max(1, currentRoi.height * baseHeight);
+                        roiOverlayCtx.drawImage(
+                            overlaySourceForRoi,
+                            sx,
+                            sy,
+                            sWidth,
+                            sHeight,
+                            0,
+                            0,
+                            targetWidth,
+                            targetHeight,
+                        );
                     }
                 } else if (roiOverlayCtx) {
                     roiOverlayCtx.clearRect(0, 0, roiOverlayCanvas.width, roiOverlayCanvas.height);
@@ -1318,7 +1262,6 @@ export const useCameraPipeline = ({
         previewMode,
         roiViewEnabled,
         rotationDegrees,
-        shouldUseWorkerRoi,
         blobsOverlayEnabled,
         opencvStatus,
     ]);

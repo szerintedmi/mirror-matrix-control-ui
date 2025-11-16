@@ -20,7 +20,6 @@ export interface ProcessFrameParams {
     brightness: number;
     contrast: number;
     roi: NormalizedRoi;
-    applyRoi: boolean;
     claheClipLimit: number;
     claheTileGridSize: number;
     blobParams: BlobDetectorParams;
@@ -34,12 +33,6 @@ export interface ProcessFrameResult {
     height: number;
     sourceWidth: number;
     sourceHeight: number;
-    appliedRoi: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-    } | null;
     keypoints: DetectedBlob[];
     frame: ImageBitmap;
 }

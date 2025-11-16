@@ -392,7 +392,6 @@ const handleProcessFrame = async (payload) => {
         brightness = 0,
         contrast = 1,
         roi,
-        applyRoi,
         requestId,
         claheClipLimit = 2,
         claheTileGridSize = 8,
@@ -430,16 +429,6 @@ const handleProcessFrame = async (payload) => {
     clahe.apply(adjusted, claheResult);
     clahe.delete();
 
-    let view = claheResult;
-    let roiView = null;
-    let appliedRect = null;
-    if (applyRoi && roi && roi.enabled) {
-        const rect = buildRect(roi, width, height);
-        roiView = view.roi(rect);
-        view = roiView;
-        appliedRect = rect;
-    }
-
     const detectionRect = roi && roi.enabled ? buildRect(roi, width, height) : null;
     const detectionView = detectionRect ? claheResult.roi(detectionRect) : claheResult;
     const keypoints = runDetection
@@ -450,33 +439,29 @@ const handleProcessFrame = async (payload) => {
     }
 
     const rgba = new cvModule.Mat();
-    cvModule.cvtColor(view, rgba, cvModule.COLOR_GRAY2RGBA);
+    cvModule.cvtColor(claheResult, rgba, cvModule.COLOR_GRAY2RGBA);
 
-    const output = new ImageData(new Uint8ClampedArray(rgba.data), view.cols, view.rows);
+    const output = new ImageData(
+        new Uint8ClampedArray(rgba.data),
+        claheResult.cols,
+        claheResult.rows,
+    );
     const bitmap = await createImageBitmap(output);
 
     workerCtx.postMessage(
         {
             type: 'FRAME_RESULT',
             requestId,
-            width: view.cols,
-            height: view.rows,
+            width: claheResult.cols,
+            height: claheResult.rows,
             sourceWidth: width,
             sourceHeight: height,
-            appliedRoi: appliedRect
-                ? {
-                      x: appliedRect.x,
-                      y: appliedRect.y,
-                      width: appliedRect.width,
-                      height: appliedRect.height,
-                  }
-                : null,
             keypoints,
             frame: bitmap,
         },
         [bitmap],
     );
-    cleanupMats([rgba, roiView, claheResult, adjusted, gray, src]);
+    cleanupMats([rgba, claheResult, adjusted, gray, src]);
 };
 
 workerCtx.addEventListener('message', (event) => {

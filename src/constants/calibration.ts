@@ -56,7 +56,7 @@ export interface CalibrationRunnerSettings {
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 300,
-    gridGapNormalized: 0.02,
+    gridGapNormalized: 0.01,
     moveAsideBaseSteps: MOTOR_MAX_POSITION_STEPS,
     moveAsideRowSpreadSteps: 40,
     moveAsideColSpreadSteps: 35,
