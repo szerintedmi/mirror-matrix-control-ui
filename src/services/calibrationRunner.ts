@@ -147,6 +147,14 @@ const roundSteps = (value: number): number => {
     return Math.round(value);
 };
 
+const getAxisStepDelta = (axis: Axis, deltaSteps: number): number | null => {
+    if (deltaSteps <= 0) {
+        return null;
+    }
+    const rawDelta = clampSteps(deltaSteps);
+    return axis === 'x' ? -rawDelta : rawDelta;
+};
+
 class RunnerAbortError extends Error {
     constructor(message = 'Calibration run aborted') {
         super(message);
@@ -433,12 +441,57 @@ export class CalibrationRunner {
             return;
         }
 
-        const stepX = await this.runStepCharacterization(tile, 'x', homeMeasurement);
-        const stepY = await this.runStepCharacterization(tile, 'y', homeMeasurement);
+        const xMotor = tile.assignment.x;
+        const yMotor = tile.assignment.y;
+        const xDelta = xMotor ? getAxisStepDelta('x', this.settings.deltaSteps) : null;
+        const yDelta = yMotor ? getAxisStepDelta('y', this.settings.deltaSteps) : null;
+        const sizeDeltas: number[] = [];
+        const stepToDisplacement: { x: number | null; y: number | null } = {
+            x: null,
+            y: null,
+        };
+        let positionedForYMeasurementInParallel = false;
 
-        const sizeDeltas = [stepX?.sizeDelta, stepY?.sizeDelta].filter(
-            (value): value is number => typeof value === 'number' && Number.isFinite(value),
-        );
+        if (xMotor && xDelta !== null) {
+            await this.moveAxisToPosition(xMotor, xDelta);
+            const measurement = await this.captureMeasurementWithRetries();
+            if (measurement) {
+                const displacement = measurement.x - homeMeasurement.x;
+                const perStep = displacement / xDelta;
+                if (Number.isFinite(perStep)) {
+                    stepToDisplacement.x = perStep;
+                }
+                const sizeDelta = measurement.size - homeMeasurement.size;
+                if (Number.isFinite(sizeDelta)) {
+                    sizeDeltas.push(sizeDelta);
+                }
+            }
+            if (yMotor && yDelta !== null) {
+                await this.moveTileAxesToPositions(tile, { x: 0, y: yDelta });
+                positionedForYMeasurementInParallel = true;
+            } else {
+                await this.moveAxisToPosition(xMotor, 0);
+            }
+        }
+
+        if (yMotor && yDelta !== null) {
+            if (!positionedForYMeasurementInParallel) {
+                await this.moveAxisToPosition(yMotor, yDelta);
+            }
+            const measurement = await this.captureMeasurementWithRetries();
+            if (measurement) {
+                const displacement = measurement.y - homeMeasurement.y;
+                const perStep = displacement / yDelta;
+                if (Number.isFinite(perStep)) {
+                    stepToDisplacement.y = perStep;
+                }
+                const sizeDelta = measurement.size - homeMeasurement.size;
+                if (Number.isFinite(sizeDelta)) {
+                    sizeDeltas.push(sizeDelta);
+                }
+            }
+        }
+
         const sizeDeltaAtStepTest =
             sizeDeltas.length > 0
                 ? sizeDeltas.reduce((sum, value) => sum + value, 0) / sizeDeltas.length
@@ -448,10 +501,7 @@ export class CalibrationRunner {
             home: homeMeasurement,
             homeOffset: null,
             idealTarget: null,
-            stepToDisplacement: {
-                x: stepX?.perStep ?? null,
-                y: stepY?.perStep ?? null,
-            },
+            stepToDisplacement,
             sizeDeltaAtStepTest,
         };
         this.setTileState(tile.key, {
@@ -515,6 +565,27 @@ export class CalibrationRunner {
         ]);
     }
 
+    private async moveTileAxesToPositions(
+        tile: TileDescriptor,
+        targets: Partial<Record<Axis, number>>,
+    ): Promise<void> {
+        const tasks: Promise<void>[] = [];
+        (['x', 'y'] as Axis[]).forEach((axis) => {
+            const target = targets[axis];
+            if (typeof target !== 'number' || !Number.isFinite(target)) {
+                return;
+            }
+            const motor = tile.assignment[axis];
+            if (!motor) {
+                return;
+            }
+            tasks.push(this.moveAxisToPosition(motor, target));
+        });
+        if (tasks.length > 0) {
+            await Promise.all(tasks);
+        }
+    }
+
     private computePoseTargets(
         tile: TileDescriptor,
         pose: 'home' | 'aside',
@@ -570,35 +641,6 @@ export class CalibrationRunner {
             await waitWithSignal(this.settings.retryDelayMs, this.abortController.signal);
         }
         return null;
-    }
-
-    private async runStepCharacterization(
-        tile: TileDescriptor,
-        axis: Axis,
-        referenceMeasurement: BlobMeasurement,
-    ): Promise<{ perStep: number; sizeDelta: number } | null> {
-        const motor = tile.assignment[axis];
-        if (!motor) {
-            return null;
-        }
-        if (this.settings.deltaSteps <= 0) {
-            return null;
-        }
-        const rawDelta = clampSteps(this.settings.deltaSteps);
-        const delta = axis === 'x' ? -rawDelta : rawDelta;
-        await this.moveAxisToPosition(motor, delta);
-        const measurement = await this.captureMeasurementWithRetries();
-        await this.moveAxisToPosition(motor, 0);
-        if (!measurement) {
-            return null;
-        }
-        const displacement =
-            axis === 'x'
-                ? measurement.x - referenceMeasurement.x
-                : measurement.y - referenceMeasurement.y;
-        const perStep = displacement / delta;
-        const sizeDelta = measurement.size - referenceMeasurement.size;
-        return { perStep, sizeDelta };
     }
 
     private applySummaryMetrics(summary: CalibrationRunSummary): void {
