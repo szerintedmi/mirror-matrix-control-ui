@@ -37,7 +37,6 @@ export interface BlobMeasurement {
 export type CaptureBlobMeasurement = (params: {
     timeoutMs: number;
     signal?: AbortSignal;
-    expectedPosition?: { x: number; y: number };
 }) => Promise<BlobMeasurement | null>;
 
 export type CalibrationRunnerPhase =
@@ -406,13 +405,11 @@ export class CalibrationRunner {
 
         await this.moveTileToPose(tile, 'home');
 
-        const previousResult = this.tileResults.get(tile.key);
-        const priorMeasurement = previousResult?.homeMeasurement ?? null;
-        const homeMeasurement = await this.captureMeasurementWithRetries(priorMeasurement);
+        const homeMeasurement = await this.captureMeasurementWithRetries();
         if (!homeMeasurement) {
             const errorMessage = 'Unable to detect blob at home position';
             this.markTileFailed(tile, errorMessage);
-            await this.moveTileToPose(tile, 'measured');
+            await this.moveTileToPose(tile, 'aside');
             return;
         }
 
@@ -452,7 +449,7 @@ export class CalibrationRunner {
         this.publishSummarySnapshot();
         this.bumpProgress('completed');
 
-        await this.moveTileToPose(tile, 'measured');
+        await this.moveTileToPose(tile, 'aside');
     }
 
     private async homeAllMotors(): Promise<void> {
@@ -490,10 +487,7 @@ export class CalibrationRunner {
         );
     }
 
-    private async moveTileToPose(
-        tile: TileDescriptor,
-        pose: 'home' | 'aside' | 'measured',
-    ): Promise<void> {
+    private async moveTileToPose(tile: TileDescriptor, pose: 'home' | 'aside'): Promise<void> {
         const targets = this.computePoseTargets(tile, pose);
         await Promise.all([
             this.moveAxisToPosition(tile.assignment.x, targets.x),
@@ -503,7 +497,7 @@ export class CalibrationRunner {
 
     private computePoseTargets(
         tile: TileDescriptor,
-        pose: 'home' | 'aside' | 'measured',
+        pose: 'home' | 'aside',
     ): {
         x: number;
         y: number;
@@ -511,7 +505,7 @@ export class CalibrationRunner {
         if (pose === 'home') {
             return { x: 0, y: 0 };
         }
-        const direction = pose === 'aside' ? 1 : -1;
+        const direction = 1;
         const base = this.settings.moveAsideBaseSteps;
         const xOffset = clampSteps(
             direction * (base + tile.row * this.settings.moveAsideRowSpreadSteps),
@@ -543,15 +537,12 @@ export class CalibrationRunner {
         this.axisPositions.set(axisKey, clamped);
     }
 
-    private async captureMeasurementWithRetries(
-        expectedPosition?: { x: number; y: number } | null,
-    ): Promise<BlobMeasurement | null> {
+    private async captureMeasurementWithRetries(): Promise<BlobMeasurement | null> {
         for (let attempt = 0; attempt < this.settings.maxDetectionRetries; attempt += 1) {
             await this.checkContinue();
             const measurement = await this.captureMeasurement({
                 timeoutMs: this.settings.sampleTimeoutMs,
                 signal: this.abortController.signal,
-                expectedPosition: expectedPosition ?? undefined,
             });
             if (measurement) {
                 return measurement;
@@ -575,7 +566,7 @@ export class CalibrationRunner {
         }
         const delta = clampSteps(this.settings.deltaSteps);
         await this.moveAxisToPosition(motor, delta);
-        const measurement = await this.captureMeasurementWithRetries(referenceMeasurement);
+        const measurement = await this.captureMeasurementWithRetries();
         await this.moveAxisToPosition(motor, 0);
         if (!measurement) {
             return null;

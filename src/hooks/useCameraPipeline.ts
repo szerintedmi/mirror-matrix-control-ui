@@ -291,7 +291,7 @@ export const useCameraPipeline = ({
         };
     }, []);
 
-    const readBestBlobMeasurement = useCallback((expectedPosition?: { x: number; y: number }) => {
+    const readBestBlobMeasurement = useCallback(() => {
         const meta = processedFrameMetaRef.current;
         const blobs = detectionResultsRef.current;
         if (!meta || !meta.sourceWidth || !meta.sourceHeight || blobs.length === 0) {
@@ -309,36 +309,22 @@ export const useCameraPipeline = ({
             };
         });
 
-        const selectByDistance = (expected: { x: number; y: number }) => {
-            const EPS = 1e-6;
-            return normalized.reduce(
-                (closest, current) => {
-                    const currentDistance = Math.hypot(
-                        current.normalizedX - expected.x,
-                        current.normalizedY - expected.y,
-                    );
-                    if (!closest) {
-                        return { entry: current, distance: currentDistance };
-                    }
-                    if (currentDistance + EPS < closest.distance) {
-                        return { entry: current, distance: currentDistance };
-                    }
-                    if (Math.abs(currentDistance - closest.distance) <= EPS) {
-                        return current.blob.response > closest.entry.blob.response
-                            ? { entry: current, distance: currentDistance }
-                            : closest;
-                    }
-                    return closest;
-                },
-                null as null | { entry: (typeof normalized)[number]; distance: number },
-            );
-        };
-
-        const bestEntry = expectedPosition
-            ? selectByDistance(expectedPosition)?.entry
-            : normalized.reduce((top, candidate) =>
-                  candidate.blob.response > top.blob.response ? candidate : top,
-              );
+        const EPS = 1e-4;
+        const bestEntry = normalized.reduce<(typeof normalized)[number] | null>(
+            (top, candidate) => {
+                if (!top) {
+                    return candidate;
+                }
+                if (candidate.normalizedX > top.normalizedX + EPS) {
+                    return candidate;
+                }
+                if (Math.abs(candidate.normalizedX - top.normalizedX) <= EPS) {
+                    return candidate.blob.response > top.blob.response ? candidate : top;
+                }
+                return top;
+            },
+            null,
+        );
 
         if (!bestEntry) {
             return null;
@@ -355,7 +341,7 @@ export const useCameraPipeline = ({
     }, []);
 
     const captureBlobMeasurement = useCallback<CaptureBlobMeasurement>(
-        async ({ timeoutMs, signal, expectedPosition }) => {
+        async ({ timeoutMs, signal }) => {
             const start = performance.now();
             let baselineSequence = detectionSequenceRef.current;
             while (performance.now() - start < timeoutMs) {
@@ -364,7 +350,7 @@ export const useCameraPipeline = ({
                 }
                 const sequenceChanged = detectionSequenceRef.current !== baselineSequence;
                 if (sequenceChanged) {
-                    const measurement = readBestBlobMeasurement(expectedPosition);
+                    const measurement = readBestBlobMeasurement();
                     baselineSequence = detectionSequenceRef.current;
                     if (measurement) {
                         return measurement;
