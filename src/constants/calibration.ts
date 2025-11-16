@@ -1,4 +1,3 @@
-import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
 import type { NormalizedRoi } from '@/types';
 
 export interface ResolutionOption {
@@ -53,9 +52,6 @@ export const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
 export interface CalibrationRunnerSettings {
     deltaSteps: number;
     gridGapNormalized: number;
-    moveAsideBaseSteps: number;
-    moveAsideRowSpreadSteps: number;
-    moveAsideColSpreadSteps: number;
     sampleTimeoutMs: number;
     maxDetectionRetries: number;
     retryDelayMs: number;
@@ -64,9 +60,6 @@ export interface CalibrationRunnerSettings {
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 500,
     gridGapNormalized: 0.0,
-    moveAsideBaseSteps: MOTOR_MAX_POSITION_STEPS,
-    moveAsideRowSpreadSteps: 40,
-    moveAsideColSpreadSteps: 35,
     sampleTimeoutMs: 1_500,
     maxDetectionRetries: 5,
     retryDelayMs: 150,

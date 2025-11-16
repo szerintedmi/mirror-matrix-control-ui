@@ -596,17 +596,21 @@ export class CalibrationRunner {
         if (pose === 'home') {
             return { x: 0, y: 0 };
         }
-        const direction = 1;
-        const base = this.settings.moveAsideBaseSteps;
-        const xOffset = clampSteps(
-            direction * (base + tile.row * this.settings.moveAsideRowSpreadSteps),
-        );
-        const centeredCol = tile.col - (this.gridSize.cols - 1) / 2;
-        const yOffset = clampSteps(centeredCol * this.settings.moveAsideColSpreadSteps);
         return {
-            x: xOffset,
-            y: yOffset,
+            x: MOTOR_MAX_POSITION_STEPS,
+            y: this.computeAsideYTarget(tile.col),
         };
+    }
+
+    private computeAsideYTarget(column: number): number {
+        const totalCols = Math.max(1, this.gridSize.cols);
+        if (totalCols === 1) {
+            return clampSteps((MOTOR_MAX_POSITION_STEPS + MOTOR_MIN_POSITION_STEPS) / 2);
+        }
+        const normalizedColumn = column / (totalCols - 1);
+        const span = MOTOR_MAX_POSITION_STEPS - MOTOR_MIN_POSITION_STEPS;
+        const rawTarget = MOTOR_MIN_POSITION_STEPS + normalizedColumn * span;
+        return clampSteps(rawTarget);
     }
 
     private async moveAxisToPosition(motor: Motor | null, target: number): Promise<void> {
