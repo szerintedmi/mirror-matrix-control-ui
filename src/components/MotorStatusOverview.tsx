@@ -229,7 +229,7 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                             axis,
                             colorClass: 'bg-slate-600',
                             animate: false,
-                            title: `Tile ${row + 1},${col + 1} axis ${axis.toUpperCase()}: Unassigned`,
+                            title: `Tile ${row},${col} axis ${axis.toUpperCase()}: Unassigned`,
                             motor: null,
                         };
                     }
@@ -247,7 +247,7 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                               ? 'Delayed heartbeat'
                               : 'Offline';
                     const statusNotes: string[] = [
-                        `Tile ${row + 1},${col + 1} axis ${axis.toUpperCase()}`,
+                        `Tile ${row},${col} axis ${axis.toUpperCase()}`,
                         `MAC ${macLabel}`,
                         `Motor ${motor.motorIndex}`,
                         labelPresence,
@@ -271,7 +271,7 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                 views.push({
                     key,
                     dots,
-                    tileTitle: `Tile ${row + 1},${col + 1}`,
+                    tileTitle: `Tile ${row},${col}`,
                 });
             }
         }

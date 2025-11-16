@@ -159,7 +159,7 @@ interface PlaybackRunState {
     error?: string;
 }
 
-const formatTileLabel = (row: number, col: number): string => `Tile ${row + 1},${col + 1}`;
+const formatTileLabel = (row: number, col: number): string => `Tile ${row},${col}`;
 const normalizeMac = (mac: string): string => mac.trim().toUpperCase();
 
 const axisAssignmentSignature = (

@@ -47,7 +47,7 @@ const buildArrayPlan = (mirrors: MirrorReflectionSolution[]): PlanPoint[] => {
             id: mirror.mirrorId,
             x: POINT_PADDING + normalizedX * DRAW_SPAN,
             y: VIEW_BOX - POINT_PADDING - normalizedY * DRAW_SPAN,
-            label: `${mirror.row + 1}:${mirror.col + 1}`,
+            label: `${mirror.row}:${mirror.col}`,
             isActive: Boolean(mirror.patternId),
         } satisfies PlanPoint;
     });

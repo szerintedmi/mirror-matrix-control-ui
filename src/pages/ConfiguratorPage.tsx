@@ -25,6 +25,19 @@ import type { SnapshotPersistenceStatus } from '../types/persistence';
 
 type DiscoveryFilter = 'online' | 'all' | 'new' | 'offline' | 'unassigned';
 
+const gridViewOptions = [
+    {
+        id: 'mirror' as const,
+        label: 'Mirror view',
+        helper: 'Physical mirror layout • [0,0] is top-right when you face the array.',
+    },
+    {
+        id: 'projection' as const,
+        label: 'Projection view',
+        helper: 'Wall projection layout • [0,0] is top-left when you face the wall.',
+    },
+];
+
 interface ModalState {
     isOpen: boolean;
     title: string;
@@ -84,6 +97,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         confirmLabel: undefined,
         cancelLabel: undefined,
     });
+    const [gridViewMode, setGridViewMode] = useState<'mirror' | 'projection'>('mirror');
 
     const assignmentMetrics = useMemo(() => {
         let assignedAxes = 0;
@@ -775,6 +789,27 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 staleThresholdMs={staleThresholdMs}
                             />
                         </div>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+                            <p>
+                                {
+                                    gridViewOptions.find((option) => option.id === gridViewMode)
+                                        ?.helper
+                                }
+                            </p>
+                            <div className="inline-flex rounded-full border border-gray-700 bg-gray-900/60 p-1 text-sm">
+                                {gridViewOptions.map((option) => (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => setGridViewMode(option.id)}
+                                        className={`rounded-full px-3 py-1 font-medium transition-colors ${gridViewMode === option.id ? 'bg-emerald-500/30 text-emerald-200' : 'text-gray-300 hover:text-gray-100'}`}
+                                        aria-pressed={gridViewMode === option.id}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <div className="flex-grow mt-4 overflow-auto p-2 bg-black/20 rounded-md">
                             <MirrorGrid
                                 rows={gridSize.rows}
@@ -783,6 +818,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 onMotorDrop={handleMotorDrop}
                                 selectedNodeMac={selectedNodeMacEffective}
                                 driverStatuses={driverStatusByMac}
+                                orientation={gridViewMode}
                             />
                         </div>
                     </main>

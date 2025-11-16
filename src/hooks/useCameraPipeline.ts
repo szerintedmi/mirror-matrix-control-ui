@@ -590,11 +590,6 @@ export const useCameraPipeline = ({
                 if (!tileEntries.length) {
                     return;
                 }
-                const cols =
-                    tileEntries.reduce(
-                        (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
-                        0,
-                    ) + 1;
                 const spacingX =
                     blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
                 const spacingY =
@@ -604,10 +599,9 @@ export const useCameraPipeline = ({
                 ctx.save();
                 ctx.lineWidth = 2;
                 tileEntries.forEach((entry) => {
-                    const mirroredCol = cols - 1 - entry.tile.col;
                     const adjustedCenterX =
                         blueprint.gridOrigin.x +
-                        mirroredCol * spacingX +
+                        entry.tile.col * spacingX +
                         blueprint.adjustedTileFootprint.width / 2;
                     const adjustedCenterY =
                         blueprint.gridOrigin.y +
@@ -740,11 +734,6 @@ export const useCameraPipeline = ({
                 if (!tileEntries.length) {
                     return;
                 }
-                const cols =
-                    tileEntries.reduce(
-                        (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
-                        0,
-                    ) + 1;
                 const spacingX =
                     blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
                 const spacingY =
@@ -755,10 +744,9 @@ export const useCameraPipeline = ({
                 const labelColor = new runtime.Scalar(240, 255, 255, 255);
                 const measurementColor = new runtime.Scalar(255, 255, 0, 255);
                 tileEntries.forEach((entry) => {
-                    const mirroredCol = cols - 1 - entry.tile.col;
                     const adjustedCenterX =
                         blueprint.gridOrigin.x +
-                        mirroredCol * spacingX +
+                        entry.tile.col * spacingX +
                         blueprint.adjustedTileFootprint.width / 2;
                     const adjustedCenterY =
                         blueprint.gridOrigin.y +

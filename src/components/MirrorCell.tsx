@@ -295,6 +295,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
 
     return (
         <div
+            dir="ltr"
             data-testid={`mirror-cell-${position.row}-${position.col}`}
             onClick={() => setIsSelected(!isSelected)}
             onBlur={() => setIsSelected(false)}

@@ -861,8 +861,7 @@ export class CalibrationRunner {
                 if (!measurement) {
                     return;
                 }
-                const mirroredCol = this.gridSize.cols - 1 - entry.tile.col;
-                const candidateX = measurement.x - (mirroredCol * spacingX + tileWidth / 2);
+                const candidateX = measurement.x - (entry.tile.col * spacingX + tileWidth / 2);
                 const candidateY = measurement.y - (entry.tile.row * spacingY + tileHeight / 2);
                 if (candidateX < minOriginX) {
                     minOriginX = candidateX;
@@ -901,10 +900,9 @@ export class CalibrationRunner {
                 continue;
             }
             const tile = result.tile;
-            const mirroredCol = this.gridSize.cols - 1 - tile.col;
             const adjustedCenterX =
                 gridBlueprint.gridOrigin.x +
-                mirroredCol * spacingX +
+                tile.col * spacingX +
                 gridBlueprint.adjustedTileFootprint.width / 2;
             const adjustedCenterY =
                 gridBlueprint.gridOrigin.y +

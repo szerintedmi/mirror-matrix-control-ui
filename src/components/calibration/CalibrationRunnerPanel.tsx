@@ -60,7 +60,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
 }) => {
     const phaseLabel = runnerState.phase.charAt(0).toUpperCase() + runnerState.phase.slice(1);
     const activeTileLabel = runnerState.activeTile
-        ? `R${runnerState.activeTile.row + 1}C${runnerState.activeTile.col + 1}`
+        ? `R${runnerState.activeTile.row}C${runnerState.activeTile.col}`
         : '—';
     const isRunnerBusy =
         runnerState.phase === 'homing' ||

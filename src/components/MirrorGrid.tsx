@@ -11,6 +11,7 @@ interface MirrorGridProps {
     onMotorDrop: (pos: GridPosition, axis: Axis, dragDataString: string) => void;
     selectedNodeMac: string | null;
     driverStatuses: Map<string, DriverStatusSnapshot>;
+    orientation?: 'mirror' | 'projection';
 }
 
 const MirrorGrid: React.FC<MirrorGridProps> = ({
@@ -20,13 +21,16 @@ const MirrorGrid: React.FC<MirrorGridProps> = ({
     onMotorDrop,
     selectedNodeMac,
     driverStatuses,
+    orientation = 'mirror',
 }) => {
+    const gridDirection = orientation === 'mirror' ? 'rtl' : 'ltr';
     return (
         <div
             className="grid gap-x-1 gap-y-0.5 bg-gray-900 p-2"
             style={{
                 gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
                 gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                direction: gridDirection,
             }}
         >
             {Array.from({ length: rows * cols }).map((_, index) => {
