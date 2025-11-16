@@ -346,6 +346,7 @@ For each profile:
   - Step-to-displacement factors.
   - Grid blueprint metadata (tile footprint, gap, origin).
 - This guarantees that playback can swap between legacy angle mode and calibration mode without additional per-profile transforms.
+- The **calibration-native pattern designer** (see §3.9.5) uses this same normalized playback frame, treated as a fixed **1:1 canvas** where both axes span `[0, 1]`.
 
 #### 3.8.3 Save / Load Behavior
 
@@ -367,14 +368,15 @@ For each profile:
 #### 3.9.1 Legacy Playback (existing page)
 
 - Remains angle-based and continues to use `reflectionSolver` → `planPlayback` → `buildAxisTargets`.
-- Only navigation updates (to expose the new route) are needed for MVP; legacy UX stays untouched.
+- Surfaced in the UI as **Playback (legacy)** together with the existing pattern tooling shown as **Patterns (legacy)**; this path remains available for backward compatibility and testing while the calibration-native pipeline matures.
+- Legacy pattern and projection storage (localStorage keys, etc.) does **not** need to be preserved for the calibration-native flow; it may be cleared or migrated independently as long as angle-based playback continues to function.
 
 #### 3.9.2 Calibration Playback Route (new)
 
-- Add a **new navigation entry/page** dedicated to calibration-based playback so it can evolve independently from the legacy flow.
+- Add a **new navigation entry/page** (labelled **Playback**) dedicated to calibration-based playback so it can evolve independently from **Playback (legacy)**.
 - Requirements for this route:
   - User must pick a **Calibration Profile** (validated grid size + coordinate system) before playback controls unlock.
-  - For MVP, reuse the existing pattern library to supply target points; roadmap item: add "ad hoc coordinate" tooling driven solely by calibration data.
+  - Use a **new calibration-native pattern library** as the sole source of target points; the legacy pattern library is _not_ reused in this mode.
   - Provide its own preview/status UI that does **not** depend on the legacy solver (preview parity can arrive post-MVP).
   - Surface the profile's **grid blueprint** (tile footprint + gap + origin) so installers can confirm the aligned grid computed in §3.7; treat profiles missing this metadata as invalid.
 - Implement a **fresh playback solver** that:
@@ -423,6 +425,43 @@ stepsY = ΔY / stepToDisplacement.y
 - Architecture should not prevent a later change where:
   - Calibration profiles (or a reduced form) are pushed to firmware.
   - Firmware then exposes higher-level positioning commands based on that data.
+
+#### 3.9.5 Calibration-Native Pattern Designer (New)
+
+The calibration-based playback path uses a **new pattern designer and library** that are independent from the legacy system.
+
+- **Separation from legacy tools**
+  - Existing angle-based tools are surfaced as **Patterns (legacy)** / **Playback (legacy)** and keep their current behavior and storage.
+  - The new calibration-native designer is exposed as **Patterns** and feeds only the calibration-based **Playback** page.
+  - Calibration-native patterns do **not** depend on legacy pattern or projection storage; legacy entries can be removed without affecting the new flow.
+
+- **Canvas and alignment**
+  - The calibration-native pattern canvas has a fixed **1:1 aspect ratio**, representing the normalized playback coordinate system where both axes span `[0, 1]`.
+  - For MVP, only a simple **center alignment** is supported: patterns are authored directly in this normalized frame and interpreted identically for all calibration profiles.
+
+- **Pattern semantics**
+  - Each pattern is a set of **normalized target points**; patterns are **profile-agnostic** and never store calibration profile identifiers.
+  - Overlapping points are fully allowed: multiple pattern points may share identical normalized coordinates, as long as the total point count does not exceed the number of available mirrors.
+  - The designer must preserve the existing **overlap shading** behavior from the current pattern editor (overlay counts and max-brightness logic) so authors can visualize concentration of points when they overlap.
+
+- **Calibration-aware overlays (optional helper)**
+  - While editing, the user may optionally select an **active Calibration Profile**.
+  - When a profile is selected, the designer displays a helper overlay that visualizes:
+    - The **measured reachable canvas** for that profile, derived from `stepToDisplacement` and configured motor step limits to show where tiles can be steered safely in normalized coordinates.
+    - Per-tile blob footprints sized to the profile’s **maximum measured blob size** (normalized), so authors can see approximate projected spot size.
+  - These overlays are informational only; they do not change the stored pattern coordinates.
+
+- **Behavior without a selected calibration profile**
+  - When no calibration profile is selected, the designer uses reasonable defaults for:
+    - The effective canvas bounds (still `[0, 1] × [0, 1]`, but with default virtual grid density / framing).
+    - Default blob size used for visualization.
+  - These defaults are driven by shared constants and may be user-adjustable in the UI, but they are not persisted into calibration profiles.
+
+- **Preview (lower priority)**
+  - A future enhancement can add a simplified preview for calibration-based playback that:
+    - Renders pattern points, mirror tile assignments, and target positions in the normalized calibrated space.
+    - Does **not** model sun position, wall distance, or wall angle; it only needs calibration data plus the normalized pattern.
+  - This preview is lower priority than the core calibration, pattern, and playback flows.
 
 ---
 
@@ -542,16 +581,16 @@ The playback system must support switching between:
 
 1. **Legacy Angle-Based Playback**
    - Uses the existing math: pattern → desired angles → motor steps.
-   - Remains available for backward compatibility and testing.
+   - Remains available for backward compatibility and testing, surfaced in the UI as **Playback (legacy)** together with **Patterns (legacy)**.
 
 2. **Calibration-Based Playback (New)**
    - Does **not** compute or use mirror angles.
-   - Uses only calibration data:
+   - Uses only calibration data together with **calibration-native patterns**:
      - Per-tile **adjusted home** coordinates plus `homeOffset` deltas in the normalized playback coordinate system.
      - Per-tile **step-to-displacement mappings** (units per step in X and Y).
      - Normalized **blob size** if needed for wall-space scaling checks.
      - Profile-level **grid blueprint** metadata (tile footprint, gap, origin) so solver/previews can honor the aligned grid computed during calibration.
-   - Maps pattern coordinates directly to required step movements.
+   - Maps normalized pattern coordinates directly to required step movements without any dependency on the legacy projection settings.
 
 ### 6.2 Mapping Logic (Calibration-Based Mode)
 
@@ -583,21 +622,34 @@ This fully bypasses the angle/geometry math used in the legacy model.
 
 ### 6.3 UI Integration
 
-- Add a **playback mode selector**:
-- **Angle-based playback**
-- **Calibration-based playback**
-- Add a **calibration profile selection dropdown** (enabled only in calibration mode).
-- Show which profile is currently active.
+- Expose **two distinct navigation entries** for playback:
+  - **Playback (legacy)** → existing angle-based playback page using the legacy pattern library.
+  - **Playback** → new calibration-based playback page driven by calibration profiles and the calibration-native pattern library.
+- Expose **two distinct navigation entries** for pattern authoring:
+  - **Patterns (legacy)** → existing angle-based pattern designer and library.
+  - **Patterns** → new calibration-native pattern designer described in §3.9.5.
+- Within the calibration-based **Playback** page:
+  - Require the user to select an **active calibration profile** before playback controls unlock.
+  - Require the user to select a **calibration-native pattern** from the new library.
+  - Provide a **calibration profile selection dropdown** and clearly display which profile is currently active.
+  - Optionally (lower priority) include a simple 2D preview that shows pattern points, mirror assignments, and target positions in normalized calibrated space without modeling wall/sun geometry.
 
 ### 6.4 Behavior & Constraints
 
 - Calibration-based playback must use the exact same coordinate system that:
-- The calibration measurements were normalized into.
-- The pattern editor/rendering uses.
-- Switching profiles should immediately update the mapping logic used for subsequent playback commands.
-- Firmware changes are **not required** for MVP, but:
-- Architecture must allow a future step where per-tile calibration data is pushed into firmware and the array becomes alignment-aware internally.
+  - The calibration measurements were normalized into.
+  - The calibration-native pattern designer/rendering uses (fixed 1:1 normalized canvas).
+- Calibration-native patterns are **profile-agnostic**; a single pattern can be played against any calibration profile that meets the constraints below.
+- Playback is only permitted when:
+  - A valid **calibration profile** is selected.
+  - The number of pattern points does **not** exceed the number of available mirror tiles; if there are fewer tiles than points, playback is rejected (no partial runs).
+  - Every requested target for each assigned tile lies within that tile’s **calibrated reachable region** (derived from `adjustedHome`, `stepToDisplacement`, and configured motor step limits); if any requested target is out of bounds, playback is rejected rather than clamped.
+- Overlapping pattern points are allowed:
+  - Multiple pattern points may share identical normalized coordinates.
+  - The solver still assigns each point to a mirror tile (subject to the capacity constraint above), and different mirrors may be commanded to the same normalized location.
+- The UI must surface clear validation errors (e.g. insufficient mirrors, out-of-bounds targets, missing profile) before any motor commands are sent.
+- Firmware changes are **not** required for MVP, but the architecture must allow a future step where per-tile calibration data is pushed into firmware and the array becomes alignment-aware internally.
 
 ### 6.5 Summary
 
-Milestone 6 introduces a **fully step-based, calibration-driven playback pipeline**, makes it selectable in the UI, and ensures it runs in parallel with the old angle-based system without breaking existing behavior.
+Milestone 6 introduces a **fully step-based, calibration-driven playback pipeline** backed by a new calibration-native pattern designer, exposes it via dedicated **Playback** / **Patterns** navigation entries, and ensures it runs in parallel with the old angle-based system (**Playback (legacy)** / **Patterns (legacy)**) without breaking existing behavior.
