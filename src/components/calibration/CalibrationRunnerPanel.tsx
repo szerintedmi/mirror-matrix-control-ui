@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
+import CalibrationHomeControls from '@/components/calibration/CalibrationHomeControls';
 import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
@@ -41,6 +42,9 @@ const getTileStatusClasses = (status: TileRunState['status']): string => {
             return 'border-gray-700 bg-gray-900/60 text-gray-200';
     }
 };
+
+const SUMMARY_BUTTON_CLASS =
+    'rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     runnerState,
@@ -89,7 +93,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
         ({
             deltaSteps: runnerSettings.deltaSteps,
         } as const);
-
     const telemetryMap = useMemo(() => {
         const map = new Map<string, MotorTelemetry>();
         drivers.forEach((driver) => {
@@ -308,13 +311,20 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     grid.
                                 </p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setSummaryModalOpen(true)}
-                                className="rounded-md border border-emerald-500/70 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/10"
-                            >
-                                Calibration math
-                            </button>
+                            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                                <CalibrationHomeControls
+                                    runnerState={runnerState}
+                                    tileEntries={tileEntries}
+                                    isRunnerBusy={isRunnerBusy}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setSummaryModalOpen(true)}
+                                    className={`${SUMMARY_BUTTON_CLASS} border-emerald-500/70 text-emerald-200 hover:bg-emerald-500/10`}
+                                >
+                                    Calibration math
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

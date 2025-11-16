@@ -16,12 +16,17 @@ import type {
 } from '@/services/calibrationRunner';
 import type { Motor } from '@/types';
 
+const nudgeMotorMock = vi.fn().mockResolvedValue({ direction: 1 });
+const homeMotorMock = vi.fn().mockResolvedValue({ mac: 'mac', completion: { status: 'done' } });
+const homeAllMock = vi.fn().mockResolvedValue([]);
+const moveMotorMock = vi.fn().mockResolvedValue({ status: 'done' });
+
 vi.mock('@/hooks/useMotorCommands', () => ({
     useMotorCommands: () => ({
-        nudgeMotor: vi.fn().mockResolvedValue({ direction: 1 }),
-        homeMotor: vi.fn().mockResolvedValue({ mac: 'mac', completion: { status: 'done' } }),
-        homeAll: vi.fn().mockResolvedValue([]),
-        moveMotor: vi.fn().mockResolvedValue({ status: 'done' }),
+        nudgeMotor: nudgeMotorMock,
+        homeMotor: homeMotorMock,
+        homeAll: homeAllMock,
+        moveMotor: moveMotorMock,
     }),
 }));
 
@@ -31,6 +36,25 @@ const createMotor = (motorIndex: number): Motor => ({
 });
 
 const baseAssignment = { x: createMotor(1), y: createMotor(2) };
+
+const createDriverView = (topicMac: string): DriverView => ({
+    mac: topicMac,
+    topicMac,
+    snapshot: {
+        mac: topicMac,
+        topicMac,
+        nodeState: 'ready',
+        motors: {},
+        raw: {},
+    },
+    firstSeenAt: 0,
+    lastSeenAt: 0,
+    isNew: false,
+    source: 'ws',
+    presence: 'ready',
+    staleForMs: 0,
+    brokerDisconnected: false,
+});
 
 const pendingTile: TileRunState = {
     tile: { row: 0, col: 0, key: '0-0' },
@@ -107,17 +131,28 @@ const handleUpdateSetting = <K extends keyof CalibrationRunnerSettings>(
     void value;
 };
 
-const renderPanel = async () => {
+interface RenderOptions {
+    runnerState?: CalibrationRunnerState;
+    tileEntries?: TileRunState[];
+    drivers?: DriverView[];
+    detectionReady?: boolean;
+}
+
+const renderPanel = async (options: RenderOptions = {}) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
+    const state = options.runnerState ?? runnerState;
+    const entries = options.tileEntries ?? [pendingTile, completedTile];
+    const driverList = options.drivers ?? drivers;
+    const detectionReady = options.detectionReady ?? true;
     await act(async () => {
         const element = (
             <CalibrationRunnerPanel
-                runnerState={runnerState}
+                runnerState={state}
                 runnerSettings={runnerSettings}
-                tileEntries={[pendingTile, completedTile]}
-                detectionReady
-                drivers={drivers}
+                tileEntries={entries}
+                detectionReady={detectionReady}
+                drivers={driverList}
                 onUpdateSetting={handleUpdateSetting}
                 onStart={noop}
                 onPause={noop}
@@ -133,6 +168,10 @@ const renderPanel = async () => {
 
 beforeEach(() => {
     document.body.innerHTML = '';
+    nudgeMotorMock.mockClear();
+    homeMotorMock.mockClear();
+    homeAllMock.mockClear();
+    moveMotorMock.mockClear();
 });
 
 afterEach(() => {
@@ -153,5 +192,83 @@ describe('CalibrationRunnerPanel tile modal', () => {
         expect(modalRoot).not.toBeNull();
         expect(modalRoot?.textContent).toContain('Tile [0,1] – debug metrics');
         expect(modalRoot?.textContent).not.toContain('[0,0]');
+    });
+});
+
+describe('CalibrationRunnerPanel homing actions', () => {
+    it('hides calibrated homing button when summary is missing', async () => {
+        const container = await renderPanel({
+            runnerState: { ...runnerState, summary: undefined },
+        });
+        const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Move to calibrated home'),
+        );
+        expect(calibratedButton).toBeUndefined();
+    });
+
+    it('homes all motors to physical zero', async () => {
+        const driverList = [createDriverView('aa:bb'), createDriverView('cc:dd')];
+        const container = await renderPanel({ drivers: driverList });
+        const physicalButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Move to physical home'),
+        );
+        expect(physicalButton).toBeTruthy();
+        expect(physicalButton?.hasAttribute('disabled')).toBe(false);
+        await act(async () => {
+            physicalButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+        expect(moveMotorMock).toHaveBeenCalledTimes(2);
+        expect(moveMotorMock.mock.calls).toEqual(
+            expect.arrayContaining([
+                [
+                    {
+                        mac: 'mac-1',
+                        motorId: 1,
+                        positionSteps: 0,
+                    },
+                ],
+                [
+                    {
+                        mac: 'mac-2',
+                        motorId: 2,
+                        positionSteps: 0,
+                    },
+                ],
+            ]),
+        );
+        expect(homeAllMock).not.toHaveBeenCalled();
+    });
+
+    it('applies calibrated home offsets via move commands', async () => {
+        const container = await renderPanel();
+        const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Move to calibrated home'),
+        );
+        expect(calibratedButton).toBeTruthy();
+        expect(calibratedButton?.hasAttribute('disabled')).toBe(false);
+        await act(async () => {
+            calibratedButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+        expect(moveMotorMock).toHaveBeenCalledTimes(2);
+        expect(moveMotorMock.mock.calls).toEqual(
+            expect.arrayContaining([
+                [
+                    {
+                        mac: 'mac-1',
+                        motorId: 1,
+                        positionSteps: -20,
+                    },
+                ],
+                [
+                    {
+                        mac: 'mac-2',
+                        motorId: 2,
+                        positionSteps: -50,
+                    },
+                ],
+            ]),
+        );
     });
 });

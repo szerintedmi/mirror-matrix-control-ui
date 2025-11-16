@@ -615,6 +615,7 @@ export class CalibrationRunner {
         if (!summary.gridBlueprint) {
             return;
         }
+        const moveTasks: Promise<void>[] = [];
         for (const tile of this.calibratableTiles) {
             await this.checkContinue();
             const result = summary.tiles[tile.key];
@@ -630,11 +631,14 @@ export class CalibrationRunner {
                 result.stepToDisplacement?.y ?? null,
             );
             if (targetX !== null) {
-                await this.moveAxisToPosition(tile.assignment.x, targetX);
+                moveTasks.push(this.moveAxisToPosition(tile.assignment.x, targetX));
             }
             if (targetY !== null) {
-                await this.moveAxisToPosition(tile.assignment.y, targetY);
+                moveTasks.push(this.moveAxisToPosition(tile.assignment.y, targetY));
             }
+        }
+        if (moveTasks.length > 0) {
+            await Promise.all(moveTasks);
         }
     }
 
