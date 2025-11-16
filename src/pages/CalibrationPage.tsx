@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
+import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
 import { useStatusStore } from '@/context/StatusContext';
+import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
 import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
 import { useCameraPipeline } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
@@ -119,17 +121,50 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         detectionReady,
     });
 
-    useEffect(() => {
-        setAlignmentOverlaySummary(runnerState.summary ?? null);
-    }, [runnerState.summary, setAlignmentOverlaySummary]);
+    const calibrationProfilesController = useCalibrationProfilesController({
+        runnerState,
+        gridSize,
+        mirrorConfig,
+    });
 
-    const alignmentOverlayAvailable = Boolean(runnerState.summary?.gridBlueprint);
-    const displayedAlignmentOverlayEnabled = alignmentOverlayVisible;
+    const runSummary = {
+        total: runnerState.progress.total,
+        completed: runnerState.progress.completed,
+        failed: runnerState.progress.failed,
+        skipped: runnerState.progress.skipped,
+    };
+
+    const alignmentSourceSummary =
+        runnerState.summary ?? calibrationProfilesController.activeProfileSummary;
+
+    useEffect(() => {
+        setAlignmentOverlaySummary(alignmentSourceSummary ?? null);
+    }, [alignmentSourceSummary, setAlignmentOverlaySummary]);
+
+    const alignmentOverlayAvailable = Boolean(alignmentSourceSummary?.gridBlueprint);
+    const displayedAlignmentOverlayEnabled = alignmentOverlayVisible && alignmentOverlayAvailable;
 
     const rotationOverlayVisible = isRotationAdjusting;
 
     return (
         <div className="flex flex-col gap-6">
+            <CalibrationProfileManager
+                profiles={calibrationProfilesController.profiles}
+                selectedProfileId={calibrationProfilesController.selectedProfileId}
+                activeProfileId={calibrationProfilesController.activeProfileId}
+                onSelectProfile={calibrationProfilesController.selectProfileId}
+                onDeleteProfile={calibrationProfilesController.deleteProfile}
+                onLoadProfile={calibrationProfilesController.loadProfile}
+                profileName={calibrationProfilesController.profileNameInput}
+                onProfileNameChange={calibrationProfilesController.setProfileNameInput}
+                onSaveProfile={calibrationProfilesController.saveProfile}
+                onNewProfile={calibrationProfilesController.resetProfileSelection}
+                canSave={calibrationProfilesController.canSaveProfile}
+                saveFeedback={calibrationProfilesController.saveFeedback}
+                onDismissFeedback={calibrationProfilesController.dismissFeedback}
+                lastRunSummary={runSummary}
+                currentGridFingerprint={calibrationProfilesController.currentGridFingerprint}
+            />
             <CalibrationRunnerPanel
                 runnerState={runnerState}
                 runnerSettings={runnerSettings}

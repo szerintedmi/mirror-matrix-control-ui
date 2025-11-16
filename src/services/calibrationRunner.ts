@@ -4,7 +4,13 @@ import {
 } from '@/constants/calibration';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
-import type { MirrorAssignment, MirrorConfig, Motor } from '@/types';
+import type {
+    BlobMeasurement,
+    CalibrationGridBlueprint,
+    MirrorAssignment,
+    MirrorConfig,
+    Motor,
+} from '@/types';
 
 type Axis = 'x' | 'y';
 
@@ -22,36 +28,6 @@ interface TileDescriptor extends TileAddress {
 interface AxisDescriptor {
     key: string;
     motor: Motor;
-}
-
-export interface BlobMeasurementStats {
-    sampleCount: number;
-    thresholds: {
-        minSamples: number;
-        maxMedianDeviationPt: number;
-    };
-    median: {
-        x: number;
-        y: number;
-        size: number;
-    };
-    medianAbsoluteDeviation: {
-        x: number;
-        y: number;
-        size: number;
-    };
-    passed: boolean;
-}
-
-export interface BlobMeasurement {
-    x: number;
-    y: number;
-    size: number;
-    response: number;
-    capturedAt: number;
-    sourceWidth?: number;
-    sourceHeight?: number;
-    stats?: BlobMeasurementStats;
 }
 
 export type CaptureBlobMeasurement = (params: {
@@ -87,12 +63,6 @@ export interface TileRunState {
     error?: string;
     metrics?: TileCalibrationMetrics;
     assignment: MirrorAssignment;
-}
-
-export interface CalibrationGridBlueprint {
-    adjustedTileFootprint: { width: number; height: number };
-    tileGap: { x: number; y: number };
-    gridOrigin: { x: number; y: number };
 }
 
 export interface TileCalibrationResult {

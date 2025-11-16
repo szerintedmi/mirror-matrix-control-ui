@@ -6,11 +6,8 @@ import {
     DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT,
     DETECTION_BLOB_MIN_SAMPLES,
 } from '@/constants/calibration';
-import type {
-    BlobMeasurement,
-    BlobMeasurementStats,
-    CaptureBlobMeasurement,
-} from '@/services/calibrationRunner';
+import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
+import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
 
 const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {

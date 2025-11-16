@@ -229,3 +229,84 @@ export interface NormalizedRoi {
     width: number;
     height: number;
 }
+
+export interface CalibrationGridBlueprint {
+    adjustedTileFootprint: { width: number; height: number };
+    tileGap: { x: number; y: number };
+    gridOrigin: { x: number; y: number };
+}
+
+export interface BlobMeasurementStats {
+    sampleCount: number;
+    thresholds: {
+        minSamples: number;
+        maxMedianDeviationPt: number;
+    };
+    median: {
+        x: number;
+        y: number;
+        size: number;
+    };
+    medianAbsoluteDeviation: {
+        x: number;
+        y: number;
+        size: number;
+    };
+    passed: boolean;
+}
+
+export interface BlobMeasurement {
+    x: number;
+    y: number;
+    size: number;
+    response: number;
+    capturedAt: number;
+    sourceWidth?: number;
+    sourceHeight?: number;
+    stats?: BlobMeasurementStats;
+}
+
+export type CalibrationTileStatus =
+    | 'pending'
+    | 'staged'
+    | 'measuring'
+    | 'completed'
+    | 'failed'
+    | 'skipped';
+
+export interface CalibrationProfileTile {
+    key: string;
+    row: number;
+    col: number;
+    status: CalibrationTileStatus;
+    error?: string | null;
+    adjustedHome: { x: number; y: number } | null;
+    homeOffset: { dx: number; dy: number } | null;
+    homeMeasurement: BlobMeasurement | null;
+    stepToDisplacement: {
+        x: number | null;
+        y: number | null;
+    };
+    sizeDeltaAtStepTest: number | null;
+    blobSize: number | null;
+}
+
+export interface CalibrationProfileMetrics {
+    totalTiles: number;
+    completedTiles: number;
+    failedTiles: number;
+    skippedTiles: number;
+}
+
+export interface CalibrationProfile {
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+    gridSize: { rows: number; cols: number };
+    gridBlueprint: CalibrationGridBlueprint | null;
+    stepTestSettings: { deltaSteps: number };
+    gridStateFingerprint: string;
+    tiles: Record<string, CalibrationProfileTile>;
+    metrics: CalibrationProfileMetrics;
+}
