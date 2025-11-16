@@ -43,9 +43,14 @@ If you need to extend the UI, prefer adding props/hooks instead of re-expanding 
   - Calibration runs by sending commands to home and move individual tiles.
   - **Future option:** Some or all calibration data could be pushed into firmware (per-tile corrections), turning the app into a calibration+config tool.
 
----
-
 ## 3. Functional Requirements
+
+Throughout this section:
+
+- **Home measurement** refers to the normalized blob reading captured at a tile's mechanical home position (center, size, capture timestamp, stability stats).
+- **Adjusted home** is the normalized coordinate where that tile should land once aligned to the synthesized grid derived from the largest captured footprint plus configured gaps; stored per tile as `adjustedHome`.
+- **Home offset** (`homeOffset = homeMeasurement - adjustedHome`) is the signed delta we remove when aligning the array and later use for drift checks.
+- UI and profile schemas treat raw captures (home.\*, blob stats, `deltaSteps`, `Δnorm` inputs) as measurements and place derived values (homeOffset, `adjustedHome`, per-step factors, alignment steps) in separate groups so operators know the provenance of each number.
 
 ### 3.1 Calibration Page – Camera & Preview
 
@@ -283,14 +288,14 @@ For each mirror tile, measure how its reflection behaves and store that as calib
       - Proceed to next tile.
 
 4. **Completion after all tiles are measured**
-   - use the the biggest tile size measurement to calculate an ideal grid - where each mirror tile projects its shape with the adjsuted displacement to results in a perfectly aligned grid projection. Make sure there is gap between each projected tile. (gap size defaults to a reasonable default but adjustable in advanced settings)
-   - In the ideal grid each tile should project directly straight, ensure in the calculation that no crossing is needed (ie. tile 0,0 should project to 0,0 postion)
-   - Caculate the each **Home displacement** for all tiles: `dx`, `dy` relative to the ideal grid position.
-   - Show final calibration results in the calibration array overview. Include easily digestable visual for each tile:
-     - x/y displacement needed for each tile to achieve ideal position at home
-     - size difference among tiles
-     - stepToDisplacement difference among tiles
-   - Move all tiles to this ideal home position
+   - Use the largest captured tile footprint to calculate the aligned ("adjusted home") grid so every tile has a deterministic normalized destination. Keep storing the blueprint under `adjustedTileFootprint`/`tileGap` for continuity, but describe this grid to users as the adjusted home layout.
+   - Ensure tiles in this adjusted grid never cross (tile `0,0` must map to the top-left cell, mirrored columns accounted for) and respect installer-defined gaps.
+   - Calculate each tile's **home offset**: `homeOffset = homeMeasurement - adjustedHome`. These `dx`/`dy` deltas explain how far mechanical home is from the aligned target before we issue corrective moves.
+   - Show the final calibration results in the array overview/debug modal with the new grouping: left column for measurements (home.\*, detection stability, step measurement deltas) and right column for derived values (homeOffset, `adjustedHome`, per-step factors, alignment steps, informational blob metrics). Highlight outliers per category, especially:
+     - `homeOffset.dx|dy` magnitudes required to sit on the aligned grid.
+     - Blob size spread between tiles.
+     - `stepToDisplacement` variance that might impact targeting accuracy.
+   - Move all tiles to their adjusted home positions by applying `-homeOffset` through `stepToDisplacement` so the array physically matches the synthesized grid at the end of the run.
    - Allow user to **save** the calibration profile (see next section).
 
 ### 3.8 Calibration Profiles (Results)
@@ -305,15 +310,17 @@ For each profile:
   - **Name** (required; user-provided).
   - **Timestamp** (auto-added on save).
   - **Grid blueprint** derived from the completion step in §3.7:
-    - `idealTileFootprint`: normalized width/height computed from the **largest** captured tile at home.
+    - `adjustedTileFootprint`: normalized width/height computed from the **largest** captured tile at home. The name stays for backward compatibility, but it now represents the adjusted home footprint.
     - `tileGap`: normalized space between tile footprints, stored per axis (`x`, `y`) so we can translate installer intent across aspect ratios.
     - `gridOrigin`: normalized offset applied when pushing tiles to the aligned grid (defaults to `(0, 0)` but stored so future firmware uploads stay deterministic).
   - **Step-test settings** actually used during the run (so advanced overrides persist with the data):
     - `deltaSteps` per axis (default ±400 from §3.7.2.3.4).
 
 - Per-tile data (for every mirror tile):
-  - **Home displacement** in the **normalized playback coordinate system**:
-    - `dx`, `dy` from ideal target grid location.
+  - **Adjusted home target** in the **normalized playback coordinate system**:
+    - stored as `adjustedHome.{x,y}` so playback can refer to the aligned grid center directly.
+  - **Home offset** in the same coordinate system:
+    - stored as `homeOffset.{dx,dy} = homeMeasurement - adjustedHome` (zero once the array has been aligned but retained for drift inspection and re-alignment).
   - **Blob size** at home position:
     - Stored as a value **normalized** to the same coordinate system used by playback (e.g., relative to projection width/height in normalized units).
   - **Step-to-displacement mapping**:
@@ -330,8 +337,9 @@ For each profile:
 - Every numeric value stored in a calibration profile is normalized into the same reference frame used by:
   - The pattern editor/grid (`0–1` canvas coordinates per axis) and
   - The projection/planner math (`reflectionSolver`).
+- This includes both `adjustedHome` coordinates and the associated `homeOffset` deltas so alignment math never mixes coordinate systems.
 - During calibration runs, any pixel or world-space measurements must be converted into this normalized frame **before** persisting.
-- `gridBlueprint.tileGap.{x,y}` and `idealTileFootprint` live in this normalized frame as well so playback and previews can reconstruct the aligned layout without recomputing Section 3.7 math client-side.
+- `gridBlueprint.tileGap.{x,y}` and `adjustedTileFootprint` live in this normalized frame as well so playback and previews can reconstruct the aligned layout without recomputing Section 3.7 math client-side.
 - The requirement is **one shared, consistent coordinate system** for:
   - Pattern pixels on the wall.
   - Measured blob positions.
@@ -372,7 +380,7 @@ For each profile:
 - Implement a **fresh playback solver** that:
   - Works purely from normalized calibration data plus pattern targets.
   - Bypasses `reflectionSolver` entirely—no intermediate angle math.
-  - Converts normalized targets to motor steps via `homeOffset` and `stepToDisplacement` per tile.
+  - Converts normalized targets to motor steps using `adjustedHome` + `stepToDisplacement` per tile, and optionally performs a pre-flight `homeOffset` correction if the array is not already aligned.
   - Can optionally leverage `sizeDeltaAtStepTest` to warn if a requested displacement risks shrinking/growing blobs beyond the characterized envelope (roadmap-level warning, but solver API should expose the metric).
   - Emits command plans compatible with the existing MQTT/motor command pipeline (skipped-axis reporting, clamping flags, etc.).
 
@@ -382,23 +390,31 @@ For each mirror tile:
 
 1. Define the desired projection point `(targetX, targetY)` based on the active pattern (shared normalized coordinate system).
 2. Retrieve calibration data for the tile:
-   - `homeOffset.dx`, `homeOffset.dy`
+   - `adjustedHome.x`, `adjustedHome.y`
+   - `homeOffset.dx`, `homeOffset.dy` (used for a preparatory "move to grid" if the tile hasn't been aligned since calibration).
    - `stepToDisplacement.x`, `stepToDisplacement.y`
-3. Compute displacement relative to home:
+3. If needed, schedule an alignment move:
 
 ```
-ΔX = targetX - homeOffset.dx
-ΔY = targetY - homeOffset.dy
+alignmentX = -homeOffset.dx
+alignmentY = -homeOffset.dy
 ```
 
-4. Convert to motor steps:
+Convert those values to steps with the per-axis `stepToDisplacement` values and enqueue them before any pattern moves. Once applied, treat `homeOffset` as zero for that tile. 4. Compute displacement relative to the adjusted home grid:
+
+```
+ΔX = targetX - adjustedHome.x
+ΔY = targetY - adjustedHome.y
+```
+
+5. Convert to motor steps:
 
 ```
 stepsX = ΔX / stepToDisplacement.x
 stepsY = ΔY / stepToDisplacement.y
 ```
 
-5. Issue commands to move the tile accordingly.
+6. Issue commands to move the tile accordingly.
 
 - The calibration solver owns this end-to-end pipeline, reuses the profile's grid blueprint to ensure the requested points respect the stored gap/origin, and can later power a dedicated preview/diagnostics overlay without touching the legacy solver.
 
@@ -488,7 +504,8 @@ type DetectionSettings = {
 
 ```ts
 type TileCalibration = {
-  homeOffset: { dx: number; dy: number }; // normalized 0–1 playback coords
+  adjustedHome: { x: number; y: number }; // normalized aligned-grid coordinate
+  homeOffset: { dx: number; dy: number }; // normalized delta = homeMeasurement - adjustedHome
   blobSize: number; // normalized to the same reference frame
   sizeDeltaAtStepTest: number; // normalized delta captured during ±step characterization
   stepToDisplacement: {
@@ -504,7 +521,7 @@ type CalibrationProfile = {
   tiles: TileCalibration[][]; // 2D grid [row][col]
   coordinateSystem: 'normalized-playback'; // explicit reference frame tag
   gridBlueprint: {
-    idealTileFootprint: { width: number; height: number }; // normalized dims derived from largest tile
+    adjustedTileFootprint: { width: number; height: number }; // normalized dims derived from largest tile (adjusted home footprint)
     tileGap: { x: number; y: number }; // normalized spacing between footprints per axis
     gridOrigin: { x: number; y: number }; // normalized offset applied after calibration (usually 0,0)
   };
@@ -530,35 +547,37 @@ The playback system must support switching between:
 2. **Calibration-Based Playback (New)**
    - Does **not** compute or use mirror angles.
    - Uses only calibration data:
-     - Per-tile **home displacement** offsets (dx, dy) in the normalized playback coordinate system.
+     - Per-tile **adjusted home** coordinates plus `homeOffset` deltas in the normalized playback coordinate system.
      - Per-tile **step-to-displacement mappings** (units per step in X and Y).
-   - Normalized **blob size** if needed for wall-space scaling checks.
-   - Profile-level **grid blueprint** metadata (tile footprint, gap, origin) so solver/previews can honor the aligned grid computed during calibration.
+     - Normalized **blob size** if needed for wall-space scaling checks.
+     - Profile-level **grid blueprint** metadata (tile footprint, gap, origin) so solver/previews can honor the aligned grid computed during calibration.
    - Maps pattern coordinates directly to required step movements.
 
 ### 6.2 Mapping Logic (Calibration-Based Mode)
 
 For each mirror tile:
 
-1. Define the desired projection point `(targetX, targetY)` based on the pattern (in the shared coordinate system).
+1. Define the desired projection point `(targetX, targetY)` based on the pattern (normalized coordinate system shared with calibration).
 2. Retrieve calibration data for the tile:
+   - `adjustedHome.x`, `adjustedHome.y`
    - `homeOffset.dx`, `homeOffset.dy`
    - `stepToDisplacement.x`, `stepToDisplacement.y`
-3. Compute required displacement relative to home:
+3. If the tile has not been aligned yet, enqueue an alignment move using `alignmentX = -homeOffset.dx` / `alignmentY = -homeOffset.dy` converted through the per-step factors.
+4. Compute required displacement relative to the adjusted home grid:
 
 ```
-ΔX = targetX - homeOffset.dx
-ΔY = targetY - homeOffset.dy
+ΔX = targetX - adjustedHome.x
+ΔY = targetY - adjustedHome.y
 ```
 
-4. Convert displacement to motor steps using calibration:
+5. Convert displacement to motor steps using calibration:
 
 ```
 stepsX = ΔX / stepToDisplacement.x
 stepsY = ΔY / stepToDisplacement.y
 ```
 
-5. Issue commands to move the tile accordingly.
+6. Issue commands to move the tile accordingly.
 
 This fully bypasses the angle/geometry math used in the legacy model.
 

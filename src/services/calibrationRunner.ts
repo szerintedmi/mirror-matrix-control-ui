@@ -90,7 +90,7 @@ export interface TileRunState {
 }
 
 export interface CalibrationGridBlueprint {
-    idealTileFootprint: { width: number; height: number };
+    adjustedTileFootprint: { width: number; height: number };
     tileGap: { x: number; y: number };
     gridOrigin: { x: number; y: number };
 }
@@ -878,7 +878,7 @@ export class CalibrationRunner {
                 originY = minOriginY;
             }
             gridBlueprint = {
-                idealTileFootprint: {
+                adjustedTileFootprint: {
                     width: tileWidth,
                     height: tileHeight,
                 },
@@ -888,10 +888,10 @@ export class CalibrationRunner {
         }
 
         const spacingX = gridBlueprint
-            ? gridBlueprint.idealTileFootprint.width + gridBlueprint.tileGap.x
+            ? gridBlueprint.adjustedTileFootprint.width + gridBlueprint.tileGap.x
             : 0;
         const spacingY = gridBlueprint
-            ? gridBlueprint.idealTileFootprint.height + gridBlueprint.tileGap.y
+            ? gridBlueprint.adjustedTileFootprint.height + gridBlueprint.tileGap.y
             : 0;
 
         const summaryTiles: Record<string, TileCalibrationResult> = {};
@@ -902,20 +902,20 @@ export class CalibrationRunner {
             }
             const tile = result.tile;
             const mirroredCol = this.gridSize.cols - 1 - tile.col;
-            const idealCenterX =
+            const adjustedCenterX =
                 gridBlueprint.gridOrigin.x +
                 mirroredCol * spacingX +
-                gridBlueprint.idealTileFootprint.width / 2;
-            const idealCenterY =
+                gridBlueprint.adjustedTileFootprint.width / 2;
+            const adjustedCenterY =
                 gridBlueprint.gridOrigin.y +
                 tile.row * spacingY +
-                gridBlueprint.idealTileFootprint.height / 2;
-            const dx = result.homeMeasurement.x - idealCenterX;
-            const dy = result.homeMeasurement.y - idealCenterY;
+                gridBlueprint.adjustedTileFootprint.height / 2;
+            const dx = result.homeMeasurement.x - adjustedCenterX;
+            const dy = result.homeMeasurement.y - adjustedCenterY;
             summaryTiles[key] = {
                 ...result,
                 homeOffset: { dx, dy },
-                adjustedHome: { x: idealCenterX, y: idealCenterY },
+                adjustedHome: { x: adjustedCenterX, y: adjustedCenterY },
             };
         }
         return {

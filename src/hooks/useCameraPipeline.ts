@@ -595,28 +595,32 @@ export const useCameraPipeline = ({
                         (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
                         0,
                     ) + 1;
-                const spacingX = blueprint.idealTileFootprint.width + (blueprint.tileGap?.x ?? 0);
-                const spacingY = blueprint.idealTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+                const spacingX =
+                    blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
+                const spacingY =
+                    blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 ctx.save();
                 ctx.lineWidth = 2;
                 tileEntries.forEach((entry) => {
                     const mirroredCol = cols - 1 - entry.tile.col;
-                    const idealCenterX =
+                    const adjustedCenterX =
                         blueprint.gridOrigin.x +
                         mirroredCol * spacingX +
-                        blueprint.idealTileFootprint.width / 2;
-                    const idealCenterY =
+                        blueprint.adjustedTileFootprint.width / 2;
+                    const adjustedCenterY =
                         blueprint.gridOrigin.y +
                         entry.tile.row * spacingY +
-                        blueprint.idealTileFootprint.height / 2;
-                    const normalizedLeft = idealCenterX - blueprint.idealTileFootprint.width / 2;
-                    const normalizedTop = idealCenterY - blueprint.idealTileFootprint.height / 2;
+                        blueprint.adjustedTileFootprint.height / 2;
+                    const normalizedLeft =
+                        adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
+                    const normalizedTop =
+                        adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
                     const pxLeft = normalizedLeft * sourceWidth;
                     const pxTop = normalizedTop * sourceHeight;
-                    const pxWidth = blueprint.idealTileFootprint.width * sourceWidth;
-                    const pxHeight = blueprint.idealTileFootprint.height * sourceHeight;
+                    const pxWidth = blueprint.adjustedTileFootprint.width * sourceWidth;
+                    const pxHeight = blueprint.adjustedTileFootprint.height * sourceHeight;
                     const localLeft = (pxLeft - baseRect.x) * scaleX;
                     const localTop = (pxTop - baseRect.y) * scaleY;
                     const rectWidth = pxWidth * scaleX;
@@ -741,8 +745,10 @@ export const useCameraPipeline = ({
                         (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
                         0,
                     ) + 1;
-                const spacingX = blueprint.idealTileFootprint.width + (blueprint.tileGap?.x ?? 0);
-                const spacingY = blueprint.idealTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+                const spacingX =
+                    blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
+                const spacingY =
+                    blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 const squareColor = new runtime.Scalar(64, 203, 153, 150);
@@ -750,20 +756,22 @@ export const useCameraPipeline = ({
                 const measurementColor = new runtime.Scalar(255, 255, 0, 255);
                 tileEntries.forEach((entry) => {
                     const mirroredCol = cols - 1 - entry.tile.col;
-                    const idealCenterX =
+                    const adjustedCenterX =
                         blueprint.gridOrigin.x +
                         mirroredCol * spacingX +
-                        blueprint.idealTileFootprint.width / 2;
-                    const idealCenterY =
+                        blueprint.adjustedTileFootprint.width / 2;
+                    const adjustedCenterY =
                         blueprint.gridOrigin.y +
                         entry.tile.row * spacingY +
-                        blueprint.idealTileFootprint.height / 2;
-                    const normalizedLeft = idealCenterX - blueprint.idealTileFootprint.width / 2;
-                    const normalizedTop = idealCenterY - blueprint.idealTileFootprint.height / 2;
+                        blueprint.adjustedTileFootprint.height / 2;
+                    const normalizedLeft =
+                        adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
+                    const normalizedTop =
+                        adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
                     const pxLeft = normalizedLeft * sourceWidth;
                     const pxTop = normalizedTop * sourceHeight;
-                    const pxWidth = blueprint.idealTileFootprint.width * sourceWidth;
-                    const pxHeight = blueprint.idealTileFootprint.height * sourceHeight;
+                    const pxWidth = blueprint.adjustedTileFootprint.width * sourceWidth;
+                    const pxHeight = blueprint.adjustedTileFootprint.height * sourceHeight;
                     const localLeft = (pxLeft - baseRect.x) * scaleX;
                     const localTop = (pxTop - baseRect.y) * scaleY;
                     const localRight = localLeft + pxWidth * scaleX;

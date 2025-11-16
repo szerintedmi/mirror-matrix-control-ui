@@ -298,9 +298,9 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <p>
-                                    Ideal footprint:{' '}
-                                    {(blueprint.idealTileFootprint.width * 100).toFixed(2)}% ×{' '}
-                                    {(blueprint.idealTileFootprint.height * 100).toFixed(2)}%
+                                    Adjusted footprint:{' '}
+                                    {(blueprint.adjustedTileFootprint.width * 100).toFixed(2)}% ×{' '}
+                                    {(blueprint.adjustedTileFootprint.height * 100).toFixed(2)}%
                                 </p>
                                 <p>
                                     Gap: X {(blueprint.tileGap.x * 100).toFixed(2)}% · Y{' '}

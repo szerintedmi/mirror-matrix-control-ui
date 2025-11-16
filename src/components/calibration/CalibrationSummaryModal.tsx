@@ -26,19 +26,20 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
         );
     }
 
-    const widthPercent = blueprint.idealTileFootprint.width * 100;
-    const heightPercent = blueprint.idealTileFootprint.height * 100;
+    const widthPercent = blueprint.adjustedTileFootprint.width * 100;
+    const heightPercent = blueprint.adjustedTileFootprint.height * 100;
     const gapPercentX = (blueprint.tileGap.x ?? 0) * 100;
     const gapPercentY = (blueprint.tileGap.y ?? 0) * 100;
-    const spacingXPercent = (blueprint.idealTileFootprint.width + (blueprint.tileGap.x ?? 0)) * 100;
+    const spacingXPercent =
+        (blueprint.adjustedTileFootprint.width + (blueprint.tileGap.x ?? 0)) * 100;
     const spacingYPercent =
-        (blueprint.idealTileFootprint.height + (blueprint.tileGap.y ?? 0)) * 100;
+        (blueprint.adjustedTileFootprint.height + (blueprint.tileGap.y ?? 0)) * 100;
     const tileCount = Object.values(summary.tiles).filter(
         (tile) => tile.status === 'completed',
     ).length;
 
-    const widthFormula = `width% = idealTileFootprint.width × 100 = ${formatDecimal(blueprint.idealTileFootprint.width)} × 100 = ${formatDecimal(widthPercent / 100)} × 100`;
-    const heightFormula = `height% = idealTileFootprint.height × 100 = ${formatDecimal(blueprint.idealTileFootprint.height)} × 100 = ${formatDecimal(heightPercent / 100)} × 100`;
+    const widthFormula = `width% = adjustedTileFootprint.width × 100 = ${formatDecimal(blueprint.adjustedTileFootprint.width)} × 100 = ${formatDecimal(widthPercent / 100)} × 100`;
+    const heightFormula = `height% = adjustedTileFootprint.height × 100 = ${formatDecimal(blueprint.adjustedTileFootprint.height)} × 100 = ${formatDecimal(heightPercent / 100)} × 100`;
     const gapFormulaX = `gapX% = tileGap.x × 100 = ${formatDecimal(blueprint.tileGap.x ?? 0)} × 100`;
     const gapFormulaY = `gapY% = tileGap.y × 100 = ${formatDecimal(blueprint.tileGap.y ?? 0)} × 100`;
     const spacingXFormula = `spacingX% = width% + gapX% = ${widthPercent.toFixed(2)} + ${gapPercentX.toFixed(2)}`;
@@ -51,12 +52,12 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
                     <p className="text-xs uppercase tracking-wide text-gray-500">Grid blueprint</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                         <SummaryStat
-                            label="Ideal width"
+                            label="Adjusted width"
                             value={`${widthPercent.toFixed(2)}%`}
                             formula={widthFormula}
                         />
                         <SummaryStat
-                            label="Ideal height"
+                            label="Adjusted height"
                             value={`${heightPercent.toFixed(2)}%`}
                             formula={heightFormula}
                         />

@@ -85,7 +85,7 @@ const completedTile: TileRunState = {
 
 const summary: CalibrationRunSummary = {
     gridBlueprint: {
-        idealTileFootprint: { width: 0.2, height: 0.2 },
+        adjustedTileFootprint: { width: 0.2, height: 0.2 },
         tileGap: { x: 0.05, y: 0.05 },
         gridOrigin: { x: 0, y: 0 },
     },
