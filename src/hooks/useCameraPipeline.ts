@@ -69,6 +69,10 @@ declare global {
     }
 }
 
+const ALIGNMENT_TEAL = { r: 16, g: 185, b: 129 } as const;
+const formatAlignmentRgba = (alpha: number): string =>
+    `rgba(${ALIGNMENT_TEAL.r}, ${ALIGNMENT_TEAL.g}, ${ALIGNMENT_TEAL.b}, ${alpha})`;
+
 export type {
     CameraPipelineOverlayHandlers,
     RoiEditingMode,
@@ -598,6 +602,9 @@ export const useCameraPipeline = ({
                 const sourceHeight = meta.sourceHeight || height;
                 ctx.save();
                 ctx.lineWidth = 2;
+                const alignmentStrokeColor = formatAlignmentRgba(0.7);
+                const alignmentFillColor = formatAlignmentRgba(0.15);
+                const alignmentLabelColor = formatAlignmentRgba(0.95);
                 tileEntries.forEach((entry) => {
                     const adjustedCenterX =
                         blueprint.gridOrigin.x +
@@ -623,8 +630,8 @@ export const useCameraPipeline = ({
                     const rectCenterY = localTop + rectHeight / 2;
                     ctx.save();
                     ctx.translate(rectCenterX, rectCenterY);
-                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
-                    ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+                    ctx.strokeStyle = alignmentStrokeColor;
+                    ctx.fillStyle = alignmentFillColor;
                     ctx.beginPath();
                     ctx.rect(-rectWidth / 2, -rectHeight / 2, rectWidth, rectHeight);
                     ctx.fill();
@@ -635,7 +642,7 @@ export const useCameraPipeline = ({
                     if (shouldCounterRotateNarrative) {
                         ctx.rotate(-counterRotationRadians);
                     }
-                    ctx.fillStyle = '#ccf0f0';
+                    ctx.fillStyle = alignmentLabelColor;
                     ctx.font = '10px monospace';
                     ctx.fillText(
                         `[${entry.tile.row},${entry.tile.col}]`,
@@ -740,8 +747,18 @@ export const useCameraPipeline = ({
                     blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
-                const squareColor = new runtime.Scalar(64, 203, 153, 150);
-                const labelColor = new runtime.Scalar(240, 255, 255, 255);
+                const squareColor = new runtime.Scalar(
+                    ALIGNMENT_TEAL.b,
+                    ALIGNMENT_TEAL.g,
+                    ALIGNMENT_TEAL.r,
+                    150,
+                );
+                const labelColor = new runtime.Scalar(
+                    ALIGNMENT_TEAL.b,
+                    ALIGNMENT_TEAL.g,
+                    ALIGNMENT_TEAL.r,
+                    255,
+                );
                 const measurementColor = new runtime.Scalar(255, 255, 0, 255);
                 tileEntries.forEach((entry) => {
                     const adjustedCenterX =

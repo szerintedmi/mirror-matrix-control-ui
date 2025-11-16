@@ -97,7 +97,7 @@ export interface CalibrationGridBlueprint {
 
 export interface TileCalibrationResult {
     tile: TileAddress;
-    status: 'completed' | 'failed' | 'skipped';
+    status: 'measuring' | 'completed' | 'failed' | 'skipped';
     error?: string;
     homeMeasurement?: BlobMeasurement;
     homeOffset?: { dx: number; dy: number };
@@ -441,6 +441,26 @@ export class CalibrationRunner {
             return;
         }
 
+        const existingMetrics = this.state.tiles[tile.key]?.metrics ?? {};
+        const initialMetrics: TileCalibrationMetrics = {
+            ...existingMetrics,
+            home: homeMeasurement,
+            homeOffset: existingMetrics.homeOffset ?? null,
+            adjustedHome: existingMetrics.adjustedHome ?? null,
+            stepToDisplacement: existingMetrics.stepToDisplacement ?? { x: null, y: null },
+            sizeDeltaAtStepTest: existingMetrics.sizeDeltaAtStepTest ?? null,
+        };
+        this.setTileState(tile.key, {
+            metrics: initialMetrics,
+            error: undefined,
+        });
+        this.tileResults.set(tile.key, {
+            tile: tileAddress,
+            status: 'measuring',
+            homeMeasurement,
+        });
+        this.publishSummarySnapshot();
+
         const xMotor = tile.assignment.x;
         const yMotor = tile.assignment.y;
         const xDelta = xMotor ? getAxisStepDelta('x', this.settings.deltaSteps) : null;
@@ -509,12 +529,15 @@ export class CalibrationRunner {
             metrics,
             error: undefined,
         });
+        const previousResult = this.tileResults.get(tile.key);
         this.tileResults.set(tile.key, {
             tile: tileAddress,
             status: 'completed',
             homeMeasurement,
             stepToDisplacement: metrics.stepToDisplacement,
             sizeDeltaAtStepTest,
+            homeOffset: previousResult?.homeOffset,
+            adjustedHome: previousResult?.adjustedHome ?? undefined,
         });
         this.publishSummarySnapshot();
         this.bumpProgress('completed');
@@ -818,17 +841,19 @@ export class CalibrationRunner {
     }
 
     private computeSummary(): CalibrationRunSummary {
-        const completedTiles = Array.from(this.tileResults.values()).filter(
-            (entry) => entry.status === 'completed' && entry.homeMeasurement,
+        const measuredTiles = Array.from(this.tileResults.values()).filter(
+            (entry) =>
+                (entry.status === 'completed' || entry.status === 'measuring') &&
+                entry.homeMeasurement,
         );
         let gridBlueprint: CalibrationGridBlueprint | null = null;
-        if (completedTiles.length > 0) {
-            const largestSize = completedTiles.reduce((max, entry) => {
+        if (measuredTiles.length > 0) {
+            const largestSize = measuredTiles.reduce((max, entry) => {
                 const size = entry.homeMeasurement?.size ?? 0;
                 return size > max ? size : max;
             }, 0);
             const referenceMeasurement =
-                completedTiles.find((entry) => entry.homeMeasurement)?.homeMeasurement ?? null;
+                measuredTiles.find((entry) => entry.homeMeasurement)?.homeMeasurement ?? null;
             const referenceWidth = referenceMeasurement?.sourceWidth ?? 1;
             const referenceHeight = referenceMeasurement?.sourceHeight ?? 1;
             const dominantDimension = Math.max(referenceWidth, referenceHeight, 1);
@@ -856,7 +881,7 @@ export class CalibrationRunner {
             let originY = 0;
             let minOriginX = Number.POSITIVE_INFINITY;
             let minOriginY = Number.POSITIVE_INFINITY;
-            completedTiles.forEach((entry) => {
+            measuredTiles.forEach((entry) => {
                 const measurement = entry.homeMeasurement;
                 if (!measurement) {
                     return;
