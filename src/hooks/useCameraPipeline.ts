@@ -6,6 +6,7 @@ import {
     useRoiOverlayInteractions,
     type RoiEditingMode,
 } from '@/hooks/useRoiOverlayInteractions';
+import { useStableBlobMeasurement, type BlobSample } from '@/hooks/useStableBlobMeasurement';
 import type { CalibrationRunSummary, CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type {
     BlobDetectorParams,
@@ -130,30 +131,6 @@ export interface CameraPipelineController {
     blobsOverlayEnabled: boolean;
     setBlobsOverlayEnabled: (enabled: boolean) => void;
 }
-
-const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
-    new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-            reject(new Error('Aborted'));
-            return;
-        }
-        const timer = setTimeout(() => {
-            if (signal) {
-                signal.removeEventListener('abort', onAbort);
-            }
-            resolve();
-        }, ms);
-        const onAbort = () => {
-            clearTimeout(timer);
-            if (signal) {
-                signal.removeEventListener('abort', onAbort);
-            }
-            reject(new Error('Aborted'));
-        };
-        if (signal) {
-            signal.addEventListener('abort', onAbort);
-        }
-    });
 
 export const useCameraPipeline = ({
     detectionSettingsLoaded,
@@ -290,7 +267,7 @@ export const useCameraPipeline = ({
         };
     }, []);
 
-    const readBestBlobMeasurement = useCallback(() => {
+    const readBestBlobMeasurement = useCallback<() => BlobSample | null>(() => {
         const meta = processedFrameMetaRef.current;
         const blobs = detectionResultsRef.current;
         if (!meta || !meta.sourceWidth || !meta.sourceHeight || blobs.length === 0) {
@@ -339,28 +316,10 @@ export const useCameraPipeline = ({
         };
     }, []);
 
-    const captureBlobMeasurement = useCallback<CaptureBlobMeasurement>(
-        async ({ timeoutMs, signal }) => {
-            const start = performance.now();
-            let baselineSequence = detectionSequenceRef.current;
-            while (performance.now() - start < timeoutMs) {
-                if (signal?.aborted) {
-                    throw new Error('Calibration measurement aborted');
-                }
-                const sequenceChanged = detectionSequenceRef.current !== baselineSequence;
-                if (sequenceChanged) {
-                    const measurement = readBestBlobMeasurement();
-                    baselineSequence = detectionSequenceRef.current;
-                    if (measurement) {
-                        return measurement;
-                    }
-                }
-                await waitFor(50, signal);
-            }
-            return null;
-        },
-        [readBestBlobMeasurement],
-    );
+    const captureBlobMeasurement = useStableBlobMeasurement({
+        readSample: readBestBlobMeasurement,
+        detectionSequenceRef,
+    });
 
     useEffect(() => {
         roiRef.current = roi;

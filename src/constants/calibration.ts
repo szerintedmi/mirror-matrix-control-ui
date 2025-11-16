@@ -27,6 +27,13 @@ export const DEFAULT_ROI: NormalizedRoi = {
 export const DEFAULT_CLAHE_CLIP_LIMIT = 2;
 export const DEFAULT_CLAHE_TILE_GRID_SIZE = 8;
 
+// drop raw samples outside this window (likely measured blob wasn't detected at the frame and a blob aside was picked up):
+export const DETECTION_BLOB_IGNORE_SAMPLE_ABOVE_DEVIATION_PT = 0.1;
+export const DETECTION_BLOB_MIN_SAMPLES = 5; // samples within range required
+// allowed normalized jitter of considered samples (normalized deviation)
+export const DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT = 0.005;
+export const DETECTION_BLOB_CAPTURE_DELAY_MS = 80; // temporary settle delay before sampling (frame capture pipeline might be behind)
+
 export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 export const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
@@ -55,8 +62,8 @@ export interface CalibrationRunnerSettings {
 }
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
-    deltaSteps: 300,
-    gridGapNormalized: 0.01,
+    deltaSteps: 500,
+    gridGapNormalized: 0.0,
     moveAsideBaseSteps: MOTOR_MAX_POSITION_STEPS,
     moveAsideRowSpreadSteps: 40,
     moveAsideColSpreadSteps: 35,

@@ -24,6 +24,25 @@ interface AxisDescriptor {
     motor: Motor;
 }
 
+export interface BlobMeasurementStats {
+    sampleCount: number;
+    thresholds: {
+        minSamples: number;
+        maxMedianDeviationPt: number;
+    };
+    median: {
+        x: number;
+        y: number;
+        size: number;
+    };
+    medianAbsoluteDeviation: {
+        x: number;
+        y: number;
+        size: number;
+    };
+    passed: boolean;
+}
+
 export interface BlobMeasurement {
     x: number;
     y: number;
@@ -32,6 +51,7 @@ export interface BlobMeasurement {
     capturedAt: number;
     sourceWidth?: number;
     sourceHeight?: number;
+    stats?: BlobMeasurementStats;
 }
 
 export type CaptureBlobMeasurement = (params: {
@@ -564,7 +584,8 @@ export class CalibrationRunner {
         if (this.settings.deltaSteps <= 0) {
             return null;
         }
-        const delta = clampSteps(this.settings.deltaSteps);
+        const rawDelta = clampSteps(this.settings.deltaSteps);
+        const delta = axis === 'x' ? -rawDelta : rawDelta;
         await this.moveAxisToPosition(motor, delta);
         const measurement = await this.captureMeasurementWithRetries();
         await this.moveAxisToPosition(motor, 0);
@@ -575,7 +596,7 @@ export class CalibrationRunner {
             axis === 'x'
                 ? measurement.x - referenceMeasurement.x
                 : measurement.y - referenceMeasurement.y;
-        const perStep = displacement / this.settings.deltaSteps;
+        const perStep = displacement / delta;
         const sizeDelta = measurement.size - referenceMeasurement.size;
         return { perStep, sizeDelta };
     }
