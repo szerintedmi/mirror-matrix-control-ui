@@ -73,7 +73,7 @@ export type CalibrationRunnerPhase =
 export interface TileCalibrationMetrics {
     home?: BlobMeasurement;
     homeOffset?: { dx: number; dy: number } | null;
-    idealTarget?: { x: number; y: number } | null;
+    adjustedHome?: { x: number; y: number } | null;
     stepToDisplacement?: {
         x: number | null;
         y: number | null;
@@ -101,7 +101,7 @@ export interface TileCalibrationResult {
     error?: string;
     homeMeasurement?: BlobMeasurement;
     homeOffset?: { dx: number; dy: number };
-    idealTarget?: { x: number; y: number };
+    adjustedHome?: { x: number; y: number };
     stepToDisplacement?: { x: number | null; y: number | null };
     sizeDeltaAtStepTest?: number | null;
 }
@@ -500,7 +500,7 @@ export class CalibrationRunner {
         const metrics: TileCalibrationMetrics = {
             home: homeMeasurement,
             homeOffset: null,
-            idealTarget: null,
+            adjustedHome: null,
             stepToDisplacement,
             sizeDeltaAtStepTest,
         };
@@ -652,18 +652,18 @@ export class CalibrationRunner {
             const previousMetrics = tileState.metrics ?? {};
             const homeMeasurement = previousMetrics.home ?? result.homeMeasurement;
             const homeOffset = result.homeOffset ?? null;
-            const idealTarget =
+            const adjustedHome =
                 homeMeasurement && homeOffset
                     ? {
                           x: homeMeasurement.x - homeOffset.dx,
                           y: homeMeasurement.y - homeOffset.dy,
                       }
-                    : (previousMetrics.idealTarget ?? null);
+                    : (previousMetrics.adjustedHome ?? null);
             const metrics: TileCalibrationMetrics = {
                 ...previousMetrics,
                 home: homeMeasurement,
                 homeOffset,
-                idealTarget,
+                adjustedHome,
                 stepToDisplacement: result.stepToDisplacement ?? previousMetrics.stepToDisplacement,
                 sizeDeltaAtStepTest:
                     result.sizeDeltaAtStepTest !== undefined
@@ -911,7 +911,7 @@ export class CalibrationRunner {
             summaryTiles[key] = {
                 ...result,
                 homeOffset: { dx, dy },
-                idealTarget: { x: idealCenterX, y: idealCenterY },
+                adjustedHome: { x: idealCenterX, y: idealCenterY },
             };
         }
         return {

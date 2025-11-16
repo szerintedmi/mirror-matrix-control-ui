@@ -71,7 +71,7 @@ const completedMetrics: TileCalibrationMetrics = {
         capturedAt: 1_735_000_000,
     },
     homeOffset: { dx: 0.01, dy: -0.02 },
-    idealTarget: { x: 0.31, y: 0.46 },
+    adjustedHome: { x: 0.31, y: 0.46 },
     stepToDisplacement: { x: 0.0005, y: -0.0004 },
     sizeDeltaAtStepTest: 0.01,
 };
@@ -98,7 +98,7 @@ const summary: CalibrationRunSummary = {
             status: 'completed',
             homeMeasurement: completedMetrics.home!,
             homeOffset: completedMetrics.homeOffset!,
-            idealTarget: completedMetrics.idealTarget!,
+            adjustedHome: completedMetrics.adjustedHome!,
             stepToDisplacement: completedMetrics.stepToDisplacement!,
             sizeDeltaAtStepTest: completedMetrics.sizeDeltaAtStepTest,
         },

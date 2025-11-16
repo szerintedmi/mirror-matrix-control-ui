@@ -41,7 +41,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
     }
     const metrics = entry.metrics ?? {};
     const home = metrics.home ?? summaryTile?.homeMeasurement ?? null;
-    const idealTarget = metrics.idealTarget ?? summaryTile?.idealTarget ?? null;
+    const adjustedHome = metrics.adjustedHome ?? summaryTile?.adjustedHome ?? null;
     const homeOffset = metrics.homeOffset ?? summaryTile?.homeOffset ?? null;
     const stepToDisplacement =
         metrics.stepToDisplacement ?? summaryTile?.stepToDisplacement ?? null;
@@ -80,7 +80,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
             : null;
     const hasMetrics = Boolean(
         home ||
-            idealTarget ||
+            adjustedHome ||
             homeOffset ||
             (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)),
     );
@@ -96,8 +96,8 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
     const homeTimestamp = home?.capturedAt ?? null;
     const measurementStats = home?.stats ?? null;
 
-    const idealXFormula =
-        idealTarget && home && homeOffset
+    const adjustedHomeXFormula =
+        adjustedHome && home && homeOffset
             ? `\`home.x - homeOffset.dx = ${formatDecimal(home.x)} - ${formatDecimal(
                   homeOffset.dx,
                   {
@@ -106,8 +106,8 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                   },
               )}\``
             : '`home.x - homeOffset.dx`';
-    const idealYFormula =
-        idealTarget && home && homeOffset
+    const adjustedHomeYFormula =
+        adjustedHome && home && homeOffset
             ? `\`home.y - homeOffset.dy = ${formatDecimal(home.y)} - ${formatDecimal(
                   homeOffset.dy,
                   {
@@ -117,13 +117,13 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
               )}\``
             : '`home.y - homeOffset.dy`';
     const offsetXFormula =
-        homeOffset && home && idealTarget
-            ? `\`home.x - idealTarget.x = ${formatDecimal(home.x)} - ${formatDecimal(idealTarget.x)}\``
-            : '`home.x - idealTarget.x`';
+        homeOffset && home && adjustedHome
+            ? `\`home.x - adjustedHome.x = ${formatDecimal(home.x)} - ${formatDecimal(adjustedHome.x)}\``
+            : '`home.x - adjustedHome.x`';
     const offsetYFormula =
-        homeOffset && home && idealTarget
-            ? `\`home.y - idealTarget.y = ${formatDecimal(home.y)} - ${formatDecimal(idealTarget.y)}\``
-            : '`home.y - idealTarget.y`';
+        homeOffset && home && adjustedHome
+            ? `\`home.y - adjustedHome.y = ${formatDecimal(home.y)} - ${formatDecimal(adjustedHome.y)}\``
+            : '`home.y - adjustedHome.y`';
 
     const alignmentStepsFormulaX =
         homeOffset && perStepX
@@ -237,180 +237,189 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                     {hasMetrics ? (
                         <>
                             <div className="grid gap-4 lg:grid-cols-2">
-                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                        Measurements (normalized)
-                                    </p>
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                        <DebugStat
-                                            label="home.x"
-                                            value={formatDecimal(home?.x ?? null)}
-                                            formula="`home.x` comes directly from the detected blob center in normalized preview space."
-                                        />
-                                        <DebugStat
-                                            label="home.y"
-                                            value={formatDecimal(home?.y ?? null)}
-                                            formula="`home.y` comes directly from the detected blob center in normalized preview space."
-                                        />
-                                        <DebugStat
-                                            label="home.size"
-                                            value={formatDecimal(home?.size ?? null)}
-                                            formula="`home.size` is the normalized blob diameter reported by OpenCV."
-                                        />
-                                        <DebugStat
-                                            label="idealTarget.x"
-                                            value={formatDecimal(idealTarget?.x ?? null)}
-                                            formula={idealXFormula}
-                                        />
-                                        <DebugStat
-                                            label="idealTarget.y"
-                                            value={formatDecimal(idealTarget?.y ?? null)}
-                                            formula={idealYFormula}
-                                        />
-                                    </div>
-                                </section>
-                                {measurementStats ? (
+                                <div className="space-y-4">
                                     <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
                                         <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                            Detection stability
+                                            Measurements (normalized)
                                         </p>
                                         <div className="grid gap-2 sm:grid-cols-2">
                                             <DebugStat
-                                                label="samples.collected"
-                                                value={`${measurementStats.sampleCount} / ${measurementStats.thresholds.minSamples}`}
-                                                formula="Samples captured divided by the minimum required before we trust the blob reading."
+                                                label="home.x"
+                                                value={formatDecimal(home?.x ?? null)}
+                                                formula="`home.x` comes directly from the detected blob center in normalized preview space."
                                             />
                                             <DebugStat
-                                                label="deviation.threshold"
-                                                value={formatPercent(
-                                                    measurementStats.thresholds
-                                                        .maxMedianDeviationPt,
-                                                )}
-                                                formula="Maximum allowed normalized deviation applied to both per-frame and median absolute deviation checks."
+                                                label="home.y"
+                                                value={formatDecimal(home?.y ?? null)}
+                                                formula="`home.y` comes directly from the detected blob center in normalized preview space."
                                             />
                                             <DebugStat
-                                                label="stability.status"
-                                                value={measurementStats.passed ? 'PASS' : 'FAIL'}
-                                                formula="PASS indicates every sample stayed within the configured deviation window."
+                                                label="home.size"
+                                                value={formatDecimal(home?.size ?? null)}
+                                                formula="`home.size` is the normalized blob diameter reported by OpenCV."
                                             />
                                             <DebugStat
-                                                label="MAD.x"
-                                                value={formatPercent(
-                                                    measurementStats.medianAbsoluteDeviation.x,
-                                                )}
-                                                formula="Median absolute deviation of normalized X across the sampled frames."
+                                                label="adjustedHome.x"
+                                                value={formatDecimal(adjustedHome?.x ?? null)}
+                                                formula={adjustedHomeXFormula}
                                             />
                                             <DebugStat
-                                                label="MAD.y"
-                                                value={formatPercent(
-                                                    measurementStats.medianAbsoluteDeviation.y,
-                                                )}
-                                                formula="Median absolute deviation of normalized Y across the sampled frames."
-                                            />
-                                            <DebugStat
-                                                label="MAD.size"
-                                                value={formatPercent(
-                                                    measurementStats.medianAbsoluteDeviation.size,
-                                                )}
-                                                formula="Median absolute deviation of the normalized blob size across the sampled frames."
+                                                label="adjustedHome.y"
+                                                value={formatDecimal(adjustedHome?.y ?? null)}
+                                                formula={adjustedHomeYFormula}
                                             />
                                         </div>
                                     </section>
-                                ) : null}
-                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                        Derived offsets
-                                    </p>
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                        <DebugStat
-                                            label="homeOffset.dx"
-                                            value={formatDecimal(homeOffset?.dx ?? null, {
-                                                digits: 4,
-                                                signed: true,
-                                            })}
-                                            formula={offsetXFormula}
-                                        />
-                                        <DebugStat
-                                            label="homeOffset.dy"
-                                            value={formatDecimal(homeOffset?.dy ?? null, {
-                                                digits: 4,
-                                                signed: true,
-                                            })}
-                                            formula={offsetYFormula}
-                                        />
-                                    </div>
-                                </section>
-                            </div>
-                            <div className="grid gap-4 lg:grid-cols-2">
-                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                        Step test / conversions
-                                    </p>
-                                    <div className="grid gap-4">
-                                        <div>
-                                            <p className="mb-1 text-[10px] uppercase tracking-wide text-amber-200">
-                                                Measured inputs
+                                    {measurementStats ? (
+                                        <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                            <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                                Detection stability
                                             </p>
                                             <div className="grid gap-2 sm:grid-cols-2">
                                                 <DebugStat
-                                                    label="deltaSteps"
-                                                    value={`${stepTestSettings.deltaSteps} steps`}
-                                                    formula="Configured move magnitude used during characterization."
+                                                    label="samples.collected"
+                                                    value={`${measurementStats.sampleCount} / ${measurementStats.thresholds.minSamples}`}
+                                                    formula="Samples captured divided by the minimum required before we trust the blob reading."
                                                 />
                                                 <DebugStat
-                                                    label="Δnorm_x"
-                                                    value={formatDecimal(measuredShiftX, {
-                                                        digits: 4,
-                                                        signed: true,
-                                                    })}
-                                                    formula={measuredShiftFormulaX}
+                                                    label="deviation.threshold"
+                                                    value={formatPercent(
+                                                        measurementStats.thresholds
+                                                            .maxMedianDeviationPt,
+                                                    )}
+                                                    formula="Maximum allowed normalized deviation applied to both per-frame and median absolute deviation checks."
                                                 />
                                                 <DebugStat
-                                                    label="Δnorm_y"
-                                                    value={formatDecimal(measuredShiftY, {
-                                                        digits: 4,
-                                                        signed: true,
-                                                    })}
-                                                    formula={measuredShiftFormulaY}
+                                                    label="stability.status"
+                                                    value={
+                                                        measurementStats.passed ? 'PASS' : 'FAIL'
+                                                    }
+                                                    formula="PASS indicates every sample stayed within the configured deviation window."
+                                                />
+                                                <DebugStat
+                                                    label="MAD.x"
+                                                    value={formatPercent(
+                                                        measurementStats.medianAbsoluteDeviation.x,
+                                                    )}
+                                                    formula="Median absolute deviation of normalized X across the sampled frames."
+                                                />
+                                                <DebugStat
+                                                    label="MAD.y"
+                                                    value={formatPercent(
+                                                        measurementStats.medianAbsoluteDeviation.y,
+                                                    )}
+                                                    formula="Median absolute deviation of normalized Y across the sampled frames."
+                                                />
+                                                <DebugStat
+                                                    label="MAD.size"
+                                                    value={formatPercent(
+                                                        measurementStats.medianAbsoluteDeviation
+                                                            .size,
+                                                    )}
+                                                    formula="Median absolute deviation of the normalized blob size across the sampled frames."
                                                 />
                                             </div>
+                                        </section>
+                                    ) : null}
+                                    <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                            Step measurements
+                                        </p>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            <DebugStat
+                                                label="deltaSteps"
+                                                value={`${stepTestSettings.deltaSteps} steps`}
+                                                formula="Configured move magnitude used during characterization."
+                                            />
+                                            <DebugStat
+                                                label="Δnorm_x"
+                                                value={formatDecimal(measuredShiftX, {
+                                                    digits: 4,
+                                                    signed: true,
+                                                })}
+                                                formula={measuredShiftFormulaX}
+                                            />
+                                            <DebugStat
+                                                label="Δnorm_y"
+                                                value={formatDecimal(measuredShiftY, {
+                                                    digits: 4,
+                                                    signed: true,
+                                                })}
+                                                formula={measuredShiftFormulaY}
+                                            />
                                         </div>
-                                        <div>
-                                            <p className="mb-1 text-[10px] uppercase tracking-wide text-emerald-300">
-                                                Derived per-step factors
-                                            </p>
-                                            <div className="grid gap-2 sm:grid-cols-2">
-                                                <DebugStat
-                                                    label="stepToDisplacement.x"
-                                                    value={formatDecimal(perStepX, { digits: 6 })}
-                                                    formula={perStepFormulaX}
-                                                />
-                                                <DebugStat
-                                                    label="stepToDisplacement.y"
-                                                    value={formatDecimal(perStepY, { digits: 6 })}
-                                                    formula={perStepFormulaY}
-                                                />
+                                    </section>
+                                </div>
+                                <div className="space-y-4">
+                                    <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                            Derived offsets
+                                        </p>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            <DebugStat
+                                                label="homeOffset.dx"
+                                                value={formatDecimal(homeOffset?.dx ?? null, {
+                                                    digits: 4,
+                                                    signed: true,
+                                                })}
+                                                formula={offsetXFormula}
+                                            />
+                                            <DebugStat
+                                                label="homeOffset.dy"
+                                                value={formatDecimal(homeOffset?.dy ?? null, {
+                                                    digits: 4,
+                                                    signed: true,
+                                                })}
+                                                formula={offsetYFormula}
+                                            />
+                                        </div>
+                                    </section>
+                                    <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
+                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                            Step conversions (derived)
+                                        </p>
+                                        <div className="grid gap-4">
+                                            <div>
+                                                <p className="mb-1 text-[10px] uppercase tracking-wide text-emerald-300">
+                                                    Per-step factors
+                                                </p>
+                                                <div className="grid gap-2 sm:grid-cols-2">
+                                                    <DebugStat
+                                                        label="stepToDisplacement.x"
+                                                        value={formatDecimal(perStepX, {
+                                                            digits: 6,
+                                                        })}
+                                                        formula={perStepFormulaX}
+                                                    />
+                                                    <DebugStat
+                                                        label="stepToDisplacement.y"
+                                                        value={formatDecimal(perStepY, {
+                                                            digits: 6,
+                                                        })}
+                                                        formula={perStepFormulaY}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-300">
+                                                    Alignment steps
+                                                </p>
+                                                <div className="grid gap-2">
+                                                    <DebugStat
+                                                        label="alignmentSteps.x"
+                                                        value={formatStepValue(alignmentStepsX)}
+                                                        formula={alignmentStepsFormulaX}
+                                                    />
+                                                    <DebugStat
+                                                        label="alignmentSteps.y"
+                                                        value={formatStepValue(alignmentStepsY)}
+                                                        formula={alignmentStepsFormulaY}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </section>
-                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                                        Alignment steps (derived)
-                                    </p>
-                                    <div className="grid gap-2">
-                                        <DebugStat
-                                            label="alignmentSteps.x"
-                                            value={formatStepValue(alignmentStepsX)}
-                                            formula={alignmentStepsFormulaX}
-                                        />
-                                        <DebugStat
-                                            label="alignmentSteps.y"
-                                            value={formatStepValue(alignmentStepsY)}
-                                            formula={alignmentStepsFormulaY}
-                                        />
-                                    </div>
-                                </section>
+                                    </section>
+                                </div>
                             </div>
                             <section className="rounded-lg border border-amber-600/40 bg-amber-500/10 p-4 text-sm text-amber-100">
                                 <p className="mb-2 text-xs uppercase tracking-wide">
