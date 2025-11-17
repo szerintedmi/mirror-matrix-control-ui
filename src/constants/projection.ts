@@ -35,7 +35,7 @@ const createUpOrientation = (yaw: number, pitch: number) => ({
 export const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
     wallDistance: 5,
     wallOrientation: createForwardOrientation(0, 0),
-    sunOrientation: createForwardOrientation(0, -15),
+    sunOrientation: createForwardOrientation(0, 0),
     worldUpOrientation: createUpOrientation(0, -90),
     projectionOffset: 0,
     pixelSpacing: {

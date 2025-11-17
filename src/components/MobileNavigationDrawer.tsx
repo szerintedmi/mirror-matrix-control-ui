@@ -44,9 +44,7 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
                 </div>
                 <ul className="flex flex-col gap-2">
                     {items.map((item) => {
-                        const isActive =
-                            item.page === activePage ||
-                            (item.page === 'library' && activePage === 'editor');
+                        const isActive = item.page === activePage;
                         return (
                             <li key={item.page}>
                                 <button

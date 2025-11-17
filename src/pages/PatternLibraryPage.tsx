@@ -5,18 +5,18 @@ import { calculateProjectionSpan, inferGridFromCanvas } from '../utils/projectio
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type { NavigationControls } from '../App';
-import type { Pattern, PatternCanvas, ProjectionSettings } from '../types';
+import type { LegacyPattern, LegacyPatternCanvas, ProjectionSettings } from '../types';
 
 interface PatternLibraryPageProps {
     navigation: NavigationControls;
-    patterns: Pattern[];
+    patterns: LegacyPattern[];
     onDeletePattern: (patternId: string) => void;
     projectionSettings: ProjectionSettings;
     activePatternId: string | null;
     onSelectActivePattern: (patternId: string) => void;
 }
 
-const PatternPreview: React.FC<{ pattern: Pattern }> = ({ pattern }) => {
+const PatternPreview: React.FC<{ pattern: LegacyPattern }> = ({ pattern }) => {
     const canvasWidth = Math.max(pattern.canvas.width, TILE_PLACEMENT_UNIT);
     const canvasHeight = Math.max(pattern.canvas.height, TILE_PLACEMENT_UNIT);
     const aspectRatio = canvasWidth / canvasHeight;
@@ -97,7 +97,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
         onSelectActivePattern,
     } = props;
 
-    const formatProjectedSize = (canvas: PatternCanvas) => {
+    const formatProjectedSize = (canvas: LegacyPatternCanvas) => {
         const derivedGrid = inferGridFromCanvas(canvas);
         const span = calculateProjectionSpan(derivedGrid, projectionSettings);
         const widthStr = span.width !== null ? `${span.width.toFixed(2)}m` : 'Infinite';

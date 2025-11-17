@@ -20,6 +20,7 @@ import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
 import CalibrationPage from './pages/CalibrationPage';
 import ConfiguratorPage from './pages/ConfiguratorPage';
+import PatternDesignerPage from './pages/PatternDesignerPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
 import PlaybackPage from './pages/PlaybackPage';
@@ -32,19 +33,20 @@ import {
     persistLastSelectedSnapshotName,
     persistNamedGridSnapshot,
 } from './services/gridStorage';
-import { loadPatterns, persistPatterns } from './services/patternStorage';
+import { loadLegacyPatterns, persistLegacyPatterns } from './services/legacyPatternStorage';
 import {
     getInitialProjectionSettings,
     persistProjectionSettings,
 } from './services/projectionStorage';
 import { validateProjectionSettings } from './utils/geometryValidation';
 
-import type { MirrorConfig, Pattern, ProjectionSettings } from './types';
+import type { LegacyPattern, MirrorConfig, ProjectionSettings } from './types';
 import type { SnapshotPersistenceStatus } from './types/persistence';
 
 export type Page =
-    | 'library'
-    | 'editor'
+    | 'legacy-patterns'
+    | 'legacy-patterns-editor'
+    | 'patterns'
     | 'playback'
     | 'calibration'
     | 'configurator'
@@ -81,9 +83,9 @@ const App: React.FC = () => {
         rows: snapshotBootstrap.snapshot?.gridSize.rows ?? 8,
         cols: snapshotBootstrap.snapshot?.gridSize.cols ?? 8,
     }));
-    const persistedPatterns = useMemo(() => loadPatterns(resolvedStorage), [resolvedStorage]);
+    const persistedPatterns = useMemo(() => loadLegacyPatterns(resolvedStorage), [resolvedStorage]);
 
-    const [patterns, setPatterns] = useState<Pattern[]>(persistedPatterns);
+    const [patterns, setPatterns] = useState<LegacyPattern[]>(persistedPatterns);
     const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(
         () => new Map(snapshotBootstrap.snapshot?.mirrorConfig ?? []),
     );
@@ -136,7 +138,7 @@ const App: React.FC = () => {
     };
 
     useEffect(() => {
-        persistPatterns(resolvedStorage, patterns);
+        persistLegacyPatterns(resolvedStorage, patterns);
     }, [patterns, resolvedStorage]);
 
     useEffect(() => {
@@ -161,7 +163,7 @@ const App: React.FC = () => {
 
     const editPattern = (patternId: string | null) => {
         setEditingPatternId(patternId);
-        setPage('editor');
+        setPage('legacy-patterns-editor');
     };
 
     const handleSaveSnapshot = useCallback(
@@ -258,7 +260,8 @@ const App: React.FC = () => {
     );
 
     const navigationControls: NavigationControls = { navigateTo, editPattern };
-    const effectiveNavPage: Page = page === 'editor' ? 'library' : page;
+    const effectiveNavPage: Page =
+        page === 'legacy-patterns-editor' ? 'legacy-patterns' : page;
     const editingPattern = useMemo(
         () =>
             editingPatternId
@@ -279,7 +282,12 @@ const App: React.FC = () => {
             icon: <CalibrationIcon />,
         },
         {
-            page: 'library' as const,
+            page: 'legacy-patterns' as const,
+            label: 'Patterns (legacy)',
+            icon: <PatternsIcon />,
+        },
+        {
+            page: 'patterns' as const,
             label: 'Patterns',
             icon: <PatternsIcon />,
         },
@@ -300,7 +308,7 @@ const App: React.FC = () => {
         },
     ];
 
-    const handleSavePattern = (pattern: Pattern) => {
+    const handleSavePattern = (pattern: LegacyPattern) => {
         setPatterns((prev) => {
             const existingIndex = prev.findIndex((p) => p.id === pattern.id);
             if (existingIndex > -1) {
@@ -311,7 +319,7 @@ const App: React.FC = () => {
             return [...prev, pattern];
         });
         setActivePatternId((current) => current ?? pattern.id);
-        setPage('library');
+        setPage('legacy-patterns');
     };
 
     const handleDeletePattern = (patternId: string) => {
@@ -346,14 +354,14 @@ const App: React.FC = () => {
                 );
             case 'calibration':
                 return <CalibrationPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
-            case 'editor':
+            case 'legacy-patterns-editor':
                 return (
                     <PatternEditorPage
                         onSave={handleSavePattern}
                         existingPattern={editingPattern}
                         mirrorCount={gridSize.rows * gridSize.cols}
                         defaultCanvasSize={gridSize}
-                        onBack={() => setPage('library')}
+                        onBack={() => setPage('legacy-patterns')}
                     />
                 );
             case 'configurator':
@@ -399,7 +407,9 @@ const App: React.FC = () => {
                         onSelectPattern={handleSelectPattern}
                     />
                 );
-            case 'library':
+            case 'patterns':
+                return <PatternDesignerPage />;
+            case 'legacy-patterns':
             default:
                 return (
                     <PatternLibraryPage
@@ -416,9 +426,11 @@ const App: React.FC = () => {
 
     const pageTitle = (() => {
         switch (page) {
-            case 'library':
-                return 'Patterns';
-            case 'editor':
+            case 'legacy-patterns':
+                return 'Patterns (legacy)';
+            case 'legacy-patterns-editor':
+                return 'Patterns (legacy)';
+            case 'patterns':
                 return 'Patterns';
             case 'playback':
                 return 'Playback';
@@ -436,21 +448,21 @@ const App: React.FC = () => {
     })();
 
     const breadcrumbs: AppTopBarBreadcrumb[] =
-        page === 'editor' && editingPattern
+        page === 'legacy-patterns-editor' && editingPattern
             ? [
                   {
                       label: 'Patterns',
-                      onClick: () => navigateTo('library'),
+                      onClick: () => navigateTo('legacy-patterns'),
                   },
                   {
                       label: editingPattern.name,
                   },
               ]
-            : page === 'editor'
+            : page === 'legacy-patterns-editor'
               ? [
                     {
                         label: 'Patterns',
-                        onClick: () => navigateTo('library'),
+                        onClick: () => navigateTo('legacy-patterns'),
                     },
                 ]
               : [];

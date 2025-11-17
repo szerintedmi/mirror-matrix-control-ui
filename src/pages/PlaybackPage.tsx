@@ -20,15 +20,15 @@ import { withOrientationAngles } from '../utils/orientation';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type {
+    LegacyPattern,
     MirrorAssignment,
     MirrorConfig,
-    Pattern,
     PlaybackPlanResult,
     ProjectionSettings,
 } from '../types';
 
 interface PlaybackPageProps {
-    patterns: Pattern[];
+    patterns: LegacyPattern[];
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
     projectionSettings: ProjectionSettings;
@@ -39,7 +39,7 @@ interface PlaybackPageProps {
 }
 
 const PatternThumbnail: React.FC<{
-    pattern: Pattern;
+    pattern: LegacyPattern;
     isActive: boolean;
     onActivate: (patternId: string) => void;
 }> = ({ pattern, isActive, onActivate }) => {

@@ -46,9 +46,7 @@ const NavigationRail: React.FC<NavigationRailProps> = ({
                     </div>
                     <ul className="flex flex-col gap-1">
                         {items.map((item) => {
-                            const isActive =
-                                item.page === activePage ||
-                                (item.page === 'library' && activePage === 'editor');
+                            const isActive = item.page === activePage;
                             return (
                                 <li key={item.page}>
                                     <button

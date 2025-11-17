@@ -4,8 +4,8 @@ import { MIRROR_DIMENSION_M, MIRROR_PITCH_M } from '../constants/projection';
 import { deriveWallBasis } from './orientation';
 
 import type {
-    Pattern,
-    PatternCanvas,
+    LegacyPattern,
+    LegacyPatternCanvas,
     ProjectionFootprint,
     ProjectionSettings,
     ProjectedSpot,
@@ -14,7 +14,7 @@ import type {
 const safeRows = (rows: number): number => Math.max(1, Math.round(rows));
 const safeCols = (cols: number): number => Math.max(1, Math.round(cols));
 
-export const inferGridFromCanvas = (canvas: PatternCanvas): { rows: number; cols: number } => ({
+export const inferGridFromCanvas = (canvas: LegacyPatternCanvas): { rows: number; cols: number } => ({
     rows: safeRows(canvas.height / TILE_PLACEMENT_UNIT),
     cols: safeCols(canvas.width / TILE_PLACEMENT_UNIT),
 });
@@ -121,7 +121,7 @@ export const computeProjectionFootprint = ({
     settings,
 }: {
     gridSize: { rows: number; cols: number };
-    pattern: Pattern | null;
+    pattern: LegacyPattern | null;
     settings: ProjectionSettings;
 }): ProjectionFootprint => {
     const span = calculateProjectionSpan(gridSize, settings);

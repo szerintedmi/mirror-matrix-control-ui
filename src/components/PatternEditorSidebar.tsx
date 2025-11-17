@@ -4,7 +4,7 @@ import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS } from '../constants/pattern';
 
 import type { EditorTool } from '../types/patternEditor';
 
-interface PatternEditorSidebarProps {
+interface LegacyPatternEditorSidebarProps {
     name: string;
     onNameChange: (value: string) => void;
     usedTiles: number;
@@ -23,7 +23,7 @@ interface PatternEditorSidebarProps {
     onClear: () => void;
 }
 
-const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
+const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (props) => {
     const {
         name,
         onNameChange,
@@ -265,4 +265,4 @@ const PatternEditorSidebar: React.FC<PatternEditorSidebarProps> = (props) => {
     );
 };
 
-export default PatternEditorSidebar;
+export default LegacyPatternEditorSidebar;

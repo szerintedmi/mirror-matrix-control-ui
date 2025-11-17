@@ -1,12 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-    loadLegacyPatterns,
-    persistLegacyPatterns,
-    removeLegacyPattern,
-} from '../legacyPatternStorage';
+import { loadPatterns, persistPatterns, removePattern } from '../patternStorage';
 
-import type { LegacyPattern } from '../../types';
+import type { Pattern } from '../../types';
 
 class MemoryStorage implements Storage {
     private store = new Map<string, string>();
@@ -36,40 +32,39 @@ class MemoryStorage implements Storage {
     }
 }
 
-const STORAGE_KEY = 'mirror:patterns';
+const STORAGE_KEY = 'mirror:calibration-patterns';
 
-const createPattern = (overrides?: Partial<LegacyPattern>): LegacyPattern => ({
+const createPattern = (overrides?: Partial<Pattern>): Pattern => ({
     id: 'pattern-1',
-    name: 'Example Pattern',
-    canvas: { width: 256, height: 256 },
-    tiles: [
-        {
-            id: 'tile-1',
-            center: { x: 5, y: 5 },
-            size: { width: 1, height: 1 },
-        },
-    ],
+    name: 'Pattern',
     createdAt: new Date('2025-01-01T00:00:00.000Z').toISOString(),
     updatedAt: new Date('2025-01-02T00:00:00.000Z').toISOString(),
+    points: [
+        {
+            id: 'point-1',
+            x: 0.5,
+            y: 0.5,
+        },
+    ],
     ...overrides,
 });
 
-describe('legacyPatternStorage', () => {
+describe('patternStorage (new patterns)', () => {
     it('returns empty list when nothing is stored', () => {
         const storage = new MemoryStorage();
-        expect(loadLegacyPatterns(storage)).toEqual([]);
+        expect(loadPatterns(storage)).toEqual([]);
     });
 
     it('persists and reloads patterns', () => {
         const storage = new MemoryStorage();
         const pattern = createPattern();
 
-        persistLegacyPatterns(storage, [pattern]);
+        persistPatterns(storage, [pattern]);
 
         const raw = storage.getItem(STORAGE_KEY);
         expect(raw).toBeTruthy();
 
-        const reloaded = loadLegacyPatterns(storage);
+        const reloaded = loadPatterns(storage);
         expect(reloaded).toHaveLength(1);
         expect(reloaded[0]).toEqual(pattern);
     });
@@ -84,29 +79,27 @@ describe('legacyPatternStorage', () => {
                     {
                         id: 'good-pattern',
                         name: 'Valid',
-                        canvas: { width: 100, height: 100 },
-                        tiles: [
-                            {
-                                id: 'tile-123',
-                                center: { x: 10, y: 10 },
-                                size: { width: 5, height: 5 },
-                            },
-                        ],
                         createdAt: '2025-01-01T00:00:00.000Z',
                         updatedAt: '2025-01-01T02:00:00.000Z',
+                        points: [
+                            {
+                                id: 'point-1',
+                                x: 0.1,
+                                y: 0.2,
+                            },
+                        ],
                     },
                     {
                         id: 'missing-name',
-                        canvas: { width: 10, height: 10 },
-                        tiles: [],
                         createdAt: '2025-01-01T00:00:00.000Z',
-                        updatedAt: '2025-01-01T00:00:00.000Z',
+                        updatedAt: '2025-01-01T02:00:00.000Z',
+                        points: [],
                     },
                 ],
             }),
         );
 
-        const loaded = loadLegacyPatterns(storage);
+        const loaded = loadPatterns(storage);
         expect(loaded).toHaveLength(1);
         expect(loaded[0].id).toBe('good-pattern');
     });
@@ -120,13 +113,13 @@ describe('legacyPatternStorage', () => {
                 patterns: [],
             }),
         );
-        expect(loadLegacyPatterns(storage)).toEqual([]);
+        expect(loadPatterns(storage)).toEqual([]);
 
         storage.setItem(STORAGE_KEY, '{not-json');
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(loadLegacyPatterns(storage)).toEqual([]);
+        expect(loadPatterns(storage)).toEqual([]);
         expect(warnSpy).toHaveBeenCalledWith(
-            'Failed to parse pattern storage',
+            'Failed to parse calibration-native pattern storage',
             expect.any(SyntaxError),
         );
         warnSpy.mockRestore();
@@ -138,14 +131,15 @@ describe('legacyPatternStorage', () => {
         const patternB = createPattern({
             id: 'b',
             name: 'B',
-            tiles: [],
+            points: [],
         });
 
-        persistLegacyPatterns(storage, [patternA, patternB]);
-        removeLegacyPattern(storage, 'a');
+        persistPatterns(storage, [patternA, patternB]);
+        removePattern(storage, 'a');
 
-        const loaded = loadLegacyPatterns(storage);
+        const loaded = loadPatterns(storage);
         expect(loaded).toHaveLength(1);
         expect(loaded[0].id).toBe('b');
     });
 });
+

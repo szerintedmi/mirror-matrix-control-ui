@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import PatternCanvas from '../components/PatternCanvas';
-import PatternEditorSidebar from '../components/PatternEditorSidebar';
+import LegacyPatternCanvas from '../components/LegacyPatternCanvas';
+import LegacyPatternEditorSidebar from '../components/LegacyPatternEditorSidebar';
 import { MAX_CANVAS_CELLS, MIN_CANVAS_CELLS, TILE_PLACEMENT_UNIT } from '../constants/pattern';
-import { usePatternEditorInteractions } from '../hooks/usePatternEditorInteractions';
+import {
+    useLegacyPatternEditorInteractions,
+    type UseLegacyPatternEditorInteractionsResult,
+} from '../hooks/useLegacyPatternEditorInteractions';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
-import type { Pattern } from '../types';
+import type { LegacyPattern } from '../types';
 import type { EditorTool, TileDraft } from '../types/patternEditor';
 
 const clampCanvasCells = (value: number): number =>
@@ -46,15 +49,15 @@ const useElementSize = <T extends HTMLElement>(): [
     return [ref, size];
 };
 
-interface PatternEditorPageProps {
-    onSave: (pattern: Pattern) => void;
-    existingPattern: Pattern | null;
+interface LegacyPatternEditorPageProps {
+    onSave: (pattern: LegacyPattern) => void;
+    existingPattern: LegacyPattern | null;
     mirrorCount: number;
     defaultCanvasSize: { rows: number; cols: number };
     onBack?: () => void;
 }
 
-const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
+const LegacyPatternEditorPage: React.FC<LegacyPatternEditorPageProps> = ({
     onSave,
     existingPattern,
     mirrorCount,
@@ -107,7 +110,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
         handlePointerUp,
         handlePointerLeave,
         handlePointerCancel,
-    } = usePatternEditorInteractions({
+    }: UseLegacyPatternEditorInteractionsResult = useLegacyPatternEditorInteractions({
         mirrorCount,
         canvasSize,
         canvasWidth,
@@ -287,7 +290,7 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 .join('|'),
         });
 
-        const pattern: Pattern = {
+        const pattern: LegacyPattern = {
             id: existingPattern?.id ?? generatePatternId(),
             name: trimmed,
             canvas: { width: canvasWidth, height: canvasHeight },
@@ -394,14 +397,14 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
                 </button>
             </div>
             <div className="flex flex-grow flex-col gap-6 min-h-0 md:flex-row">
-                <PatternEditorSidebar {...sidebarProps} />
+                <LegacyPatternEditorSidebar {...sidebarProps} />
                 <main className="flex-grow bg-gray-800/50 rounded-lg ring-1 ring-white/10 p-4 flex items-center justify-center min-h-0">
                     <div
                         ref={containerRef}
                         className="w-full h-full flex min-h-0 min-w-0 items-center justify-center"
                     >
                         <div style={surfaceStyle} className="relative max-h-full max-w-full">
-                            <PatternCanvas
+                            <LegacyPatternCanvas
                                 canvasSize={canvasSize}
                                 canvasWidth={canvasWidth}
                                 canvasHeight={canvasHeight}
@@ -427,4 +430,4 @@ const PatternEditorPage: React.FC<PatternEditorPageProps> = ({
     );
 };
 
-export default PatternEditorPage;
+export default LegacyPatternEditorPage;

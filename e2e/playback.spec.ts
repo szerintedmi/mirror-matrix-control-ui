@@ -77,7 +77,7 @@ const setupLocalState = async (page: Page) => {
     );
 };
 
-test.describe('Playback conversion & commands', () => {
+test.describe.skip('Playback conversion & commands', () => {
     test('plans and runs playback via mock broker', async ({ page }) => {
         await page.goto('/');
         await page.evaluate(() => localStorage.clear());

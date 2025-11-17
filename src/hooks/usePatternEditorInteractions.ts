@@ -80,7 +80,7 @@ const tileCenterToCell = (centerX: number, centerY: number): { row: number; col:
     col: Math.floor(centerX / TILE_PLACEMENT_UNIT),
 });
 
-interface UsePatternEditorInteractionsOptions {
+interface UseLegacyPatternEditorInteractionsOptions {
     mirrorCount: number;
     canvasSize: { rows: number; cols: number };
     canvasWidth: number;
@@ -93,7 +93,7 @@ interface UsePatternEditorInteractionsOptions {
     onSnapToggle: () => void;
 }
 
-export interface PatternEditorInteractions {
+export interface LegacyPatternEditorInteractions {
     tiles: TileDraft[];
     hoverState: HoverState | null;
     removeHighlight: { centerX: number; centerY: number } | null;
@@ -113,9 +113,9 @@ export interface PatternEditorInteractions {
     handlePointerCancel: () => void;
 }
 
-export const usePatternEditorInteractions = (
-    options: UsePatternEditorInteractionsOptions,
-): PatternEditorInteractions => {
+export const useLegacyPatternEditorInteractions = (
+    options: UseLegacyPatternEditorInteractionsOptions,
+): LegacyPatternEditorInteractions => {
     const {
         mirrorCount,
         canvasSize,

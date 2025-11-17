@@ -4,8 +4,8 @@ import { MIRROR_PITCH_M } from '../constants/projection';
 import { degToRad, dotVec3, normalizeVec3, radToDeg } from './orientation';
 
 import type {
+    LegacyPattern,
     MirrorReflectionSolution,
-    Pattern,
     ProjectionSettings,
     ReflectionAssignment,
     ReflectionSolverError,
@@ -18,7 +18,7 @@ const EPSILON = 1e-6;
 export interface ReflectionSolverParams {
     gridSize: { rows: number; cols: number };
     projection: ProjectionSettings;
-    pattern: Pattern | null;
+    pattern: LegacyPattern | null;
     arrayOrigin?: Vec3;
     wallAnchor?: Vec3;
 }
@@ -103,7 +103,7 @@ const translatePatternOffset = (
 
 const derivePatternCenterOffset = (
     gridSize: { rows: number; cols: number },
-    pattern: Pattern | null,
+    pattern: LegacyPattern | null,
 ): { cols: number; rows: number } => {
     if (pattern && pattern.tiles.length > 0) {
         const spanCols = Math.max(pattern.canvas.width / TILE_PLACEMENT_UNIT, 1);
@@ -127,7 +127,7 @@ const buildPatternTargets = ({
     spacing,
     centerOffset,
 }: {
-    pattern: Pattern | null;
+    pattern: LegacyPattern | null;
     uWall: Vec3;
     vWall: Vec3;
     patternOrigin: Vec3;

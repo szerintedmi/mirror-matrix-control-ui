@@ -1,21 +1,20 @@
-import type { Pattern, PatternCanvas, PatternTile } from '../types';
+import type { Pattern } from '../types';
 
-const STORAGE_KEY = 'mirror:patterns';
+const STORAGE_KEY = 'mirror:calibration-patterns';
 const CURRENT_VERSION = 1;
 
-interface StoredPatternTile {
+interface StoredPatternPoint {
     id: string;
-    center: { x: number; y: number };
-    size: { width: number; height: number };
+    x: number;
+    y: number;
 }
 
 interface StoredPattern {
     id: string;
     name: string;
-    canvas: PatternCanvas;
-    tiles: StoredPatternTile[];
     createdAt: string;
     updatedAt: string;
+    points: StoredPatternPoint[];
 }
 
 interface StoredPayload {
@@ -29,62 +28,24 @@ const isFiniteNumber = (value: unknown): value is number =>
 const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
-const parseCanvas = (input: unknown): PatternCanvas | null => {
+const parsePoint = (input: unknown): StoredPatternPoint | null => {
     if (!input || typeof input !== 'object') {
         return null;
     }
-    const candidate = input as Partial<PatternCanvas>;
-    if (!isFiniteNumber(candidate.width) || !isFiniteNumber(candidate.height)) {
-        return null;
-    }
-    if (candidate.width <= 0 || candidate.height <= 0) {
-        return null;
-    }
-    return {
-        width: candidate.width,
-        height: candidate.height,
-    };
-};
-
-const parseTile = (input: unknown): PatternTile | null => {
-    if (!input || typeof input !== 'object') {
-        return null;
-    }
-    const candidate = input as Partial<StoredPatternTile>;
+    const candidate = input as Partial<StoredPatternPoint>;
     if (!isNonEmptyString(candidate.id)) {
         return null;
     }
-    const center = candidate.center;
-    if (!center || typeof center !== 'object') {
+    if (!isFiniteNumber(candidate.x) || !isFiniteNumber(candidate.y)) {
         return null;
     }
-    const size = candidate.size;
-    if (!size || typeof size !== 'object') {
-        return null;
-    }
-    const parsedCenter = center as { x?: unknown; y?: unknown };
-    const parsedSize = size as { width?: unknown; height?: unknown };
-    if (
-        !isFiniteNumber(parsedCenter.x) ||
-        !isFiniteNumber(parsedCenter.y) ||
-        !isFiniteNumber(parsedSize.width) ||
-        !isFiniteNumber(parsedSize.height)
-    ) {
-        return null;
-    }
-    if (parsedSize.width <= 0 || parsedSize.height <= 0) {
+    if (candidate.x < 0 || candidate.x > 1 || candidate.y < 0 || candidate.y > 1) {
         return null;
     }
     return {
         id: candidate.id,
-        center: {
-            x: parsedCenter.x,
-            y: parsedCenter.y,
-        },
-        size: {
-            width: parsedSize.width,
-            height: parsedSize.height,
-        },
+        x: candidate.x,
+        y: candidate.y,
     };
 };
 
@@ -99,26 +60,23 @@ const parsePattern = (input: unknown): Pattern | null => {
     if (!isNonEmptyString(candidate.createdAt) || !isNonEmptyString(candidate.updatedAt)) {
         return null;
     }
-    const canvas = parseCanvas(candidate.canvas);
-    if (!canvas) {
-        return null;
-    }
-    const tiles: PatternTile[] = [];
-    if (Array.isArray(candidate.tiles)) {
-        for (const tileInput of candidate.tiles) {
-            const tile = parseTile(tileInput);
-            if (tile) {
-                tiles.push(tile);
+
+    const points: StoredPatternPoint[] = [];
+    if (Array.isArray(candidate.points)) {
+        for (const pointInput of candidate.points) {
+            const parsed = parsePoint(pointInput);
+            if (parsed) {
+                points.push(parsed);
             }
         }
     }
+
     return {
         id: candidate.id,
         name: candidate.name,
-        canvas,
-        tiles,
         createdAt: candidate.createdAt,
         updatedAt: candidate.updatedAt,
+        points,
     };
 };
 
@@ -147,7 +105,7 @@ export const loadPatterns = (storage: Storage | undefined): Pattern[] => {
         }
         return patterns;
     } catch (error) {
-        console.warn('Failed to parse pattern storage', error);
+        console.warn('Failed to parse calibration-native pattern storage', error);
         return [];
     }
 };
@@ -155,17 +113,13 @@ export const loadPatterns = (storage: Storage | undefined): Pattern[] => {
 const serializePattern = (pattern: Pattern): StoredPattern => ({
     id: pattern.id,
     name: pattern.name,
-    canvas: {
-        width: pattern.canvas.width,
-        height: pattern.canvas.height,
-    },
-    tiles: pattern.tiles.map((tile) => ({
-        id: tile.id,
-        center: { x: tile.center.x, y: tile.center.y },
-        size: { width: tile.size.width, height: tile.size.height },
-    })),
     createdAt: pattern.createdAt,
     updatedAt: pattern.updatedAt,
+    points: pattern.points.map((point) => ({
+        id: point.id,
+        x: point.x,
+        y: point.y,
+    })),
 });
 
 const writePatterns = (storage: Storage | undefined, patterns: Pattern[]): void => {
@@ -179,7 +133,7 @@ const writePatterns = (storage: Storage | undefined, patterns: Pattern[]): void 
     try {
         storage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (error) {
-        console.warn('Failed to persist pattern storage', error);
+        console.warn('Failed to persist calibration-native pattern storage', error);
     }
 };
 

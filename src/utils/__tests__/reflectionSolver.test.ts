@@ -5,7 +5,7 @@ import { DEFAULT_PROJECTION_SETTINGS } from '../../constants/projection';
 import { anglesToVector, degToRad, deriveWallBasis, dotVec3, normalizeVec3 } from '../orientation';
 import { solveReflection } from '../reflectionSolver';
 
-import type { OrientationState, Pattern, ProjectionSettings, Vec3 } from '../../types';
+import type { LegacyPattern, OrientationState, ProjectionSettings, Vec3 } from '../../types';
 
 const cloneProjection = (): ProjectionSettings => ({
     wallDistance: DEFAULT_PROJECTION_SETTINGS.wallDistance,
@@ -199,7 +199,7 @@ describe('reflectionSolver', () => {
 
     it('reports pattern_exceeds_mirrors when pattern size is too large', () => {
         const projection = cloneProjection();
-        const oversizedPattern: Pattern = {
+        const oversizedPattern: LegacyPattern = {
             id: 'oversized',
             name: 'oversized',
             canvas: { width: 100, height: 100 },
@@ -263,7 +263,7 @@ describe('reflectionSolver', () => {
             vector: anglesToVector(-5, -10, 'forward'),
         };
 
-        const pattern: Pattern = {
+        const pattern: LegacyPattern = {
             id: 'two-tiles',
             name: 'two-tiles',
             canvas: { width: 40, height: 20 },
@@ -314,7 +314,7 @@ describe('reflectionSolver', () => {
 
     it('moves lower pattern tiles downward along the wall vertical axis', () => {
         const projection = cloneProjection();
-        const pattern: Pattern = {
+        const pattern: LegacyPattern = {
             id: 'vertical-pair',
             name: 'vertical-pair',
             canvas: { width: 20, height: 40 },
@@ -368,7 +368,7 @@ describe('reflectionSolver', () => {
             vector: anglesToVector(0, 25, 'forward'),
         };
 
-        const pattern: Pattern = {
+        const pattern: LegacyPattern = {
             id: 'pitched-vertical',
             name: 'pitched-vertical',
             canvas: { width: 20, height: 40 },

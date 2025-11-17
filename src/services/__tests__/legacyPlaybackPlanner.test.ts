@@ -4,7 +4,7 @@ import { TILE_PLACEMENT_UNIT } from '../../constants/pattern';
 import { DEFAULT_PROJECTION_SETTINGS } from '../../constants/projection';
 import { planPlayback } from '../playbackPlanner';
 
-import type { MirrorConfig, Pattern } from '../../types';
+import type { LegacyPattern, MirrorConfig } from '../../types';
 
 const cloneProjectionSettings = () => ({
     ...DEFAULT_PROJECTION_SETTINGS,
@@ -36,7 +36,7 @@ const createMirrorConfig = (): MirrorConfig => {
     return config;
 };
 
-const createPattern = (tileCount: number): Pattern => ({
+const createPattern = (tileCount: number): LegacyPattern => ({
     id: 'pattern-test',
     name: 'Test Pattern',
     canvas: { width: TILE_PLACEMENT_UNIT * tileCount, height: TILE_PLACEMENT_UNIT },
@@ -55,7 +55,7 @@ const createPattern = (tileCount: number): Pattern => ({
     updatedAt: new Date().toISOString(),
 });
 
-describe('planPlayback', () => {
+describe('legacyPlaybackPlanner', () => {
     it('maps mirror assignments and solver outputs into the playback plan', () => {
         const mirrorConfig = createMirrorConfig();
         const plan = planPlayback({

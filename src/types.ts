@@ -43,12 +43,12 @@ export interface DraggedMotorInfo {
     axis?: Axis;
 }
 
-export interface PatternCanvas {
+export interface LegacyPatternCanvas {
     width: number;
     height: number;
 }
 
-export interface PatternTile {
+export interface LegacyPatternTile {
     id: string;
     center: {
         x: number;
@@ -60,13 +60,27 @@ export interface PatternTile {
     };
 }
 
+export interface LegacyPattern {
+    id: string;
+    name: string;
+    canvas: LegacyPatternCanvas;
+    tiles: LegacyPatternTile[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PatternPoint {
+    id: string;
+    x: number; // normalized [0, 1]
+    y: number; // normalized [0, 1]
+}
+
 export interface Pattern {
     id: string;
     name: string;
-    canvas: PatternCanvas;
-    tiles: PatternTile[];
     createdAt: string;
     updatedAt: string;
+    points: PatternPoint[];
 }
 
 export type DriverPresenceSummary = 'ready' | 'stale' | 'offline';

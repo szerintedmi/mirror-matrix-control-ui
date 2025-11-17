@@ -2,8 +2,8 @@ import { getMirrorAssignment } from '../utils/grid';
 import { solveReflection } from '../utils/reflectionSolver';
 
 import type {
+    LegacyPattern,
     MirrorConfig,
-    Pattern,
     PlaybackPlanResult,
     PlaybackMirrorPlan,
     ProjectionSettings,
@@ -13,7 +13,7 @@ export interface PlaybackPlanningParams {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
     projectionSettings: ProjectionSettings;
-    pattern: Pattern | null;
+    pattern: LegacyPattern | null;
 }
 
 const cloneAssignment = (

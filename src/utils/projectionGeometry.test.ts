@@ -8,7 +8,9 @@ import {
     calculateProjectionSpan,
 } from './projectionGeometry';
 
-const mockPattern = {
+import type { LegacyPattern } from '../types';
+
+const mockPattern: LegacyPattern = {
     id: 'pattern-1',
     name: 'Test Pattern',
     canvas: { width: 100, height: 100 },

@@ -29,10 +29,10 @@ import { computeProjectionFootprint } from '../utils/projectionGeometry';
 import { solveReflection } from '../utils/reflectionSolver';
 
 import type {
+    LegacyPattern,
     MirrorReflectionSolution,
     OrientationInputMode,
     OrientationState,
-    Pattern,
     ProjectionSettings,
     ReflectionSolverResult,
     Vec3,
@@ -44,7 +44,7 @@ interface SimulationPageProps {
     onUpdateProjection: (patch: Partial<ProjectionSettings>) => void;
     projectionError: string | null;
     onClearProjectionError?: () => void;
-    patterns: Pattern[];
+    patterns: LegacyPattern[];
     hasUserPatterns: boolean;
     activePatternId: string | null;
     onSelectPattern: (patternId: string | null) => void;

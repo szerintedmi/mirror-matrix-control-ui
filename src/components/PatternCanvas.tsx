@@ -4,7 +4,7 @@ import { TILE_PLACEMENT_UNIT } from '../constants/pattern';
 
 import type { HoverState, TileDraft, EditorTool } from '../types/patternEditor';
 
-interface PatternCanvasProps {
+interface LegacyPatternCanvasProps {
     canvasSize: { rows: number; cols: number };
     canvasWidth: number;
     canvasHeight: number;
@@ -23,7 +23,7 @@ interface PatternCanvasProps {
     onPointerCancel: () => void;
 }
 
-const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
+const LegacyPatternCanvas: React.FC<LegacyPatternCanvasProps> = (props) => {
     const {
         canvasSize,
         canvasWidth,
@@ -193,4 +193,4 @@ const PatternCanvas: React.FC<PatternCanvasProps> = (props) => {
     );
 };
 
-export default PatternCanvas;
+export default LegacyPatternCanvas;

@@ -1,4 +1,4 @@
-import type { Pattern } from '../types';
+import type { LegacyPattern } from '../types';
 
 export const TILE_PLACEMENT_UNIT = 10;
 export const MAX_CANVAS_DIMENSION_UNITS = 1024;
@@ -14,7 +14,7 @@ export const INTENSITY_GAMMA = 1.4;
 export const SNAP_OVERLAP_EPSILON = 1e-3;
 export const FREE_OVERLAP_DISTANCE = TILE_PLACEMENT_UNIT * 0.45;
 
-const SINGLE_PIXEL_CENTER_PATTERN: Pattern = {
+const SINGLE_PIXEL_CENTER_PATTERN: LegacyPattern = {
     id: 'builtin-single-center',
     name: 'Single Pixel (center)',
     canvas: {
@@ -38,4 +38,6 @@ const SINGLE_PIXEL_CENTER_PATTERN: Pattern = {
     updatedAt: '1970-01-01T00:00:00.000Z',
 };
 
-export const BUILTIN_PATTERNS: readonly Pattern[] = Object.freeze([SINGLE_PIXEL_CENTER_PATTERN]);
+export const BUILTIN_PATTERNS: readonly LegacyPattern[] = Object.freeze([
+    SINGLE_PIXEL_CENTER_PATTERN,
+]);
