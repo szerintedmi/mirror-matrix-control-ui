@@ -829,17 +829,17 @@ export class CalibrationRunner {
             const dominantDimension = Math.max(referenceWidth, referenceHeight, 1);
             const normalizeX = referenceWidth > 0 ? dominantDimension / referenceWidth : 1;
             const normalizeY = referenceHeight > 0 ? dominantDimension / referenceHeight : 1;
-            const baseGap = Math.max(0, Math.min(1, this.settings.gridGapNormalized));
+            const normalizedGap = Math.max(0, Math.min(1, this.settings.gridGapNormalized)) * 2;
             let tileWidth = largestSize * normalizeX;
             let tileHeight = largestSize * normalizeY;
-            let gapX = baseGap * normalizeX;
-            let gapY = baseGap * normalizeY;
+            let gapX = normalizedGap * normalizeX;
+            let gapY = normalizedGap * normalizeY;
             let spacingX = tileWidth + gapX;
             let spacingY = tileHeight + gapY;
             const totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * gapX;
             const totalHeight = this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * gapY;
-            if (totalWidth > 1 || totalHeight > 1) {
-                const scale = 1 / Math.max(totalWidth, totalHeight);
+            if (totalWidth > 2 || totalHeight > 2) {
+                const scale = 2 / Math.max(totalWidth, totalHeight);
                 tileWidth *= scale;
                 tileHeight *= scale;
                 gapX *= scale;

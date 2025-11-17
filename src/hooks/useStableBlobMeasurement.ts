@@ -8,6 +8,7 @@ import {
 } from '@/constants/calibration';
 import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
+import { viewDeltaToCentered, viewToCentered } from '@/utils/centeredCoordinates';
 
 const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -196,6 +197,36 @@ const buildUnstableErrorMessage = ({
     return `Blob measurement unstable: ${descriptor} (${failingAxis.axis}) ${failingValue.toFixed(4)} exceeds ${DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT.toFixed(4)} (samples=${formatSampleList(samples)})`;
 };
 
+const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasurement => {
+    const convertStats = measurement.stats
+        ? {
+              ...measurement.stats,
+              thresholds: {
+                  ...measurement.stats.thresholds,
+                  maxMedianDeviationPt: measurement.stats.thresholds.maxMedianDeviationPt * 2,
+              },
+              median: {
+                  x: viewToCentered(measurement.stats.median.x),
+                  y: viewToCentered(measurement.stats.median.y),
+                  size: viewDeltaToCentered(measurement.stats.median.size),
+              },
+              medianAbsoluteDeviation: {
+                  x: viewDeltaToCentered(measurement.stats.medianAbsoluteDeviation.x),
+                  y: viewDeltaToCentered(measurement.stats.medianAbsoluteDeviation.y),
+                  size: viewDeltaToCentered(measurement.stats.medianAbsoluteDeviation.size),
+              },
+          }
+        : undefined;
+
+    return {
+        ...measurement,
+        x: viewToCentered(measurement.x),
+        y: viewToCentered(measurement.y),
+        size: viewDeltaToCentered(measurement.size),
+        stats: convertStats,
+    };
+};
+
 interface UseStableBlobMeasurementParams {
     readSample: () => BlobSample | null;
     detectionSequenceRef: MutableRefObject<number>;
@@ -252,7 +283,7 @@ export const useStableBlobMeasurement = ({
                                     }),
                                 );
                             }
-                            return measurement;
+                            return convertMeasurementToCentered(measurement);
                         }
                     }
                 }

@@ -17,6 +17,7 @@ import type {
 } from '@/services/opencvWorkerClient';
 import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
 import type { NormalizedRoi } from '@/types';
+import { centeredDeltaToView, centeredToView } from '@/utils/centeredCoordinates';
 
 import type React from 'react';
 
@@ -585,6 +586,11 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
+            const convertCoordToPixels = (value: number, dimension: number): number =>
+                centeredToView(value) * dimension;
+            const convertDeltaToPixels = (delta: number, dimension: number): number =>
+                centeredDeltaToView(delta) * dimension;
+
             const drawAlignmentCanvas = () => {
                 if (!alignmentOverlayVisibleRef.current || !summary?.gridBlueprint) {
                     return;
@@ -618,10 +624,16 @@ export const useCameraPipeline = ({
                         adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
                     const normalizedTop =
                         adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = normalizedLeft * sourceWidth;
-                    const pxTop = normalizedTop * sourceHeight;
-                    const pxWidth = blueprint.adjustedTileFootprint.width * sourceWidth;
-                    const pxHeight = blueprint.adjustedTileFootprint.height * sourceHeight;
+                    const pxLeft = convertCoordToPixels(normalizedLeft, sourceWidth);
+                    const pxTop = convertCoordToPixels(normalizedTop, sourceHeight);
+                    const pxWidth = convertDeltaToPixels(
+                        blueprint.adjustedTileFootprint.width,
+                        sourceWidth,
+                    );
+                    const pxHeight = convertDeltaToPixels(
+                        blueprint.adjustedTileFootprint.height,
+                        sourceHeight,
+                    );
                     const localLeft = (pxLeft - baseRect.x) * scaleX;
                     const localTop = (pxTop - baseRect.y) * scaleY;
                     const rectWidth = pxWidth * scaleX;
@@ -654,8 +666,12 @@ export const useCameraPipeline = ({
                         ? rotatePoint(entry.homeMeasurement)
                         : undefined;
                     if (measurement) {
-                        const measurementX = (measurement.x * sourceWidth - baseRect.x) * scaleX;
-                        const measurementY = (measurement.y * sourceHeight - baseRect.y) * scaleY;
+                        const measurementX =
+                            (convertCoordToPixels(measurement.x, sourceWidth) - baseRect.x) *
+                            scaleX;
+                        const measurementY =
+                            (convertCoordToPixels(measurement.y, sourceHeight) - baseRect.y) *
+                            scaleY;
                         ctx.fillStyle = '#facc15';
                         ctx.beginPath();
                         ctx.arc(measurementX, measurementY, 4, 0, Math.PI * 2);
@@ -773,10 +789,16 @@ export const useCameraPipeline = ({
                         adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
                     const normalizedTop =
                         adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = normalizedLeft * sourceWidth;
-                    const pxTop = normalizedTop * sourceHeight;
-                    const pxWidth = blueprint.adjustedTileFootprint.width * sourceWidth;
-                    const pxHeight = blueprint.adjustedTileFootprint.height * sourceHeight;
+                    const pxLeft = convertCoordToPixels(normalizedLeft, sourceWidth);
+                    const pxTop = convertCoordToPixels(normalizedTop, sourceHeight);
+                    const pxWidth = convertDeltaToPixels(
+                        blueprint.adjustedTileFootprint.width,
+                        sourceWidth,
+                    );
+                    const pxHeight = convertDeltaToPixels(
+                        blueprint.adjustedTileFootprint.height,
+                        sourceHeight,
+                    );
                     const localLeft = (pxLeft - baseRect.x) * scaleX;
                     const localTop = (pxTop - baseRect.y) * scaleY;
                     const localRight = localLeft + pxWidth * scaleX;
@@ -821,8 +843,12 @@ export const useCameraPipeline = ({
                         ? rotatePoint(entry.homeMeasurement)
                         : undefined;
                     if (measurement) {
-                        const measurementX = (measurement.x * sourceWidth - baseRect.x) * scaleX;
-                        const measurementY = (measurement.y * sourceHeight - baseRect.y) * scaleY;
+                        const measurementX =
+                            (convertCoordToPixels(measurement.x, sourceWidth) - baseRect.x) *
+                            scaleX;
+                        const measurementY =
+                            (convertCoordToPixels(measurement.y, sourceHeight) - baseRect.y) *
+                            scaleY;
                         runtime.circle(
                             overlayMat,
                             new runtime.Point(Math.round(measurementX), Math.round(measurementY)),

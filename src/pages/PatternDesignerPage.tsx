@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
-import PatternDesignerDebugPanel from '../components/patternDesigner/PatternDesignerDebugPanel';
-import { loadPatterns, persistPatterns } from '../services/patternStorage';
-
-import type { DesignerCoordinate } from '../components/patternDesigner/types';
-import type { Pattern, PatternPoint } from '../types';
+import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
+import type { DesignerCoordinate } from '@/components/patternDesigner/types';
+import { loadPatterns, persistPatterns } from '@/services/patternStorage';
+import type { Pattern, PatternPoint } from '@/types';
+import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
 
 interface PatternDesignerCanvasProps {
     pattern: Pattern;
@@ -12,10 +12,10 @@ interface PatternDesignerCanvasProps {
     onHoverChange?: (point: DesignerCoordinate | null) => void;
 }
 
-const BLOB_RADIUS = 0.02;
-const BLOB_DELETE_RADIUS = 0.03;
+const PATTERN_BLOB_RADIUS = 0.04;
+const PATTERN_DELETE_RADIUS = 0.06;
 
-const clamp01 = (value: number): number => {
+const clampUnit = (value: number): number => {
     if (Number.isNaN(value)) {
         return 0;
     }
@@ -48,13 +48,15 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
             const size = Math.min(bounds.width, bounds.height);
             const originX = bounds.left + (bounds.width - size) / 2;
             const originY = bounds.top + (bounds.height - size) / 2;
-            const x = clamp01((event.clientX - originX) / size);
-            const y = clamp01((event.clientY - originY) / size);
+            const viewX = clampUnit((event.clientX - originX) / size);
+            const viewY = clampUnit((event.clientY - originY) / size);
+            const normalizedX = viewToCentered(viewX);
+            const normalizedY = viewToCentered(viewY);
             const now = new Date().toISOString();
             const nextPoint: PatternPoint = {
                 id: createPointId(),
-                x,
-                y,
+                x: normalizedX,
+                y: normalizedY,
             };
             const nextPattern: Pattern = {
                 ...pattern,
@@ -84,9 +86,11 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
             const size = Math.min(bounds.width, bounds.height);
             const originX = bounds.left + (bounds.width - size) / 2;
             const originY = bounds.top + (bounds.height - size) / 2;
-            const x = clamp01((event.clientX - originX) / size);
-            const y = clamp01((event.clientY - originY) / size);
-            onHoverChange?.({ x, y });
+            const viewX = clampUnit((event.clientX - originX) / size);
+            const viewY = clampUnit((event.clientY - originY) / size);
+            const normalizedX = viewToCentered(viewX);
+            const normalizedY = viewToCentered(viewY);
+            onHoverChange?.({ x: normalizedX, y: normalizedY });
             if (!draggingPointId) {
                 return;
             }
@@ -98,8 +102,8 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                     point.id === draggingPointId
                         ? {
                               ...point,
-                              x,
-                              y,
+                              x: normalizedX,
+                              y: normalizedY,
                           }
                         : point,
                 ),
@@ -144,12 +148,28 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                     className="h-full w-full"
                 >
                     <rect x={0} y={0} width={1} height={1} fill="rgb(15,23,42)" />
+                    <line
+                        x1={0}
+                        y1={centeredToView(0)}
+                        x2={1}
+                        y2={centeredToView(0)}
+                        stroke="rgba(148, 163, 184, 0.25)"
+                        strokeWidth={0.0015}
+                    />
+                    <line
+                        x1={centeredToView(0)}
+                        y1={0}
+                        x2={centeredToView(0)}
+                        y2={1}
+                        stroke="rgba(148, 163, 184, 0.25)"
+                        strokeWidth={0.0015}
+                    />
                     {pattern.points.map((point) => (
                         <g key={point.id}>
                             <circle
-                                cx={point.x}
-                                cy={point.y}
-                                r={BLOB_RADIUS}
+                                cx={centeredToView(point.x)}
+                                cy={centeredToView(point.y)}
+                                r={centeredDeltaToView(PATTERN_BLOB_RADIUS)}
                                 fill="#22d3ee"
                                 stroke="#0f172a"
                                 strokeWidth={0.004}
@@ -159,9 +179,9 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                 }}
                             />
                             <circle
-                                cx={point.x}
-                                cy={point.y}
-                                r={BLOB_DELETE_RADIUS}
+                                cx={centeredToView(point.x)}
+                                cy={centeredToView(point.y)}
+                                r={centeredDeltaToView(PATTERN_DELETE_RADIUS)}
                                 fill="transparent"
                                 onClick={(event) => {
                                     event.stopPropagation();
@@ -313,8 +333,8 @@ const PatternDesignerPage: React.FC = () => {
             <PatternDesignerDebugPanel
                 pattern={selectedPattern}
                 hoverPoint={hoverPoint}
-                blobRadius={BLOB_RADIUS}
-                deleteRadius={BLOB_DELETE_RADIUS}
+                blobRadius={PATTERN_BLOB_RADIUS}
+                deleteRadius={PATTERN_DELETE_RADIUS}
             />
         </div>
     );

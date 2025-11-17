@@ -1,7 +1,7 @@
 import type { Pattern } from '../types';
 
 const STORAGE_KEY = 'mirror:calibration-patterns';
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 interface StoredPatternPoint {
     id: string;
@@ -39,7 +39,7 @@ const parsePoint = (input: unknown): StoredPatternPoint | null => {
     if (!isFiniteNumber(candidate.x) || !isFiniteNumber(candidate.y)) {
         return null;
     }
-    if (candidate.x < 0 || candidate.x > 1 || candidate.y < 0 || candidate.y > 1) {
+    if (candidate.x < -1 || candidate.x > 1 || candidate.y < -1 || candidate.y > 1) {
         return null;
     }
     return {

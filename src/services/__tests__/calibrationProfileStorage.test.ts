@@ -49,9 +49,9 @@ const createMirrorConfig = (): MirrorConfig =>
 
 const createRunnerState = (): CalibrationRunnerState => {
     const measurement = {
-        x: 0.45,
-        y: 0.55,
-        size: 0.08,
+        x: -0.18,
+        y: -0.12,
+        size: 0.16,
         response: 0.92,
         capturedAt: 1_704_000_000,
         sourceWidth: 1920,
@@ -60,19 +60,19 @@ const createRunnerState = (): CalibrationRunnerState => {
             sampleCount: 8,
             thresholds: {
                 minSamples: 5,
-                maxMedianDeviationPt: 0.005,
+                maxMedianDeviationPt: 0.01,
             },
-            median: { x: 0.45, y: 0.55, size: 0.08 },
-            medianAbsoluteDeviation: { x: 0.001, y: 0.001, size: 0.002 },
+            median: { x: -0.18, y: -0.12, size: 0.16 },
+            medianAbsoluteDeviation: { x: 0.002, y: 0.002, size: 0.004 },
             passed: true,
         },
     } as const;
 
     const summary: CalibrationRunSummary = {
         gridBlueprint: {
-            adjustedTileFootprint: { width: 0.11, height: 0.12 },
-            tileGap: { x: 0.02, y: 0.03 },
-            gridOrigin: { x: 0.05, y: 0.04 },
+            adjustedTileFootprint: { width: 0.22, height: 0.24 },
+            tileGap: { x: 0.04, y: 0.06 },
+            gridOrigin: { x: -0.9, y: -0.88 },
         },
         stepTestSettings: {
             deltaSteps: 450,
@@ -82,8 +82,8 @@ const createRunnerState = (): CalibrationRunnerState => {
                 tile: { row: 0, col: 0, key: '0-0' },
                 status: 'completed',
                 homeMeasurement: measurement,
-                homeOffset: { dx: 0.01, dy: -0.015 },
-                adjustedHome: { x: 0.4, y: 0.42 },
+                homeOffset: { dx: 0.02, dy: 0.02 },
+                adjustedHome: { x: -0.2, y: -0.1 },
                 stepToDisplacement: { x: 0.0005, y: 0.0006 },
                 sizeDeltaAtStepTest: 0.01,
             },
@@ -104,8 +104,8 @@ const createRunnerState = (): CalibrationRunnerState => {
                 status: 'completed',
                 metrics: {
                     home: measurement,
-                    homeOffset: { dx: 0.01, dy: -0.015 },
-                    adjustedHome: { x: 0.4, y: 0.42 },
+                    homeOffset: { dx: 0.02, dy: 0.02 },
+                    adjustedHome: { x: -0.2, y: -0.1 },
                     stepToDisplacement: { x: 0.0005, y: 0.0006 },
                     sizeDeltaAtStepTest: 0.01,
                 },
@@ -165,9 +165,9 @@ describe('calibrationProfileStorage', () => {
         expect(saved!.gridBlueprint).toBeTruthy();
         expect(saved!.tiles['0-0']).toMatchObject({
             status: 'completed',
-            homeOffset: { dx: 0.01, dy: -0.015 },
-            adjustedHome: { x: 0.4, y: 0.42 },
-            blobSize: 0.08,
+            homeOffset: { dx: 0.02, dy: 0.02 },
+            adjustedHome: { x: -0.2, y: -0.1 },
+            blobSize: 0.16,
         });
         expect(saved!.tiles['0-1']).toMatchObject({
             status: 'failed',

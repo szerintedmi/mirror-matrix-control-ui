@@ -71,8 +71,8 @@ export interface LegacyPattern {
 
 export interface PatternPoint {
     id: string;
-    x: number; // normalized [0, 1]
-    y: number; // normalized [0, 1]
+    x: number; // centered normalized [-1, 1]
+    y: number; // centered normalized [-1, 1]
 }
 
 export interface Pattern {

@@ -28,7 +28,7 @@ const createCalibratedTile = (row: number, col: number): CalibrationProfileTile 
     col,
     status: 'completed',
     error: null,
-    adjustedHome: { x: 0.5, y: 0.5 },
+    adjustedHome: { x: 0, y: 0 },
     homeOffset: { dx: 0, dy: 0 },
     homeMeasurement: null,
     stepToDisplacement: {
@@ -79,8 +79,8 @@ const createPattern = (pointCount: number): Pattern => ({
     updatedAt: new Date('2025-01-01T01:00:00.000Z').toISOString(),
     points: Array.from({ length: pointCount }, (_, index) => ({
         id: `pt-${index}`,
-        x: 0.5,
-        y: 0.5,
+        x: 0,
+        y: 0,
     })),
 });
 

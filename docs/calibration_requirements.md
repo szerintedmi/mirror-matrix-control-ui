@@ -335,7 +335,7 @@ For each profile:
 #### 3.8.2 Coordinate System
 
 - Every numeric value stored in a calibration profile is normalized into the same reference frame used by:
-  - The pattern editor/grid (`0–1` canvas coordinates per axis) and
+  - The pattern editor/grid (`-1…1` canvas coordinates per axis, centered at the origin) and
   - The projection/planner math (`reflectionSolver`).
 - This includes both `adjustedHome` coordinates and the associated `homeOffset` deltas so alignment math never mixes coordinate systems.
 - During calibration runs, any pixel or world-space measurements must be converted into this normalized frame **before** persisting.
@@ -346,7 +346,7 @@ For each profile:
   - Step-to-displacement factors.
   - Grid blueprint metadata (tile footprint, gap, origin).
 - This guarantees that playback can swap between legacy angle mode and calibration mode without additional per-profile transforms.
-- The **calibration-native pattern designer** (see §3.9.5) uses this same normalized playback frame, treated as a fixed **1:1 canvas** where both axes span `[0, 1]`.
+- The **calibration-native pattern designer** (see §3.9.5) uses this same normalized playback frame, treated as a fixed **1:1 canvas** where both axes span `[-1, 1]` and `(0,0)` sits at the center.
 
 #### 3.8.3 Save / Load Behavior
 
@@ -436,11 +436,12 @@ The calibration-based playback path uses a **new pattern designer and library** 
   - Calibration-native patterns do **not** depend on legacy pattern or projection storage; legacy entries can be removed without affecting the new flow.
 
 - **Canvas and alignment**
-  - The calibration-native pattern canvas has a fixed **1:1 aspect ratio**, representing the normalized playback coordinate system where both axes span `[0, 1]`.
+- The calibration-native pattern canvas has a fixed **1:1 aspect ratio**, representing the normalized playback coordinate system where both axes span `[-1, 1]` with `(0,0)` at the center.
+  - A subtle crosshair is rendered across the canvas at `(0,0)` so authors can immediately see the origin they are targeting.
   - For MVP, only a simple **center alignment** is supported: patterns are authored directly in this normalized frame and interpreted identically for all calibration profiles.
 
 - **Pattern semantics**
-  - Each pattern is a set of **normalized target points**; patterns are **profile-agnostic** and never store calibration profile identifiers.
+  - Each pattern is a set of **center-origin normalized target points** (`[-1, 1]` per axis); patterns are **profile-agnostic** and never store calibration profile identifiers.
   - Overlapping points are fully allowed: multiple pattern points may share identical normalized coordinates, as long as the total point count does not exceed the number of available mirrors.
   - The designer must preserve the existing **overlap shading** behavior from the current pattern editor (overlay counts and max-brightness logic) so authors can visualize concentration of points when they overlap.
 
@@ -453,7 +454,7 @@ The calibration-based playback path uses a **new pattern designer and library** 
 
 - **Behavior without a selected calibration profile**
   - When no calibration profile is selected, the designer uses reasonable defaults for:
-    - The effective canvas bounds (still `[0, 1] × [0, 1]`, but with default virtual grid density / framing).
+    - The effective canvas bounds (still `[-1, 1] × [-1, 1]`, but with default virtual grid density / framing).
     - Default blob size used for visualization.
   - These defaults are driven by shared constants and may be user-adjustable in the UI, but they are not persisted into calibration profiles.
 

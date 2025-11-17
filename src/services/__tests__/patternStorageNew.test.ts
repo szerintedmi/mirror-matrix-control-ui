@@ -42,8 +42,8 @@ const createPattern = (overrides?: Partial<Pattern>): Pattern => ({
     points: [
         {
             id: 'point-1',
-            x: 0.5,
-            y: 0.5,
+            x: 0,
+            y: 0,
         },
     ],
     ...overrides,
@@ -74,7 +74,7 @@ describe('patternStorage (new patterns)', () => {
         storage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                version: 1,
+                version: 2,
                 patterns: [
                     {
                         id: 'good-pattern',
@@ -84,8 +84,8 @@ describe('patternStorage (new patterns)', () => {
                         points: [
                             {
                                 id: 'point-1',
-                                x: 0.1,
-                                y: 0.2,
+                                x: -0.2,
+                                y: 0.4,
                             },
                         ],
                     },

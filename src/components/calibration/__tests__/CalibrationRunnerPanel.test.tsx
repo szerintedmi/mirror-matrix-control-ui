@@ -64,14 +64,14 @@ const pendingTile: TileRunState = {
 
 const completedMetrics: TileCalibrationMetrics = {
     home: {
-        x: 0.32,
-        y: 0.44,
-        size: 0.05,
+        x: -0.08,
+        y: 0.12,
+        size: 0.1,
         response: 0.9,
         capturedAt: 1_735_000_000,
     },
-    homeOffset: { dx: 0.01, dy: -0.02 },
-    adjustedHome: { x: 0.31, y: 0.46 },
+    homeOffset: { dx: 0.02, dy: -0.02 },
+    adjustedHome: { x: -0.1, y: 0.14 },
     stepToDisplacement: { x: 0.0005, y: -0.0004 },
     sizeDeltaAtStepTest: 0.01,
 };
@@ -85,9 +85,9 @@ const completedTile: TileRunState = {
 
 const summary: CalibrationRunSummary = {
     gridBlueprint: {
-        adjustedTileFootprint: { width: 0.2, height: 0.2 },
-        tileGap: { x: 0.05, y: 0.05 },
-        gridOrigin: { x: 0, y: 0 },
+        adjustedTileFootprint: { width: 0.24, height: 0.24 },
+        tileGap: { x: 0.04, y: 0.04 },
+        gridOrigin: { x: -0.8, y: -0.8 },
     },
     stepTestSettings: {
         deltaSteps: DEFAULT_CALIBRATION_RUNNER_SETTINGS.deltaSteps,
@@ -258,7 +258,7 @@ describe('CalibrationRunnerPanel homing actions', () => {
                     {
                         mac: 'mac-1',
                         motorId: 1,
-                        positionSteps: -20,
+                        positionSteps: -40,
                     },
                 ],
                 [
