@@ -26,63 +26,48 @@
 
 ## Working Practices
 
-### Planning notes
-
-- For bigger multi-step efforts, add a brief high level plan in `agent_notes/`. Use `yyyy-mm-dd-short-title-of-plan` filename format.
-- Keep notes concise: list tasks, mark status.
-- As you progress update the plan file with a short note about status of task progress.
-- Feel free to adjust the plan as you progreess - the goal is living context not a plan in stone.
-
 ### Clarify scope / requirements
 
-- For new features and techical decisions validate with user instead of assuming. Propose a reasonable MVP approach in a concise way for confirmation. If there are multiple questions always present it as numbered list.
+- For new or changed features and technical decisions validate with user instead of assuming. Propose a reasonable MVP approach in a concise way for confirmation.
+- If there are multiple questions always present it as numbered list.
 - Less code is better. Suggest feature trade-offs to reduce complexity.
 
-- Do not install new dependencies without explicit approval
-
-### Process for significant new features/epics
+### Process for non trivial features / refactors / tasks
 
 #### 1. Gather requirements, understand as-is
 
-The user might provided you requirements or pointed you to a relevant document or a section in a document. First read these documents, understand the as-is checking relevant code. If needed use web search to research further. Y
+The user might provided you requirements or pointed you to a relevant document or a section in a document. First read these documents, understand the as-is checking relevant code. If needed use web search to research further.
 
-Check if a relevant document already exist agent_notes for the feature. If it does ask user for instructions how to treat it.
-
-ou proceed to next step without user input unless you miss information to proceed.
+You proceed to next step without user input unless you miss information to proceed.
 
 #### 2. Clarify scope and confirm assumptions
 
-Based on your input and research you create a document for the feature in agent_notes: `yyyy-mm-dd-short-feature-name.md`.
+- Based on your input and research ask all clarifiying questions required for implementation
+- You are encouraged to challenge scope and features too if you deem there are better alternatives.
+- Include reasonable suggestions or assumptions for each question.
+- if there are viable alternatives very brielfy explain pro/cons of each alternative.
+- If there are multiple questions always present them as numbered list.
+- Feel free to ask follow up questions if required.
 
-Add all clarifiying questions required for implementation. Include reasonalble suggestions or assumptions for confirmation for each question.
+#### 3. Planning
 
-Include technical questions with proposals. If there are multiple questions always present it as numbered list.
-
-Use a format where the user can I add their answers inline.
-
-#### 3. Create a high level plan
-
-Once the user has confirmed they answered your questions inline feel free to ask follow up questions if required.
-
-If the scope and requirements are clear then proced to create a short step-by-step plan in the same document. Keep it concise. Make each task group end user testable - include a cleare acceptance criteria.
-
-Make sure you are explicit about automated tests: both unit tests and e2e tests for each task must be implemented too
-
-Make both the acceptance criteria and the tasks readable by using bullet points
-
-use [ ] format so we can track progres
+- When the scope and requirements are clear proceed to implementation using your planing tool if required.
+- Aim to plan as many steps as needed to achieve a bigger milestone which can be tested by the user. Think of the acceptance criteria at the end of your work.
+- Always consider refactor as part of your plan. If the resulting component becaming big or the complexity creeped includ then including refactoring in your plan.
+- Make sure you include creating/updating automated tests as part of your plan when it's relevant for the work.
 
 #### 4. Implement and validate
 
-- Once the user has reviewed the plan follow their instructions to start the implementation.
-- Try to implement as many steps as needed to achieve a feautre milestone which can be tested by the user
+- Do not install new dependencies without explicit prior approval
 - Before you report you are ready always run build , format, lint, test , test:e2e commands (in this order)
 - Always request elevated privileges if a command execution fails.
+- Think of overall struvture and complexity when you are implementing. If a component grew thousands of lines then maybe it's time to split it. Even when it's not big if there is a clear separation of concern for a new function/component then consider splitting it to keep clear separation of concerns among components.
 - Never mark a task as complete until you have successull build, format, lint, test, test:e2e runs.
 
-#### 5. Report your progress
+#### 5. Presenting your work and final message
 
-After each task finished mark the relevant task if complete and add instructions on how user can test the acceptence criteria if it's not obvious.
+- When finished make sure you include a concise list of what can be tested by the user from your work
+- For non trivial acceptance tests include brief instructions.
 
 ## Coding Style & Naming Conventions
 
