@@ -1,13 +1,19 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
+import PatternDesignerDebugPanel from '../components/patternDesigner/PatternDesignerDebugPanel';
 import { loadPatterns, persistPatterns } from '../services/patternStorage';
 
+import type { DesignerCoordinate } from '../components/patternDesigner/types';
 import type { Pattern, PatternPoint } from '../types';
 
 interface PatternDesignerCanvasProps {
     pattern: Pattern;
     onChange: (nextPattern: Pattern) => void;
+    onHoverChange?: (point: DesignerCoordinate | null) => void;
 }
+
+const BLOB_RADIUS = 0.02;
+const BLOB_DELETE_RADIUS = 0.03;
 
 const clamp01 = (value: number): number => {
     if (Number.isNaN(value)) {
@@ -25,7 +31,11 @@ const clamp01 = (value: number): number => {
 const createPointId = (): string =>
     `pt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, onChange }) => {
+const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
+    pattern,
+    onChange,
+    onHoverChange,
+}) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
 
@@ -66,7 +76,8 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, 
 
     const handleMouseMove = useCallback(
         (event: React.MouseEvent<HTMLDivElement>) => {
-            if (!draggingPointId || !containerRef.current) {
+            if (!containerRef.current) {
+                onHoverChange?.(null);
                 return;
             }
             const bounds = containerRef.current.getBoundingClientRect();
@@ -75,6 +86,10 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, 
             const originY = bounds.top + (bounds.height - size) / 2;
             const x = clamp01((event.clientX - originX) / size);
             const y = clamp01((event.clientY - originY) / size);
+            onHoverChange?.({ x, y });
+            if (!draggingPointId) {
+                return;
+            }
             const now = new Date().toISOString();
             const nextPattern: Pattern = {
                 ...pattern,
@@ -91,8 +106,13 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, 
             };
             onChange(nextPattern);
         },
-        [draggingPointId, onChange, pattern],
+        [draggingPointId, onChange, onHoverChange, pattern],
     );
+
+    const handleMouseLeave = useCallback(() => {
+        setDraggingPointId(null);
+        onHoverChange?.(null);
+    }, [onHoverChange]);
 
     const handleRemovePoint = useCallback(
         (pointId: string) => {
@@ -115,7 +135,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, 
                 onClick={handleAddPoint}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
                 role="presentation"
             >
                 <svg
@@ -129,7 +149,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, 
                             <circle
                                 cx={point.x}
                                 cy={point.y}
-                                r={0.02}
+                                r={BLOB_RADIUS}
                                 fill="#22d3ee"
                                 stroke="#0f172a"
                                 strokeWidth={0.004}
@@ -141,7 +161,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({ pattern, 
                             <circle
                                 cx={point.x}
                                 cy={point.y}
-                                r={0.03}
+                                r={BLOB_DELETE_RADIUS}
                                 fill="transparent"
                                 onClick={(event) => {
                                     event.stopPropagation();
@@ -165,10 +185,19 @@ const PatternDesignerPage: React.FC = () => {
     const [selectedPatternId, setSelectedPatternId] = useState<string | null>(
         patterns[0]?.id ?? null,
     );
+    const [hoverPoint, setHoverPoint] = useState<DesignerCoordinate | null>(null);
 
     const selectedPattern = useMemo(
         () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
         [patterns, selectedPatternId],
+    );
+
+    const handleSelectPattern = useCallback(
+        (patternId: string | null) => {
+            setSelectedPatternId(patternId);
+            setHoverPoint(null);
+        },
+        [setHoverPoint, setSelectedPatternId],
     );
 
     const handlePersist = (nextPatterns: Pattern[]) => {
@@ -199,14 +228,14 @@ const PatternDesignerPage: React.FC = () => {
         };
         const next = [...patterns, pattern];
         handlePersist(next);
-        setSelectedPatternId(pattern.id);
+        handleSelectPattern(pattern.id);
     };
 
     const handleDeletePattern = (patternId: string) => {
         const next = patterns.filter((pattern) => pattern.id !== patternId);
         handlePersist(next);
         if (selectedPatternId === patternId) {
-            setSelectedPatternId(next[0]?.id ?? null);
+            handleSelectPattern(next[0]?.id ?? null);
         }
     };
 
@@ -236,7 +265,7 @@ const PatternDesignerPage: React.FC = () => {
                                     <li key={pattern.id}>
                                         <button
                                             type="button"
-                                            onClick={() => setSelectedPatternId(pattern.id)}
+                                            onClick={() => handleSelectPattern(pattern.id)}
                                             className={`flex w-full items-center justify-between rounded-md px-2 py-1 text-left ${
                                                 isSelected
                                                     ? 'bg-cyan-900/60 text-cyan-100'
@@ -273,12 +302,20 @@ const PatternDesignerPage: React.FC = () => {
                         <PatternDesignerCanvas
                             pattern={selectedPattern}
                             onChange={handlePatternChange}
+                            onHoverChange={setHoverPoint}
                         />
                     ) : (
                         <p className="text-sm text-gray-500">Create a pattern to start editing.</p>
                     )}
                 </div>
             </div>
+
+            <PatternDesignerDebugPanel
+                pattern={selectedPattern}
+                hoverPoint={hoverPoint}
+                blobRadius={BLOB_RADIUS}
+                deleteRadius={BLOB_DELETE_RADIUS}
+            />
         </div>
     );
 };
