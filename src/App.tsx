@@ -260,8 +260,7 @@ const App: React.FC = () => {
     );
 
     const navigationControls: NavigationControls = { navigateTo, editPattern };
-    const effectiveNavPage: Page =
-        page === 'legacy-patterns-editor' ? 'legacy-patterns' : page;
+    const effectiveNavPage: Page = page === 'legacy-patterns-editor' ? 'legacy-patterns' : page;
     const editingPattern = useMemo(
         () =>
             editingPatternId

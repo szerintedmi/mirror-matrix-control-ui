@@ -142,4 +142,3 @@ describe('patternStorage (new patterns)', () => {
         expect(loaded[0].id).toBe('b');
     });
 });
-

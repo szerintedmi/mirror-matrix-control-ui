@@ -275,9 +275,7 @@ const PatternDesignerPage: React.FC = () => {
                             onChange={handlePatternChange}
                         />
                     ) : (
-                        <p className="text-sm text-gray-500">
-                            Create a pattern to start editing.
-                        </p>
+                        <p className="text-sm text-gray-500">Create a pattern to start editing.</p>
                     )}
                 </div>
             </div>
