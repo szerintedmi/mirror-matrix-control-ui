@@ -114,10 +114,10 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     );
 
     const handleMouseUp = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-        const target = event.target as SVGCircleElement | HTMLElement;
+        const target = event.target as SVGGraphicsElement | HTMLElement;
         const { activePointId, moved } = dragStateRef.current;
         const endedOnDraggedPoint =
-            target instanceof SVGCircleElement &&
+            target instanceof SVGGraphicsElement &&
             activePointId !== null &&
             target.dataset.pointId === activePointId;
         setDraggingPointId(null);
@@ -203,7 +203,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     );
 
     const handlePointClick = useCallback(
-        (event: React.MouseEvent<SVGCircleElement>, pointId: string) => {
+        (event: React.MouseEvent<SVGGraphicsElement>, pointId: string) => {
             event.stopPropagation();
             if (editMode === 'erase') {
                 handleRemovePoint(pointId);
@@ -271,13 +271,18 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                     />
                     {pattern.points.map((point) => {
                         const isEraseHover = editMode === 'erase' && hoveredPointId === point.id;
+                        const viewX = centeredToView(point.x);
+                        const viewY = centeredToView(point.y);
+                        const halfSize = centeredDeltaToView(blobRadius);
+                        const size = halfSize * 2;
                         return (
-                            <circle
+                            <rect
                                 key={point.id}
                                 data-point-id={point.id}
-                                cx={centeredToView(point.x)}
-                                cy={centeredToView(point.y)}
-                                r={centeredDeltaToView(blobRadius)}
+                                x={viewX - halfSize}
+                                y={viewY - halfSize}
+                                width={size}
+                                height={size}
                                 fill={isEraseHover ? '#f87171' : '#22d3ee'}
                                 fillOpacity={editMode === 'erase' && !isEraseHover ? 0.45 : 1}
                                 stroke={isEraseHover ? '#fecaca' : '#0f172a'}
