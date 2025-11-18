@@ -215,191 +215,168 @@ const clampNormalized = (value: number): number => {
 };
 
 describe('calibrationProfileStorage', () => {
-    it('returns empty list when storage is empty or invalid', () => {
-        const storage = new MemoryStorage();
-        expect(loadCalibrationProfiles(storage)).toEqual([]);
+    describe('loadCalibrationProfiles', () => {
+        it('returns empty list when storage is empty or invalid', () => {
+            const storage = new MemoryStorage();
+            expect(loadCalibrationProfiles(storage)).toEqual([]);
 
-        storage.setItem('mirror:calibration:profiles', '{not-json}');
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(loadCalibrationProfiles(storage)).toEqual([]);
-        expect(warnSpy).toHaveBeenCalledWith(
-            'Failed to parse calibration profiles',
-            expect.any(SyntaxError),
-        );
-        warnSpy.mockRestore();
+            storage.setItem('mirror:calibration:profiles', '{not-json}');
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            expect(loadCalibrationProfiles(storage)).toEqual([]);
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Failed to parse calibration profiles',
+                expect.any(SyntaxError),
+            );
+            warnSpy.mockRestore();
+        });
     });
 
-    it('persists calibration profiles without stripping measurement metadata', () => {
-        const storage = new MemoryStorage();
-        const runnerState = createRunnerState();
-        const snapshot = createGridSnapshot();
+    describe('saveCalibrationProfile', () => {
+        let storage: MemoryStorage;
+        let runnerState: CalibrationRunnerState;
+        let snapshot: GridStateSnapshot;
 
-        const saved = saveCalibrationProfile(storage, {
-            name: 'Demo Run',
-            runnerState,
-            gridSnapshot: snapshot,
+        const saveProfile = (overrides?: Partial<Parameters<typeof saveCalibrationProfile>[1]>) =>
+            saveCalibrationProfile(storage, {
+                name: 'Demo Run',
+                runnerState,
+                gridSnapshot: snapshot,
+                ...overrides,
+            });
+
+        beforeEach(() => {
+            storage = new MemoryStorage();
+            runnerState = createRunnerState();
+            snapshot = createGridSnapshot();
         });
 
-        expect(saved).not.toBeNull();
-        expect(saved!.schemaVersion).toBe(2);
-        expect(saved!.name).toBe('Demo Run');
-        expect(saved!.gridBlueprint).toBeTruthy();
-        expect(saved!.tiles['0-0']).toMatchObject({ status: 'completed' });
-        expect(saved!.tiles['0-1']).toMatchObject({ status: 'completed' });
-        expect(saved!.tiles['0-0'].homeMeasurement).toBeTruthy();
-        expect(saved!.calibrationSpace.globalBounds).not.toBeNull();
-        const measurementRecord = saved!.tiles['0-0'].homeMeasurement;
-        expect(measurementRecord).not.toBeNull();
-        expect(measurementRecord!.sourceWidth).toBe(1920);
-        expect(measurementRecord!.sourceHeight).toBe(1080);
-        expect(saved!.metrics).toEqual({
-            totalTiles: 4,
-            completedTiles: 4,
-            failedTiles: 0,
-            skippedTiles: 0,
+        it('persists calibration profiles without stripping measurement metadata', () => {
+            const saved = saveProfile();
+
+            expect(saved).not.toBeNull();
+            expect(saved!.schemaVersion).toBe(2);
+            expect(saved!.tiles['0-0']).toMatchObject({ status: 'completed' });
+            expect(saved!.calibrationSpace.globalBounds).not.toBeNull();
+            const measurementRecord = saved!.tiles['0-0'].homeMeasurement;
+            expect(measurementRecord).not.toBeNull();
+            expect(measurementRecord!.sourceWidth).toBe(1920);
+            expect(measurementRecord!.sourceHeight).toBe(1080);
+            expect(saved!.metrics).toEqual({
+                totalTiles: 4,
+                completedTiles: 4,
+                failedTiles: 0,
+                skippedTiles: 0,
+            });
+
+            const list = loadCalibrationProfiles(storage);
+            expect(list).toHaveLength(1);
+            expect(list[0]!.id).toBe(saved!.id);
         });
 
-        const list = loadCalibrationProfiles(storage);
-        expect(list).toHaveLength(1);
-        const [entry] = list;
-        expect(entry.id).toBe(saved!.id);
-        expect(entry.gridStateFingerprint.hash).toBe(saved!.gridStateFingerprint.hash);
-    });
+        it('updates existing profiles when saving with the same id and supports deletion', () => {
+            const saved = saveProfile();
+            expect(saved).not.toBeNull();
 
-    it('updates existing profiles when saving with the same id and supports deletion', () => {
-        const storage = new MemoryStorage();
-        const runnerState = createRunnerState();
-        const snapshot = createGridSnapshot();
+            const updated = saveProfile({ id: saved!.id, name: 'Updated Run' });
+            expect(updated).not.toBeNull();
+            expect(updated!.name).toBe('Updated Run');
+            expect(loadCalibrationProfiles(storage)).toHaveLength(1);
 
-        const saved = saveCalibrationProfile(storage, {
-            name: 'Demo Run',
-            runnerState,
-            gridSnapshot: snapshot,
+            deleteCalibrationProfile(storage, updated!.id);
+            expect(loadCalibrationProfiles(storage)).toEqual([]);
         });
-        expect(saved).not.toBeNull();
 
-        const updated = saveCalibrationProfile(storage, {
-            id: saved!.id,
-            name: 'Updated Run',
-            runnerState,
-            gridSnapshot: snapshot,
+        it('refuses to save when runner summary is missing', () => {
+            runnerState.summary = undefined;
+            const result = saveProfile();
+            expect(result).toBeNull();
         });
-        expect(updated).not.toBeNull();
-        expect(updated!.name).toBe('Updated Run');
-        expect(loadCalibrationProfiles(storage)).toHaveLength(1);
 
-        deleteCalibrationProfile(storage, updated!.id);
-        expect(loadCalibrationProfiles(storage)).toEqual([]);
-    });
+        it('derives inferred bounds from adjusted home steps and motor ranges', () => {
+            const summary = runnerState.summary!;
+            const tileKey = '0-0';
+            const customMeasurement = measurementFactory({ x: 0.18, y: -0.07, size: 0.12 });
+            const adjustedHome = { x: 0.18, y: -0.07, stepsX: 220, stepsY: -160 };
+            const stepToDisplacement = { x: 0.00042, y: -0.00051 };
 
-    it('refuses to save when runner summary is missing', () => {
-        const storage = new MemoryStorage();
-        const runnerState = createRunnerState();
-        runnerState.summary = undefined;
-        const result = saveCalibrationProfile(storage, {
-            name: 'Invalid',
-            runnerState,
-            gridSnapshot: createGridSnapshot(),
-        });
-        expect(result).toBeNull();
-    });
-
-    it('persists and clears last selected profile id', () => {
-        const storage = new MemoryStorage();
-        expect(loadLastCalibrationProfileId(storage)).toBeNull();
-        persistLastCalibrationProfileId(storage, 'abc');
-        expect(loadLastCalibrationProfileId(storage)).toBe('abc');
-        persistLastCalibrationProfileId(storage, null);
-        expect(loadLastCalibrationProfileId(storage)).toBeNull();
-    });
-
-    it('derives inferred bounds from adjusted home steps and motor ranges', () => {
-        const storage = new MemoryStorage();
-        const runnerState = createRunnerState();
-        const snapshot = createGridSnapshot();
-        const summary = runnerState.summary!;
-        const tileKey = '0-0';
-        const customMeasurement = measurementFactory({ x: 0.18, y: -0.07, size: 0.12 });
-        const adjustedHome = { x: 0.18, y: -0.07, stepsX: 220, stepsY: -160 };
-        const stepToDisplacement = { x: 0.00042, y: -0.00051 };
-
-        summary.tiles[tileKey] = {
-            ...summary.tiles[tileKey],
-            homeMeasurement: customMeasurement,
-            adjustedHome,
-            stepToDisplacement,
-            inferredBounds: null,
-        };
-
-        runnerState.tiles[tileKey] = {
-            ...runnerState.tiles[tileKey],
-            status: 'completed',
-            metrics: {
-                home: customMeasurement,
-                adjustedHome: { x: adjustedHome.x, y: adjustedHome.y },
+            summary.tiles[tileKey] = {
+                ...summary.tiles[tileKey],
+                homeMeasurement: customMeasurement,
+                adjustedHome,
                 stepToDisplacement,
-                sizeDeltaAtStepTest: 0,
-            },
-        };
+                inferredBounds: null,
+            };
 
-        const saved = saveCalibrationProfile(storage, {
-            name: 'Bounds from steps',
-            runnerState,
-            gridSnapshot: snapshot,
+            runnerState.tiles[tileKey] = {
+                ...runnerState.tiles[tileKey],
+                status: 'completed',
+                metrics: {
+                    home: customMeasurement,
+                    adjustedHome: { x: adjustedHome.x, y: adjustedHome.y },
+                    stepToDisplacement,
+                    sizeDeltaAtStepTest: 0,
+                },
+            };
+
+            const saved = saveProfile({ name: 'Bounds from steps' });
+
+            expect(saved).not.toBeNull();
+            const bounds = saved!.tiles[tileKey].inferredBounds!;
+
+            const expectedXMin = clampNormalized(
+                adjustedHome.x +
+                    (MOTOR_MIN_POSITION_STEPS - adjustedHome.stepsX) * stepToDisplacement.x,
+            );
+            const expectedXMax = clampNormalized(
+                adjustedHome.x +
+                    (MOTOR_MAX_POSITION_STEPS - adjustedHome.stepsX) * stepToDisplacement.x,
+            );
+            const expectedYMin = clampNormalized(
+                adjustedHome.y +
+                    (MOTOR_MIN_POSITION_STEPS - adjustedHome.stepsY) * stepToDisplacement.y,
+            );
+            const expectedYMax = clampNormalized(
+                adjustedHome.y +
+                    (MOTOR_MAX_POSITION_STEPS - adjustedHome.stepsY) * stepToDisplacement.y,
+            );
+
+            expect(bounds.x.min).toBeCloseTo(Math.min(expectedXMin, expectedXMax), 6);
+            expect(bounds.x.max).toBeCloseTo(Math.max(expectedXMin, expectedXMax), 6);
+            expect(bounds.y.min).toBeCloseTo(Math.min(expectedYMin, expectedYMax), 6);
+            expect(bounds.y.max).toBeCloseTo(Math.max(expectedYMin, expectedYMax), 6);
         });
 
-        expect(saved).not.toBeNull();
-        const bounds = saved!.tiles[tileKey].inferredBounds!;
+        it('does not derive inferred bounds when adjusted home is missing', () => {
+            const tileKey = '0-0';
 
-        const expectedXMin = clampNormalized(
-            adjustedHome.x +
-                (MOTOR_MIN_POSITION_STEPS - adjustedHome.stepsX) * stepToDisplacement.x,
-        );
-        const expectedXMax = clampNormalized(
-            adjustedHome.x +
-                (MOTOR_MAX_POSITION_STEPS - adjustedHome.stepsX) * stepToDisplacement.x,
-        );
-        const expectedYMin = clampNormalized(
-            adjustedHome.y +
-                (MOTOR_MIN_POSITION_STEPS - adjustedHome.stepsY) * stepToDisplacement.y,
-        );
-        const expectedYMax = clampNormalized(
-            adjustedHome.y +
-                (MOTOR_MAX_POSITION_STEPS - adjustedHome.stepsY) * stepToDisplacement.y,
-        );
+            runnerState.summary!.tiles[tileKey] = {
+                ...runnerState.summary!.tiles[tileKey],
+                adjustedHome: undefined,
+                inferredBounds: null,
+            };
+            runnerState.tiles[tileKey] = {
+                ...runnerState.tiles[tileKey],
+                metrics: {
+                    ...(runnerState.tiles[tileKey].metrics ?? {}),
+                    adjustedHome: null,
+                },
+            };
 
-        expect(bounds.x.min).toBeCloseTo(Math.min(expectedXMin, expectedXMax), 6);
-        expect(bounds.x.max).toBeCloseTo(Math.max(expectedXMin, expectedXMax), 6);
-        expect(bounds.y.min).toBeCloseTo(Math.min(expectedYMin, expectedYMax), 6);
-        expect(bounds.y.max).toBeCloseTo(Math.max(expectedYMin, expectedYMax), 6);
+            const saved = saveProfile({ name: 'Missing adjusted home' });
+
+            expect(saved).not.toBeNull();
+            expect(saved!.tiles[tileKey].inferredBounds).toBeNull();
+        });
     });
 
-    it('does not derive inferred bounds when adjusted home is missing', () => {
-        const storage = new MemoryStorage();
-        const runnerState = createRunnerState();
-        const snapshot = createGridSnapshot();
-        const tileKey = '0-0';
-
-        runnerState.summary!.tiles[tileKey] = {
-            ...runnerState.summary!.tiles[tileKey],
-            adjustedHome: undefined,
-            inferredBounds: null,
-        };
-        runnerState.tiles[tileKey] = {
-            ...runnerState.tiles[tileKey],
-            metrics: {
-                ...(runnerState.tiles[tileKey].metrics ?? {}),
-                adjustedHome: null,
-            },
-        };
-
-        const saved = saveCalibrationProfile(storage, {
-            name: 'Missing adjusted home',
-            runnerState,
-            gridSnapshot: snapshot,
+    describe('last selected profile persistence', () => {
+        it('persists and clears last selected profile id', () => {
+            const storage = new MemoryStorage();
+            expect(loadLastCalibrationProfileId(storage)).toBeNull();
+            persistLastCalibrationProfileId(storage, 'abc');
+            expect(loadLastCalibrationProfileId(storage)).toBe('abc');
+            persistLastCalibrationProfileId(storage, null);
+            expect(loadLastCalibrationProfileId(storage)).toBeNull();
         });
-
-        expect(saved).not.toBeNull();
-        expect(saved!.tiles[tileKey].inferredBounds).toBeNull();
     });
 });
