@@ -8,6 +8,7 @@ import {
     ArrayConfigIcon,
     CalibrationIcon,
     ConnectionIcon,
+    PlaybackIcon,
     PatternsIcon,
     LegacyPlaybackIcon,
     SimulationIcon,
@@ -24,6 +25,7 @@ import LegacyPlaybackPage from './pages/LegacyPlaybackPage';
 import PatternDesignerPage from './pages/PatternDesignerPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
+import PlaybackPage from './pages/PlaybackPage';
 import SimulationPage from './pages/SimulationPage';
 import {
     bootstrapGridSnapshots,
@@ -48,6 +50,7 @@ export type Page =
     | 'legacy-patterns-editor'
     | 'patterns'
     | 'legacy-playback'
+    | 'playback'
     | 'calibration'
     | 'configurator'
     | 'simulation'
@@ -278,6 +281,11 @@ const App: React.FC = () => {
             icon: <LegacyPlaybackIcon />,
         },
         {
+            page: 'playback' as const,
+            label: 'Playback',
+            icon: <PlaybackIcon />,
+        },
+        {
             page: 'calibration' as const,
             label: 'Calibration',
             icon: <CalibrationIcon />,
@@ -410,6 +418,8 @@ const App: React.FC = () => {
                 );
             case 'patterns':
                 return <PatternDesignerPage />;
+            case 'playback':
+                return <PlaybackPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
             case 'legacy-patterns':
             default:
                 return (
@@ -435,6 +445,8 @@ const App: React.FC = () => {
                 return 'Patterns';
             case 'legacy-playback':
                 return 'Playback (legacy)';
+            case 'playback':
+                return 'Playback';
             case 'calibration':
                 return 'Calibration';
             case 'configurator':

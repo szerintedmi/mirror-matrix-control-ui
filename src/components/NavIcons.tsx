@@ -86,6 +86,23 @@ export const LegacyPlaybackIcon: React.FC = () => (
     </svg>
 );
 
+export const PlaybackIcon: React.FC = () => (
+    <svg
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="h-5 w-5"
+    >
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M8 9h4" strokeLinecap="round" />
+        <path d="M8 12h3" strokeLinecap="round" />
+        <path d="M15 9.5v5l4-2.5-4-2.5z" fill="currentColor" stroke="none" />
+    </svg>
+);
+
 export const CalibrationIcon: React.FC = () => (
     <svg
         aria-hidden="true"

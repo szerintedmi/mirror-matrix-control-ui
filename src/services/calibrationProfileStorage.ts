@@ -18,6 +18,7 @@ import type {
     TileAxisCalibration,
     TileCalibrationResults,
 } from '@/types';
+import { STEP_EPSILON, clampNormalized, convertDeltaToSteps } from '@/utils/calibrationMath';
 
 const STORAGE_KEY = 'mirror:calibration:profiles';
 const LAST_SELECTED_PROFILE_KEY = 'mirror:calibration:last-profile-id';
@@ -41,21 +42,7 @@ type PositionInput = {
     stepsY?: number | null;
 };
 
-const STEP_EPSILON = 1e-9;
 const NORMALIZED_MAD_FACTOR = 1.4826;
-
-const clampNormalized = (value: number): number => {
-    if (!Number.isFinite(value)) {
-        return 0;
-    }
-    if (value < -1) {
-        return -1;
-    }
-    if (value > 1) {
-        return 1;
-    }
-    return value;
-};
 
 const computeMedian = (values: number[]): number => {
     if (values.length === 0) {
@@ -67,17 +54,6 @@ const computeMedian = (values: number[]): number => {
         return (sorted[mid - 1] + sorted[mid]) / 2;
     }
     return sorted[mid];
-};
-
-const convertDeltaToSteps = (
-    delta: number | null | undefined,
-    perStep: number | null | undefined,
-): number | null => {
-    if (delta == null || perStep == null || Math.abs(perStep) < STEP_EPSILON) {
-        return null;
-    }
-    const steps = delta / perStep;
-    return Number.isFinite(steps) ? steps : null;
 };
 
 const normalizeStepVector = (input?: StepVector | null): StepVector => ({

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { MirrorConfig } from '@/types';
+import { clampNormalized } from '@/utils/calibrationMath';
 
 import {
     deleteCalibrationProfile,
@@ -200,19 +201,6 @@ const createGridSnapshot = (): GridStateSnapshot => ({
     gridSize: { rows: 2, cols: 2 },
     mirrorConfig: createMirrorConfig(),
 });
-
-const clampNormalized = (value: number): number => {
-    if (!Number.isFinite(value)) {
-        return 0;
-    }
-    if (value < -1) {
-        return -1;
-    }
-    if (value > 1) {
-        return 1;
-    }
-    return value;
-};
 
 describe('calibrationProfileStorage', () => {
     describe('loadCalibrationProfiles', () => {
