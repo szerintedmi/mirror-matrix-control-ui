@@ -399,6 +399,13 @@ const PatternDesignerPage: React.FC = () => {
         }
         return DEFAULT_BLOB_RADIUS;
     }, [selectedCalibrationProfile]);
+    const placedSpotCount = selectedPattern?.points.length ?? 0;
+    const availableSpotCount =
+        selectedCalibrationProfile?.metrics.completedTiles ??
+        selectedCalibrationProfile?.metrics.totalTiles ??
+        0;
+    const showSpotSummary = Boolean(selectedCalibrationProfile);
+    const spotsOverCapacity = showSpotSummary && placedSpotCount > availableSpotCount;
 
     const handleSelectPattern = useCallback(
         (patternId: string | null) => {
@@ -609,6 +616,16 @@ const PatternDesignerPage: React.FC = () => {
                             onRefresh={refreshCalibrationProfiles}
                             label="Calibration Profile (optional)"
                             placeholder="No calibration profiles"
+                            selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
+                            rightAccessory={
+                                showSpotSummary ? (
+                                    <span
+                                        className={`whitespace-nowrap ${spotsOverCapacity ? 'text-red-300' : 'text-gray-300'}`}
+                                    >
+                                        Spots: {placedSpotCount} / {availableSpotCount}
+                                    </span>
+                                ) : null
+                            }
                         />
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-3">
