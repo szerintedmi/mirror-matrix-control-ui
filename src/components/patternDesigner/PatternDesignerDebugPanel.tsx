@@ -8,6 +8,13 @@ interface PatternDesignerDebugPanelProps {
     hoverPoint: DesignerCoordinate | null;
     blobRadius: number;
     editMode: PatternEditMode;
+    calibrationTileBounds: Array<{
+        id: string;
+        xMin: number;
+        xMax: number;
+        yMin: number;
+        yMax: number;
+    }>;
 }
 
 const formatCoordinate = (value: number): string => value.toFixed(3);
@@ -19,6 +26,7 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
     hoverPoint,
     blobRadius,
     editMode,
+    calibrationTileBounds,
 }) => {
     const points = pattern?.points ?? [];
 
@@ -73,6 +81,35 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
                                 </li>
                             ))}
                         </ul>
+                    )}
+                </details>
+                <details className="rounded-md bg-gray-800/60 p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-gray-100">
+                        Calibration Tiles ({calibrationTileBounds.length})
+                    </summary>
+                    {calibrationTileBounds.length === 0 ? (
+                        <p className="mt-2 text-xs text-gray-500">
+                            Select a calibration profile to inspect tile bounds.
+                        </p>
+                    ) : (
+                        <div className="mt-2 space-y-2">
+                            {calibrationTileBounds.map((tile) => (
+                                <div
+                                    key={tile.id}
+                                    className="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200"
+                                >
+                                    <p className="font-mono text-[11px] text-gray-400">
+                                        Tile {tile.id}
+                                    </p>
+                                    <div className="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                        <span>x min: {formatCoordinate(tile.xMin)}</span>
+                                        <span>x max: {formatCoordinate(tile.xMax)}</span>
+                                        <span>y min: {formatCoordinate(tile.yMin)}</span>
+                                        <span>y max: {formatCoordinate(tile.yMax)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </details>
             </div>

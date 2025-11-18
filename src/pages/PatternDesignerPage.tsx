@@ -23,6 +23,14 @@ interface PatternDesignerCanvasProps {
     onHoverChange?: (point: DesignerCoordinate | null) => void;
     onHoverPointChange?: (pointId: string | null) => void;
     blobRadius: number;
+    showBounds: boolean;
+    tileBounds: Array<{
+        id: string;
+        xMin: number;
+        xMax: number;
+        yMin: number;
+        yMax: number;
+    }>;
 }
 
 interface RenameDialogState {
@@ -60,6 +68,8 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     onHoverChange,
     onHoverPointChange,
     blobRadius,
+    showBounds,
+    tileBounds,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const dragStateRef = useRef<{
@@ -297,6 +307,28 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                             />
                         );
                     })}
+                    {showBounds &&
+                        tileBounds.map((bound) => {
+                            const xMin = centeredToView(bound.xMin);
+                            const xMax = centeredToView(bound.xMax);
+                            const yMin = centeredToView(bound.yMin);
+                            const yMax = centeredToView(bound.yMax);
+                            const width = Math.max(0, xMax - xMin);
+                            const height = Math.max(0, yMax - yMin);
+                            return (
+                                <rect
+                                    key={`bounds-${bound.id}`}
+                                    x={xMin}
+                                    y={yMin}
+                                    width={width}
+                                    height={height}
+                                    fill="none"
+                                    stroke="rgba(250, 204, 21, 0.45)"
+                                    strokeWidth={0.0008}
+                                    pointerEvents="none"
+                                />
+                            );
+                        })}
                 </svg>
             </div>
         </div>
@@ -316,6 +348,7 @@ const PatternDesignerPage: React.FC = () => {
     const [editMode, setEditMode] = useState<PatternEditMode>('placement');
     const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
+    const [showBounds, setShowBounds] = useState(false);
     const renameInputId = 'pattern-rename-input';
     const isRenameDisabled = !renameState || renameState.value.trim().length === 0;
     const initialCalibrationState = useMemo(() => {
@@ -406,6 +439,25 @@ const PatternDesignerPage: React.FC = () => {
         0;
     const showSpotSummary = Boolean(selectedCalibrationProfile);
     const spotsOverCapacity = showSpotSummary && placedSpotCount > availableSpotCount;
+    const calibrationTileBounds = useMemo(() => {
+        if (!selectedCalibrationProfile) {
+            return [];
+        }
+        return Object.entries(selectedCalibrationProfile.tiles)
+            .map(([id, tile]) => {
+                if (!tile.inferredBounds) {
+                    return null;
+                }
+                return {
+                    id,
+                    xMin: tile.inferredBounds.x.min,
+                    xMax: tile.inferredBounds.x.max,
+                    yMin: tile.inferredBounds.y.min,
+                    yMax: tile.inferredBounds.y.max,
+                };
+            })
+            .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+    }, [selectedCalibrationProfile]);
 
     const handleSelectPattern = useCallback(
         (patternId: string | null) => {
@@ -628,34 +680,47 @@ const PatternDesignerPage: React.FC = () => {
                             }
                         />
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
-                            <span className="uppercase tracking-wide text-gray-400">Mode</span>
-                            <div className="inline-flex rounded-md bg-gray-800/70 p-1">
-                                {(['placement', 'erase'] as PatternEditMode[]).map((mode) => {
-                                    const isActive = editMode === mode;
-                                    const hotkey = mode === 'placement' ? 'P' : 'E';
-                                    return (
-                                        <button
-                                            key={mode}
-                                            type="button"
-                                            onClick={() => updateEditMode(mode)}
-                                            className={`${
-                                                isActive
-                                                    ? 'bg-cyan-600 text-white'
-                                                    : 'text-gray-300 hover:text-white'
-                                            } rounded px-3 py-1 text-xs font-semibold transition`}
-                                            aria-pressed={isActive}
-                                        >
-                                            {EDIT_MODE_LABEL[mode]} ({hotkey})
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                    <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-200">
+                        <span className="uppercase tracking-wide text-gray-400">Mode</span>
+                        <div className="inline-flex rounded-md bg-gray-800/70 p-1">
+                            {(['placement', 'erase'] as PatternEditMode[]).map((mode) => {
+                                const isActive = editMode === mode;
+                                const hotkey = mode === 'placement' ? 'P' : 'E';
+                                return (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => updateEditMode(mode)}
+                                        className={`${
+                                            isActive
+                                                ? 'bg-cyan-600 text-white'
+                                                : 'text-gray-300 hover:text-white'
+                                        } rounded px-3 py-1 text-xs font-semibold transition`}
+                                        aria-pressed={isActive}
+                                    >
+                                        {EDIT_MODE_LABEL[mode]} ({hotkey})
+                                    </button>
+                                );
+                            })}
                         </div>
-                        <p className="text-[11px] text-gray-400">
-                            Keyboard shortcuts: press P for placement, E for erase.
-                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowBounds((previous) => !previous)}
+                            disabled={!showSpotSummary}
+                            aria-pressed={showBounds}
+                            className={`rounded px-3 py-1 text-xs font-semibold transition ${
+                                showBounds
+                                    ? 'bg-cyan-600 text-white'
+                                    : 'text-gray-300 hover:text-white'
+                            } ${!showSpotSummary ? 'cursor-not-allowed opacity-50 hover:text-gray-300' : ''}`}
+                            title={
+                                showSpotSummary
+                                    ? 'Toggle calibration tile bounds overlay'
+                                    : 'Select a calibration profile to view bounds'
+                            }
+                        >
+                            Show Bounds
+                        </button>
                     </div>
                     <div className="flex flex-1 items-center justify-center">
                         {selectedPattern ? (
@@ -667,6 +732,12 @@ const PatternDesignerPage: React.FC = () => {
                                 onHoverChange={setHoverPoint}
                                 onHoverPointChange={setHoveredPatternPointId}
                                 blobRadius={calibratedBlobRadius}
+                                showBounds={
+                                    showBounds &&
+                                    showSpotSummary &&
+                                    calibrationTileBounds.length > 0
+                                }
+                                tileBounds={calibrationTileBounds}
                             />
                         ) : (
                             <p className="text-sm text-gray-500">
@@ -682,6 +753,7 @@ const PatternDesignerPage: React.FC = () => {
                 hoverPoint={hoverPoint}
                 blobRadius={calibratedBlobRadius}
                 editMode={editMode}
+                calibrationTileBounds={calibrationTileBounds}
             />
 
             <Modal
