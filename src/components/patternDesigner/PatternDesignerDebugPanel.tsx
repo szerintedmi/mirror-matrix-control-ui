@@ -1,22 +1,24 @@
 import React from 'react';
 
-import type { DesignerCoordinate } from './types';
+import type { DesignerCoordinate, PatternEditMode } from './types';
 import type { Pattern } from '../../types';
 
 interface PatternDesignerDebugPanelProps {
     pattern: Pattern | null;
     hoverPoint: DesignerCoordinate | null;
     blobRadius: number;
-    deleteRadius: number;
+    editMode: PatternEditMode;
 }
 
 const formatCoordinate = (value: number): string => value.toFixed(3);
+const formatMode = (mode: PatternEditMode): string =>
+    mode === 'placement' ? 'Placement' : 'Erase';
 
 const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
     pattern,
     hoverPoint,
     blobRadius,
-    deleteRadius,
+    editMode,
 }) => {
     const points = pattern?.points ?? [];
 
@@ -32,19 +34,15 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
                 <p className="text-xs text-gray-500">Range: -1.000 – 1.000 on both axes.</p>
                 <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="rounded-md bg-gray-800/60 p-3">
+                        <dt className="text-xs uppercase tracking-wide text-gray-400">Mode</dt>
+                        <dd className="font-mono text-sm text-gray-100">{formatMode(editMode)}</dd>
+                    </div>
+                    <div className="rounded-md bg-gray-800/60 p-3">
                         <dt className="text-xs uppercase tracking-wide text-gray-400">
                             Blob Radius
                         </dt>
                         <dd className="font-mono text-sm text-gray-100">
                             {formatCoordinate(blobRadius)}
-                        </dd>
-                    </div>
-                    <div className="rounded-md bg-gray-800/60 p-3">
-                        <dt className="text-xs uppercase tracking-wide text-gray-400">
-                            Delete Radius
-                        </dt>
-                        <dd className="font-mono text-sm text-gray-100">
-                            {formatCoordinate(deleteRadius)}
                         </dd>
                     </div>
                     <div className="rounded-md bg-gray-800/60 p-3">

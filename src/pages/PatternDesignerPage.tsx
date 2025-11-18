@@ -1,19 +1,25 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
-import type { DesignerCoordinate } from '@/components/patternDesigner/types';
+import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDesigner/types';
 import { loadPatterns, persistPatterns } from '@/services/patternStorage';
 import type { Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
 
 interface PatternDesignerCanvasProps {
     pattern: Pattern;
+    editMode: PatternEditMode;
+    hoveredPointId: string | null;
     onChange: (nextPattern: Pattern) => void;
     onHoverChange?: (point: DesignerCoordinate | null) => void;
+    onHoverPointChange?: (pointId: string | null) => void;
 }
 
 const PATTERN_BLOB_RADIUS = 0.04;
-const PATTERN_DELETE_RADIUS = 0.06;
+const EDIT_MODE_LABEL: Record<PatternEditMode, string> = {
+    placement: 'Placement',
+    erase: 'Erase',
+};
 
 const clampUnit = (value: number): number => {
     if (Number.isNaN(value)) {
@@ -33,14 +39,22 @@ const createPointId = (): string =>
 
 const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     pattern,
+    editMode,
+    hoveredPointId,
     onChange,
     onHoverChange,
+    onHoverPointChange,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const dragStateRef = useRef<{
+        activePointId: string | null;
+        moved: boolean;
+        suppressNextPointClick: boolean;
+    }>({ activePointId: null, moved: false, suppressNextPointClick: false });
     const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
 
     const handleAddPoint = useCallback(
-        (event: React.MouseEvent<HTMLDivElement>) => {
+        (event: React.MouseEvent<Element>) => {
             if (!containerRef.current) {
                 return;
             }
@@ -68,12 +82,34 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
         [onChange, pattern],
     );
 
-    const handleMouseDownPoint = useCallback((pointId: string) => {
-        setDraggingPointId(pointId);
-    }, []);
+    const handleMouseDownPoint = useCallback(
+        (pointId: string) => {
+            if (editMode !== 'placement') {
+                return;
+            }
+            setDraggingPointId(pointId);
+            dragStateRef.current = {
+                activePointId: pointId,
+                moved: false,
+                suppressNextPointClick: false,
+            };
+        },
+        [editMode],
+    );
 
-    const handleMouseUp = useCallback(() => {
+    const handleMouseUp = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+        const target = event.target as SVGCircleElement | HTMLElement;
+        const { activePointId, moved } = dragStateRef.current;
+        const endedOnDraggedPoint =
+            target instanceof SVGCircleElement &&
+            activePointId !== null &&
+            target.dataset.pointId === activePointId;
         setDraggingPointId(null);
+        dragStateRef.current = {
+            activePointId: null,
+            moved: false,
+            suppressNextPointClick: moved && endedOnDraggedPoint,
+        };
     }, []);
 
     const handleMouseMove = useCallback(
@@ -93,6 +129,13 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
             onHoverChange?.({ x: normalizedX, y: normalizedY });
             if (!draggingPointId) {
                 return;
+            }
+            const targetPoint = pattern.points.find((point) => point.id === draggingPointId);
+            if (!targetPoint) {
+                return;
+            }
+            if (targetPoint.x !== normalizedX || targetPoint.y !== normalizedY) {
+                dragStateRef.current.moved = true;
             }
             const now = new Date().toISOString();
             const nextPattern: Pattern = {
@@ -115,8 +158,10 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
 
     const handleMouseLeave = useCallback(() => {
         setDraggingPointId(null);
+        dragStateRef.current = { activePointId: null, moved: false, suppressNextPointClick: false };
+        onHoverPointChange?.(null);
         onHoverChange?.(null);
-    }, [onHoverChange]);
+    }, [onHoverChange, onHoverPointChange]);
 
     const handleRemovePoint = useCallback(
         (pointId: string) => {
@@ -131,12 +176,56 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
         [onChange, pattern],
     );
 
+    const handleCanvasClick = useCallback(
+        (event: React.MouseEvent<HTMLDivElement>) => {
+            if (editMode !== 'placement') {
+                return;
+            }
+            handleAddPoint(event);
+        },
+        [editMode, handleAddPoint],
+    );
+
+    const handlePointClick = useCallback(
+        (event: React.MouseEvent<SVGCircleElement>, pointId: string) => {
+            event.stopPropagation();
+            if (editMode === 'erase') {
+                handleRemovePoint(pointId);
+                return;
+            }
+            if (editMode === 'placement') {
+                if (dragStateRef.current.suppressNextPointClick) {
+                    dragStateRef.current.suppressNextPointClick = false;
+                    return;
+                }
+                handleAddPoint(event);
+            }
+        },
+        [editMode, handleAddPoint, handleRemovePoint],
+    );
+
+    const handlePointMouseEnter = useCallback(
+        (pointId: string) => {
+            if (editMode !== 'erase') {
+                return;
+            }
+            onHoverPointChange?.(pointId);
+        },
+        [editMode, onHoverPointChange],
+    );
+
+    const handlePointMouseLeave = useCallback(() => {
+        onHoverPointChange?.(null);
+    }, [onHoverPointChange]);
+
     return (
         <div className="relative flex aspect-square w-full max-w-xl items-center justify-center bg-gray-900">
             <div
                 ref={containerRef}
-                className="h-full w-full cursor-crosshair select-none"
-                onClick={handleAddPoint}
+                className={`h-full w-full select-none ${
+                    editMode === 'erase' ? 'cursor-pointer' : 'cursor-crosshair'
+                }`}
+                onClick={handleCanvasClick}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseLeave}
@@ -164,32 +253,29 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                         stroke="rgba(148, 163, 184, 0.25)"
                         strokeWidth={0.0015}
                     />
-                    {pattern.points.map((point) => (
-                        <g key={point.id}>
+                    {pattern.points.map((point) => {
+                        const isEraseHover = editMode === 'erase' && hoveredPointId === point.id;
+                        return (
                             <circle
+                                key={point.id}
+                                data-point-id={point.id}
                                 cx={centeredToView(point.x)}
                                 cy={centeredToView(point.y)}
                                 r={centeredDeltaToView(PATTERN_BLOB_RADIUS)}
-                                fill="#22d3ee"
-                                stroke="#0f172a"
-                                strokeWidth={0.004}
+                                fill={isEraseHover ? '#f87171' : '#22d3ee'}
+                                fillOpacity={editMode === 'erase' && !isEraseHover ? 0.45 : 1}
+                                stroke={isEraseHover ? '#fecaca' : '#0f172a'}
+                                strokeWidth={isEraseHover ? 0.006 : 0.004}
+                                onMouseEnter={() => handlePointMouseEnter(point.id)}
+                                onMouseLeave={handlePointMouseLeave}
                                 onMouseDown={(event) => {
                                     event.stopPropagation();
                                     handleMouseDownPoint(point.id);
                                 }}
+                                onClick={(event) => handlePointClick(event, point.id)}
                             />
-                            <circle
-                                cx={centeredToView(point.x)}
-                                cy={centeredToView(point.y)}
-                                r={centeredDeltaToView(PATTERN_DELETE_RADIUS)}
-                                fill="transparent"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleRemovePoint(point.id);
-                                }}
-                            />
-                        </g>
-                    ))}
+                        );
+                    })}
                 </svg>
             </div>
         </div>
@@ -206,6 +292,35 @@ const PatternDesignerPage: React.FC = () => {
         patterns[0]?.id ?? null,
     );
     const [hoverPoint, setHoverPoint] = useState<DesignerCoordinate | null>(null);
+    const [editMode, setEditMode] = useState<PatternEditMode>('placement');
+    const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
+
+    const updateEditMode = useCallback((mode: PatternEditMode) => {
+        setEditMode(mode);
+        setHoveredPatternPointId(null);
+    }, []);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.target instanceof HTMLElement) {
+                const tagName = event.target.tagName.toLowerCase();
+                if (
+                    tagName === 'input' ||
+                    tagName === 'textarea' ||
+                    event.target.isContentEditable
+                ) {
+                    return;
+                }
+            }
+            if (event.key === 'p' || event.key === 'P') {
+                updateEditMode('placement');
+            } else if (event.key === 'e' || event.key === 'E') {
+                updateEditMode('erase');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [updateEditMode]);
 
     const selectedPattern = useMemo(
         () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
@@ -216,8 +331,9 @@ const PatternDesignerPage: React.FC = () => {
         (patternId: string | null) => {
             setSelectedPatternId(patternId);
             setHoverPoint(null);
+            setHoveredPatternPointId(null);
         },
-        [setHoverPoint, setSelectedPatternId],
+        [setHoverPoint, setHoveredPatternPointId, setSelectedPatternId],
     );
 
     const handlePersist = (nextPatterns: Pattern[]) => {
@@ -317,16 +433,52 @@ const PatternDesignerPage: React.FC = () => {
                     )}
                 </div>
 
-                <div className="flex min-h-[320px] flex-1 items-center justify-center rounded-md bg-gray-900/60">
-                    {selectedPattern ? (
-                        <PatternDesignerCanvas
-                            pattern={selectedPattern}
-                            onChange={handlePatternChange}
-                            onHoverChange={setHoverPoint}
-                        />
-                    ) : (
-                        <p className="text-sm text-gray-500">Create a pattern to start editing.</p>
-                    )}
+                <div className="flex min-h-[320px] flex-1 flex-col gap-4 rounded-md bg-gray-900/60 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
+                            <span className="uppercase tracking-wide text-gray-400">Mode</span>
+                            <div className="inline-flex rounded-md bg-gray-800/70 p-1">
+                                {(['placement', 'erase'] as PatternEditMode[]).map((mode) => {
+                                    const isActive = editMode === mode;
+                                    const hotkey = mode === 'placement' ? 'P' : 'E';
+                                    return (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => updateEditMode(mode)}
+                                            className={`${
+                                                isActive
+                                                    ? 'bg-cyan-600 text-white'
+                                                    : 'text-gray-300 hover:text-white'
+                                            } rounded px-3 py-1 text-xs font-semibold transition`}
+                                            aria-pressed={isActive}
+                                        >
+                                            {EDIT_MODE_LABEL[mode]} ({hotkey})
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-gray-400">
+                            Keyboard shortcuts: press P for placement, E for erase.
+                        </p>
+                    </div>
+                    <div className="flex flex-1 items-center justify-center">
+                        {selectedPattern ? (
+                            <PatternDesignerCanvas
+                                pattern={selectedPattern}
+                                editMode={editMode}
+                                hoveredPointId={hoveredPatternPointId}
+                                onChange={handlePatternChange}
+                                onHoverChange={setHoverPoint}
+                                onHoverPointChange={setHoveredPatternPointId}
+                            />
+                        ) : (
+                            <p className="text-sm text-gray-500">
+                                Create a pattern to start editing.
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -334,7 +486,7 @@ const PatternDesignerPage: React.FC = () => {
                 pattern={selectedPattern}
                 hoverPoint={hoverPoint}
                 blobRadius={PATTERN_BLOB_RADIUS}
-                deleteRadius={PATTERN_DELETE_RADIUS}
+                editMode={editMode}
             />
         </div>
     );
