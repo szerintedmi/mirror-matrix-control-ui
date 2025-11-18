@@ -5,7 +5,6 @@ import CalibrationSummaryModal from '@/components/calibration/CalibrationSummary
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
-import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
 import type { DriverView } from '@/context/StatusContext';
 import type { CalibrationRunnerState, TileRunState } from '@/services/calibrationRunner';
 import type { Motor, MotorTelemetry } from '@/types';
@@ -46,6 +45,14 @@ const getTileStatusClasses = (status: TileRunState['status']): string => {
 const SUMMARY_BUTTON_CLASS =
     'rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
 
+const INTEGER_INPUT_PATTERN = /^\d*$/;
+const DECIMAL_INPUT_PATTERN = /^\d*(?:\.\d*)?$/;
+
+const formatGridGapPercent = (normalizedGap: number): string => {
+    const percent = Number((normalizedGap * 100).toFixed(1));
+    return percent.toString();
+};
+
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     runnerState,
     runnerSettings,
@@ -75,7 +82,79 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const blueprint = runnerState.summary?.gridBlueprint;
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-    const gapPercent = runnerSettings.gridGapNormalized * 100;
+    const canonicalStepDelta = useMemo(
+        () => runnerSettings.deltaSteps.toString(),
+        [runnerSettings.deltaSteps],
+    );
+    const canonicalGridGapPercent = useMemo(
+        () => formatGridGapPercent(runnerSettings.gridGapNormalized),
+        [runnerSettings.gridGapNormalized],
+    );
+    const [stepDeltaDraft, setStepDeltaDraft] = useState('');
+    const [gridGapDraft, setGridGapDraft] = useState('');
+    const [isEditingStepDelta, setIsEditingStepDelta] = useState(false);
+    const [isEditingGridGap, setIsEditingGridGap] = useState(false);
+    const displayedStepDelta = isEditingStepDelta ? stepDeltaDraft : canonicalStepDelta;
+    const displayedGridGap = isEditingGridGap ? gridGapDraft : canonicalGridGapPercent;
+    const handleStepDeltaInputChange = useCallback(
+        (event: React.ChangeEvent<HTMLInputElement>) => {
+            const { value } = event.target;
+            if (!INTEGER_INPUT_PATTERN.test(value)) {
+                return;
+            }
+            setStepDeltaDraft(value);
+            if (value === '' || value.endsWith('.')) {
+                return;
+            }
+            const next = Number(value);
+            if (Number.isNaN(next) || next === runnerSettings.deltaSteps) {
+                return;
+            }
+            onUpdateSetting('deltaSteps', Math.round(next));
+        },
+        [onUpdateSetting, runnerSettings.deltaSteps],
+    );
+    const handleGridGapInputChange = useCallback(
+        (event: React.ChangeEvent<HTMLInputElement>) => {
+            const { value } = event.target;
+            if (!DECIMAL_INPUT_PATTERN.test(value)) {
+                return;
+            }
+            setGridGapDraft(value);
+            if (value === '' || value.endsWith('.')) {
+                return;
+            }
+            const parsed = Number(value);
+            if (Number.isNaN(parsed)) {
+                return;
+            }
+            const clampedPercent = Math.min(Math.max(parsed, 0), 5);
+            const normalized = Number((clampedPercent / 100).toFixed(4));
+            if (clampedPercent !== parsed) {
+                setGridGapDraft(clampedPercent.toString());
+            }
+            if (normalized !== runnerSettings.gridGapNormalized) {
+                onUpdateSetting('gridGapNormalized', normalized);
+            }
+        },
+        [onUpdateSetting, runnerSettings.gridGapNormalized],
+    );
+    const handleStepDeltaFocus = useCallback(() => {
+        setIsEditingStepDelta(true);
+        setStepDeltaDraft(canonicalStepDelta);
+    }, [canonicalStepDelta]);
+    const handleStepDeltaBlur = useCallback(() => {
+        setIsEditingStepDelta(false);
+        setStepDeltaDraft('');
+    }, []);
+    const handleGridGapFocus = useCallback(() => {
+        setIsEditingGridGap(true);
+        setGridGapDraft(canonicalGridGapPercent);
+    }, [canonicalGridGapPercent]);
+    const handleGridGapBlur = useCallback(() => {
+        setIsEditingGridGap(false);
+        setGridGapDraft('');
+    }, []);
     const debugTileEntry = useMemo(() => {
         if (!debugTileKey) {
             return null;
@@ -257,17 +336,13 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             Step delta (steps)
                         </span>
                         <input
-                            type="number"
-                            min={50}
-                            max={MOTOR_MAX_POSITION_STEPS}
-                            value={runnerSettings.deltaSteps}
-                            onChange={(event) => {
-                                const next = Number(event.target.value);
-                                if (Number.isNaN(next)) {
-                                    return;
-                                }
-                                onUpdateSetting('deltaSteps', Math.round(next));
-                            }}
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={displayedStepDelta}
+                            onFocus={handleStepDeltaFocus}
+                            onBlur={handleStepDeltaBlur}
+                            onChange={handleStepDeltaInputChange}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
                         />
                     </label>
@@ -276,19 +351,13 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             Grid gap (%)
                         </span>
                         <input
-                            type="number"
-                            min={0}
-                            max={5}
-                            step={0.1}
-                            value={Number(gapPercent.toFixed(1))}
-                            onChange={(event) => {
-                                const next = Number(event.target.value);
-                                if (Number.isNaN(next)) {
-                                    return;
-                                }
-                                const normalized = Math.max(0, Math.min(1, next / 100));
-                                onUpdateSetting('gridGapNormalized', Number(normalized.toFixed(4)));
-                            }}
+                            type="text"
+                            inputMode="decimal"
+                            pattern="\\d*(\\.\\d*)?"
+                            value={displayedGridGap}
+                            onFocus={handleGridGapFocus}
+                            onBlur={handleGridGapBlur}
+                            onChange={handleGridGapInputChange}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
                         />
                     </label>
