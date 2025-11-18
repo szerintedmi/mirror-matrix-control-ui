@@ -196,26 +196,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                 dispatchPlayback={dispatchPlayback}
             />
 
-            <section className="rounded-lg border border-gray-800/70 bg-gray-900/40 p-4 shadow">
-                <h3 className="text-sm font-semibold text-gray-200">Validation</h3>
-                {previewPlan.errors.length > 0 ? (
-                    <ul className="mt-2 space-y-2 text-sm text-amber-200">
-                        {previewPlan.errors.map((error, index) => (
-                            <li
-                                key={`${error.code}-${error.mirrorId ?? 'global'}-${error.patternPointId ?? 'any'}-${index}`}
-                                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
-                            >
-                                {error.message}
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="mt-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                        All checks passed. Motors are ready for playback.
-                    </p>
-                )}
-            </section>
-
             <section className="rounded-lg border border-gray-800/70 bg-gray-900/50 p-4 shadow">
                 <h3 className="text-sm font-semibold text-gray-200">Planned Targets</h3>
                 {assignedTiles.length === 0 ? (

@@ -26,8 +26,13 @@ interface RenameDialogState {
 }
 
 interface SaveDialogState {
-    sequenceId: string | null;
     value: string;
+}
+
+interface SequenceValidationResult {
+    itemId: string;
+    status: 'ok' | 'error' | 'missing' | 'blocked';
+    message?: string;
 }
 
 interface PlaybackSequenceManagerProps {
@@ -72,10 +77,94 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         [patterns],
     );
 
+    const validationResults = useMemo(() => {
+        const list: SequenceValidationResult[] = sequence.map((entry) => {
+            const pattern = patternLookup.get(entry.patternId);
+            if (!pattern) {
+                return {
+                    itemId: entry.id,
+                    status: 'missing',
+                    message: 'This pattern no longer exists.',
+                };
+            }
+            if (!selectedProfile) {
+                return {
+                    itemId: entry.id,
+                    status: 'blocked',
+                    message: 'Select a calibration profile to validate.',
+                };
+            }
+            const plan = planProfilePlayback({
+                gridSize,
+                mirrorConfig,
+                profile: selectedProfile,
+                pattern,
+            });
+            if (plan.errors.length === 0) {
+                return { itemId: entry.id, status: 'ok' };
+            }
+            return {
+                itemId: entry.id,
+                status: 'error',
+                message: plan.errors[0].message,
+            };
+        });
+        return {
+            list,
+            byItemId: new Map(list.map((result) => [result.itemId, result])),
+        };
+    }, [gridSize, mirrorConfig, patternLookup, selectedProfile, sequence]);
+
+    const validationNotice = useMemo(() => {
+        if (sequence.length === 0) {
+            return null;
+        }
+        if (!selectedProfile) {
+            return {
+                tone: 'warning' as const,
+                message: 'Select a calibration profile to validate queued patterns.',
+            };
+        }
+        const hasIssues = validationResults.list.some(
+            (result) => result.status === 'error' || result.status === 'missing',
+        );
+        if (hasIssues) {
+            return {
+                tone: 'error' as const,
+                message: 'Some patterns need attention—see the list for details.',
+            };
+        }
+        return null;
+    }, [selectedProfile, sequence.length, validationResults.list]);
+
     const generateItemId = useCallback(() => {
         sequenceIdRef.current += 1;
         return `queued-${Date.now()}-${sequenceIdRef.current}`;
     }, []);
+
+    const persistSequencePayload = useCallback(
+        (sequenceId: string, name: string, existing?: PlaybackSequence) => {
+            const now = new Date().toISOString();
+            const payload: PlaybackSequence = {
+                id: sequenceId,
+                name,
+                createdAt: existing?.createdAt ?? now,
+                updatedAt: now,
+                patternIds: sequence.map((entry) => entry.patternId),
+            };
+            const next = existing
+                ? savedSequences.map((entry) => (entry.id === sequenceId ? payload : entry))
+                : [...savedSequences, payload];
+            persistPlaybackSequences(storage, next);
+            setSavedSequences(next);
+            setActiveSavedSequenceId(sequenceId);
+            setRunStatus('success');
+            setRunMessage(
+                existing ? `Saved changes to "${name}".` : `Saved playback sequence as "${name}".`,
+            );
+        },
+        [savedSequences, sequence, storage],
+    );
 
     const resetActiveSavedSequence = useCallback(() => {
         setActiveSavedSequenceId(null);
@@ -207,16 +296,51 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         return candidate;
     }, [savedSequences]);
 
-    const openSaveDialog = useCallback(() => {
+    const openSaveDialog = useCallback(
+        (name?: string) => setSaveState({ value: name ?? deriveDefaultSequenceName() }),
+        [deriveDefaultSequenceName],
+    );
+
+    const handleSaveSequence = useCallback(() => {
         if (sequence.length === 0) {
             setRunStatus('error');
             setRunMessage('Add patterns before saving a playback sequence.');
             return;
         }
-        const active = savedSequences.find((entry) => entry.id === activeSavedSequenceId);
-        const defaultName = active?.name ?? deriveDefaultSequenceName();
-        setSaveState({ sequenceId: active?.id ?? null, value: defaultName });
-    }, [activeSavedSequenceId, deriveDefaultSequenceName, savedSequences, sequence.length]);
+        const active = activeSavedSequenceId
+            ? savedSequences.find((entry) => entry.id === activeSavedSequenceId)
+            : null;
+        if (active) {
+            persistSequencePayload(active.id, active.name, active);
+            return;
+        }
+        openSaveDialog();
+    }, [
+        activeSavedSequenceId,
+        openSaveDialog,
+        persistSequencePayload,
+        savedSequences,
+        sequence.length,
+    ]);
+
+    const handleSaveAs = useCallback(() => {
+        if (sequence.length === 0) {
+            setRunStatus('error');
+            setRunMessage('Add patterns before saving a playback sequence.');
+            return;
+        }
+        const active = activeSavedSequenceId
+            ? savedSequences.find((entry) => entry.id === activeSavedSequenceId)
+            : null;
+        const suggestedName = active ? `${active.name} copy` : deriveDefaultSequenceName();
+        openSaveDialog(suggestedName);
+    }, [
+        activeSavedSequenceId,
+        deriveDefaultSequenceName,
+        openSaveDialog,
+        savedSequences,
+        sequence.length,
+    ]);
 
     const handleSaveInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const value = event.target.value;
@@ -233,41 +357,12 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
             if (!trimmed || sequence.length === 0) {
                 return;
             }
-            const now = new Date().toISOString();
-            const sequenceId = saveState.sequenceId ?? `sequence-${Date.now().toString(36)}`;
-            const payload: PlaybackSequence = {
-                id: sequenceId,
-                name: trimmed,
-                createdAt: saveState.sequenceId
-                    ? (savedSequences.find((entry) => entry.id === sequenceId)?.createdAt ?? now)
-                    : now,
-                updatedAt: now,
-                patternIds: sequence.map((entry) => entry.patternId),
-            };
-            const next = saveState.sequenceId
-                ? savedSequences.map((entry) => (entry.id === sequenceId ? payload : entry))
-                : [...savedSequences, payload];
-            persistPlaybackSequences(storage, next);
-            setSavedSequences(next);
-            setActiveSavedSequenceId(sequenceId);
+            const sequenceId = `sequence-${Date.now().toString(36)}`;
+            persistSequencePayload(sequenceId, trimmed);
             setSaveState(null);
-            setRunStatus('success');
-            setRunMessage(`Saved playback sequence as "${trimmed}".`);
         },
-        [saveState, savedSequences, sequence, storage],
+        [persistSequencePayload, saveState, sequence.length],
     );
-
-    const handleSaveAsCopy = useCallback(() => {
-        setSaveState((previous) => {
-            if (!previous) {
-                return previous;
-            }
-            return {
-                sequenceId: null,
-                value: previous.value || deriveDefaultSequenceName(),
-            };
-        });
-    }, [deriveDefaultSequenceName]);
 
     const handleCloseSaveModal = useCallback(() => setSaveState(null), []);
 
@@ -396,7 +491,7 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                     <button
                         type="button"
                         disabled={sequence.length === 0}
-                        onClick={openSaveDialog}
+                        onClick={handleSaveSequence}
                         className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
                             sequence.length > 0
                                 ? 'border border-gray-600 text-gray-100 hover:border-cyan-400 hover:text-cyan-200'
@@ -404,6 +499,18 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                         }`}
                     >
                         Save Sequence
+                    </button>
+                    <button
+                        type="button"
+                        disabled={sequence.length === 0}
+                        onClick={handleSaveAs}
+                        className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                            sequence.length > 0
+                                ? 'border border-gray-700 text-gray-100 hover:border-cyan-400 hover:text-cyan-200'
+                                : 'cursor-not-allowed border border-gray-800 text-gray-500'
+                        }`}
+                    >
+                        Save As
                     </button>
                     <button
                         type="button"
@@ -423,6 +530,18 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
             </div>
 
             <div className="mt-4 space-y-3">
+                {validationNotice && (
+                    <div
+                        className={`rounded-md border px-3 py-2 text-sm ${
+                            validationNotice.tone === 'error'
+                                ? 'border-red-500/50 bg-red-500/10 text-red-100'
+                                : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                        }`}
+                    >
+                        {validationNotice.message}
+                    </div>
+                )}
+
                 <div className="rounded-md border border-gray-800 bg-gray-950/60 p-3">
                     {sequence.length === 0 ? (
                         <p className="text-sm text-gray-500">
@@ -432,6 +551,13 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                         <ol className="space-y-2" aria-label="Playback sequence list">
                             {sequence.map((entry, index) => {
                                 const pattern = patternLookup.get(entry.patternId);
+                                const validation = validationResults.byItemId.get(entry.id);
+                                const validationTone =
+                                    validation?.status === 'ok'
+                                        ? 'text-emerald-300'
+                                        : validation?.status === 'blocked'
+                                          ? 'text-amber-200'
+                                          : 'text-red-200';
                                 return (
                                     <li
                                         key={entry.id}
@@ -444,10 +570,24 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                                             <span className="text-xs text-gray-400">
                                                 Step {index + 1} of {sequence.length}
                                             </span>
-                                            {!pattern && (
-                                                <span className="text-xs text-amber-300">
-                                                    This pattern no longer exists.
-                                                </span>
+                                            {validation && (
+                                                <div
+                                                    className={`flex items-start gap-2 text-xs ${validationTone}`}
+                                                >
+                                                    <span aria-hidden>
+                                                        {validation.status === 'ok' ? '✓' : '⚠'}
+                                                    </span>
+                                                    {validation.status === 'ok' ? (
+                                                        <span className="sr-only">
+                                                            Validation passed
+                                                        </span>
+                                                    ) : (
+                                                        <span>
+                                                            {validation.message ??
+                                                                'Needs validation attention.'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">
@@ -588,15 +728,6 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                             placeholder="Morning run"
                         />
                         <div className="flex items-center justify-end gap-2">
-                            {saveState.sequenceId && (
-                                <button
-                                    type="button"
-                                    onClick={handleSaveAsCopy}
-                                    className="rounded-md border border-gray-700 px-3 py-2 text-sm font-semibold text-gray-100 transition hover:border-cyan-400 hover:text-cyan-200"
-                                >
-                                    Save as copy
-                                </button>
-                            )}
                             <button
                                 type="button"
                                 onClick={handleCloseSaveModal}

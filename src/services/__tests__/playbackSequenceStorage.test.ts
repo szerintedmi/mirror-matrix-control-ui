@@ -9,7 +9,6 @@ import {
     upsertPlaybackSequence,
 } from '../playbackSequenceStorage';
 
-
 class MemoryStorage implements Storage {
     private store = new Map<string, string>();
 
