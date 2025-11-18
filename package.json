@@ -32,6 +32,7 @@
     },
     "devDependencies": {
         "@playwright/test": "1.56.1",
+        "@tailwindcss/vite": "4.1.17",
         "@types/eslint-plugin-jsx-a11y": "6.10.1",
         "@types/jsdom": "27.0.0",
         "@types/node": "22.19.0",
@@ -49,6 +50,7 @@
         "globals": "16.5.0",
         "jsdom": "27.1.0",
         "prettier": "3.6.2",
+        "tailwindcss": "4.1.17",
         "typescript": "5.9.3",
         "vite": "7.2.2",
         "vite-plugin-checker": "0.11.0",

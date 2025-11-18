@@ -1,5 +1,6 @@
 import path from 'path';
 
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type PluginOption } from 'vite';
 import { configDefaults } from 'vitest/config';
@@ -8,7 +9,7 @@ export default defineConfig(async ({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const isTest = mode === 'test' || Boolean(process.env.VITEST);
     const plugins: PluginOption[] = [];
-    plugins.push(...(react() as PluginOption[]));
+    plugins.push(...(react() as PluginOption[]), tailwindcss());
     if (!isTest) {
         try {
             const { default: checker } = await import('vite-plugin-checker');
