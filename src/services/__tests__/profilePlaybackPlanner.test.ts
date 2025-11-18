@@ -5,7 +5,7 @@ import { planProfilePlayback } from '../profilePlaybackPlanner';
 import type {
     Pattern,
     CalibrationProfile,
-    CalibrationProfileTile,
+    TileCalibrationResults,
     MirrorConfig,
 } from '../../types';
 
@@ -22,25 +22,38 @@ const createMirrorConfig = (rows: number, cols: number): MirrorConfig => {
     return map;
 };
 
-const createCalibratedTile = (row: number, col: number): CalibrationProfileTile => ({
+const createCalibratedTile = (row: number, col: number): TileCalibrationResults => ({
     key: `${row}-${col}`,
     row,
     col,
     status: 'completed',
     error: null,
-    adjustedHome: { x: 0, y: 0 },
-    homeOffset: { dx: 0, dy: 0 },
+    adjustedHome: { x: 0, y: 0, stepsX: 0, stepsY: 0 },
+    homeOffset: { dx: 0, dy: 0, stepsX: 0, stepsY: 0 },
     homeMeasurement: null,
     stepToDisplacement: {
         x: 0.001,
         y: 0.001,
     },
     sizeDeltaAtStepTest: 0,
-    blobSize: 0.01,
+    axes: {
+        x: {
+            stepRange: { minSteps: -1200, maxSteps: 1200 },
+            stepScale: 1000,
+        },
+        y: {
+            stepRange: { minSteps: -1200, maxSteps: 1200 },
+            stepScale: 1000,
+        },
+    },
+    inferredBounds: {
+        x: { min: -1, max: 1 },
+        y: { min: -1, max: 1 },
+    },
 });
 
 const createProfile = (rows: number, cols: number, calibrated = true): CalibrationProfile => {
-    const tiles: Record<string, CalibrationProfileTile> = {};
+    const tiles: Record<string, TileCalibrationResults> = {};
     for (let row = 0; row < rows; row += 1) {
         for (let col = 0; col < cols; col += 1) {
             const key = `${row}-${col}`;
@@ -55,13 +68,25 @@ const createProfile = (rows: number, cols: number, calibrated = true): Calibrati
     }
     return {
         id: 'profile-1',
+        schemaVersion: 2,
         name: 'Profile',
         createdAt: new Date('2025-01-01T00:00:00.000Z').toISOString(),
         updatedAt: new Date('2025-01-01T01:00:00.000Z').toISOString(),
         gridSize: { rows, cols },
         gridBlueprint: null,
         stepTestSettings: { deltaSteps: 400 },
-        gridStateFingerprint: 'fingerprint',
+        gridStateFingerprint: {
+            hash: 'fingerprint',
+            snapshot: {
+                version: 1,
+                gridSize: { rows, cols },
+                assignments: {},
+            },
+        },
+        calibrationSpace: {
+            blobStats: null,
+            globalBounds: null,
+        },
         tiles,
         metrics: {
             totalTiles: rows * cols,

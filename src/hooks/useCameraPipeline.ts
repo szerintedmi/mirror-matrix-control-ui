@@ -16,7 +16,7 @@ import type {
     OpenCvWorkerStatus,
 } from '@/services/opencvWorkerClient';
 import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
-import type { NormalizedRoi } from '@/types';
+import type { CalibrationProfileBounds, NormalizedRoi } from '@/types';
 import { centeredDeltaToView, centeredToView } from '@/utils/centeredCoordinates';
 
 import type React from 'react';
@@ -73,6 +73,26 @@ declare global {
 const ALIGNMENT_TEAL = { r: 16, g: 185, b: 129 } as const;
 const formatAlignmentRgba = (alpha: number): string =>
     `rgba(${ALIGNMENT_TEAL.r}, ${ALIGNMENT_TEAL.g}, ${ALIGNMENT_TEAL.b}, ${alpha})`;
+const GLOBAL_BOUNDS_RGBA = 'rgba(250, 204, 21, 0.9)';
+const GLOBAL_BOUNDS_DASH = [6, 6];
+const TILE_BOUNDS_COLORS = ['#fb7185', '#38bdf8', '#c084fc', '#facc15', '#4ade80', '#f472b6'];
+
+const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+    const normalized = hex.replace('#', '');
+    const numeric = Number.parseInt(normalized, 16);
+    return {
+        r: (numeric >> 16) & 0xff,
+        g: (numeric >> 8) & 0xff,
+        b: numeric & 0xff,
+    };
+};
+
+export interface TileBoundsOverlayEntry {
+    key: string;
+    row: number;
+    col: number;
+    bounds: CalibrationProfileBounds;
+}
 
 export type {
     CameraPipelineOverlayHandlers,
@@ -133,6 +153,8 @@ export interface CameraPipelineController {
     resetRoi: () => void;
     nativeBlobDetectorAvailable: boolean;
     setAlignmentOverlaySummary: (summary: CalibrationRunSummary | null) => void;
+    setGlobalBoundsOverlayBounds: (bounds: CalibrationProfileBounds | null) => void;
+    setTileBoundsOverlayEntries: (entries: TileBoundsOverlayEntry[] | null) => void;
     blobsOverlayEnabled: boolean;
     setBlobsOverlayEnabled: (enabled: boolean) => void;
 }
@@ -192,6 +214,8 @@ export const useCameraPipeline = ({
     const alignmentOverlayVisibleRef = useRef<boolean>(Boolean(alignmentOverlayVisible));
     const blobsOverlayVisibleRef = useRef<boolean>(true);
     const overlayCvRef = useRef<CvRuntime | null>(null);
+    const globalBoundsRef = useRef<CalibrationProfileBounds | null>(null);
+    const tileBoundsOverlayRef = useRef<TileBoundsOverlayEntry[]>([]);
 
     const reportVideoDimensions = useCallback(
         (width: number, height: number) => {
@@ -227,6 +251,22 @@ export const useCameraPipeline = ({
 
     const setAlignmentOverlaySummary = useCallback((summary: CalibrationRunSummary | null) => {
         alignmentOverlaySummaryRef.current = summary;
+    }, []);
+
+    const setGlobalBoundsOverlayBounds = useCallback((bounds: CalibrationProfileBounds | null) => {
+        globalBoundsRef.current = bounds;
+        if (import.meta.env?.DEV && bounds) {
+            const midX = (bounds.x.min + bounds.x.max) / 2;
+            const midY = (bounds.y.min + bounds.y.max) / 2;
+            console.debug('[Calibration] global bounds updated', {
+                bounds,
+                center: { x: midX, y: midY },
+            });
+        }
+    }, []);
+
+    const setTileBoundsOverlayEntries = useCallback((entries: TileBoundsOverlayEntry[] | null) => {
+        tileBoundsOverlayRef.current = entries ?? [];
     }, []);
 
     useEffect(() => {
@@ -586,10 +626,87 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
+            const drawGlobalBoundsCanvas = () => {
+                const bounds = globalBoundsRef.current;
+                if (!bounds) {
+                    return;
+                }
+                const sourceWidth = meta.sourceWidth || width;
+                const sourceHeight = meta.sourceHeight || height;
+                const normalizedWidth = bounds.x.max - bounds.x.min;
+                const normalizedHeight = bounds.y.max - bounds.y.min;
+                if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+                    return;
+                }
+                const pxLeft = convertCoordToPixels(bounds.x.min, sourceWidth);
+                const pxTop = convertCoordToPixels(bounds.y.min, sourceHeight);
+                const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
+                const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                const localLeft = (pxLeft - baseRect.x) * scaleX;
+                const localTop = (pxTop - baseRect.y) * scaleY;
+                const rectWidth = pxWidth * scaleX;
+                const rectHeight = pxHeight * scaleY;
+                if (rectWidth <= 0 || rectHeight <= 0) {
+                    return;
+                }
+                ctx.save();
+                ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.004);
+                ctx.setLineDash(GLOBAL_BOUNDS_DASH);
+                ctx.strokeStyle = GLOBAL_BOUNDS_RGBA;
+                ctx.strokeRect(localLeft, localTop, rectWidth, rectHeight);
+                ctx.restore();
+            };
+
             const convertCoordToPixels = (value: number, dimension: number): number =>
                 centeredToView(value) * dimension;
             const convertDeltaToPixels = (delta: number, dimension: number): number =>
                 centeredDeltaToView(delta) * dimension;
+
+            const drawTileBoundsCanvas = () => {
+                const entries = tileBoundsOverlayRef.current;
+                if (!entries.length) {
+                    return;
+                }
+                const sourceWidth = meta.sourceWidth || width;
+                const sourceHeight = meta.sourceHeight || height;
+                ctx.save();
+                ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.0035);
+                entries.forEach((entry, index) => {
+                    const normalizedWidth = entry.bounds.x.max - entry.bounds.x.min;
+                    const normalizedHeight = entry.bounds.y.max - entry.bounds.y.min;
+                    if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+                        return;
+                    }
+                    const pxLeft = convertCoordToPixels(entry.bounds.x.min, sourceWidth);
+                    const pxTop = convertCoordToPixels(entry.bounds.y.min, sourceHeight);
+                    const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
+                    const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                    const localLeft = (pxLeft - baseRect.x) * scaleX;
+                    const localTop = (pxTop - baseRect.y) * scaleY;
+                    const rectWidth = pxWidth * scaleX;
+                    const rectHeight = pxHeight * scaleY;
+                    if (rectWidth <= 0 || rectHeight <= 0) {
+                        return;
+                    }
+                    const color = TILE_BOUNDS_COLORS[index % TILE_BOUNDS_COLORS.length];
+                    ctx.strokeStyle = color;
+                    ctx.strokeRect(localLeft, localTop, rectWidth, rectHeight);
+                    ctx.fillStyle = color;
+                    ctx.font = '10px monospace';
+                    const labelX = localLeft + 4;
+                    const labelY = localTop + 12;
+                    if (shouldCounterRotateNarrative) {
+                        ctx.save();
+                        ctx.translate(labelX, labelY);
+                        ctx.rotate(-counterRotationRadians);
+                        ctx.fillText(entry.key, 0, 0);
+                        ctx.restore();
+                    } else {
+                        ctx.fillText(entry.key, labelX, labelY);
+                    }
+                });
+                ctx.restore();
+            };
 
             const drawAlignmentCanvas = () => {
                 if (!alignmentOverlayVisibleRef.current || !summary?.gridBlueprint) {
@@ -690,7 +807,14 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
-            if (!blobsOverlayVisibleRef.current && !alignmentOverlayVisibleRef.current) {
+            const hasGlobalBoundsOverlay = Boolean(globalBoundsRef.current);
+            const hasTileBoundsOverlay = tileBoundsOverlayRef.current.length > 0;
+            if (
+                !blobsOverlayVisibleRef.current &&
+                !alignmentOverlayVisibleRef.current &&
+                !hasGlobalBoundsOverlay &&
+                !hasTileBoundsOverlay
+            ) {
                 return;
             }
 
@@ -708,6 +832,8 @@ export const useCameraPipeline = ({
             if (!cvRuntimeReady || !cvImpl) {
                 drawBlobsCanvas();
                 drawAlignmentCanvas();
+                drawGlobalBoundsCanvas();
+                drawTileBoundsCanvas();
                 return;
             }
 
@@ -875,9 +1001,97 @@ export const useCameraPipeline = ({
                 });
             };
 
+            const drawGlobalBoundsCv = () => {
+                const bounds = globalBoundsRef.current;
+                if (!bounds) {
+                    return;
+                }
+                const normalizedWidth = bounds.x.max - bounds.x.min;
+                const normalizedHeight = bounds.y.max - bounds.y.min;
+                if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+                    return;
+                }
+                const sourceWidth = meta.sourceWidth || width;
+                const sourceHeight = meta.sourceHeight || height;
+                const pxLeft = convertCoordToPixels(bounds.x.min, sourceWidth);
+                const pxTop = convertCoordToPixels(bounds.y.min, sourceHeight);
+                const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
+                const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                const localLeft = (pxLeft - baseRect.x) * scaleX;
+                const localTop = (pxTop - baseRect.y) * scaleY;
+                const rectWidth = pxWidth * scaleX;
+                const rectHeight = pxHeight * scaleY;
+                if (rectWidth <= 0 || rectHeight <= 0) {
+                    return;
+                }
+                const topLeft = new runtime.Point(Math.round(localLeft), Math.round(localTop));
+                const bottomRight = new runtime.Point(
+                    Math.round(localLeft + rectWidth),
+                    Math.round(localTop + rectHeight),
+                );
+                const color = new runtime.Scalar(21, 204, 250, 230);
+                runtime.rectangle(overlayMat, topLeft, bottomRight, color, 2, runtime.LINE_AA);
+            };
+
+            const drawTileBoundsCv = () => {
+                const entries = tileBoundsOverlayRef.current;
+                if (!entries.length) {
+                    return;
+                }
+                const sourceWidth = meta.sourceWidth || width;
+                const sourceHeight = meta.sourceHeight || height;
+                entries.forEach((entry, index) => {
+                    const normalizedWidth = entry.bounds.x.max - entry.bounds.x.min;
+                    const normalizedHeight = entry.bounds.y.max - entry.bounds.y.min;
+                    if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+                        return;
+                    }
+                    const pxLeft = convertCoordToPixels(entry.bounds.x.min, sourceWidth);
+                    const pxTop = convertCoordToPixels(entry.bounds.y.min, sourceHeight);
+                    const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
+                    const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                    const localLeft = (pxLeft - baseRect.x) * scaleX;
+                    const localTop = (pxTop - baseRect.y) * scaleY;
+                    const localRight = localLeft + pxWidth * scaleX;
+                    const localBottom = localTop + pxHeight * scaleY;
+                    if (
+                        localRight < 0 ||
+                        localBottom < 0 ||
+                        localLeft > width ||
+                        localTop > height
+                    ) {
+                        return;
+                    }
+                    const colorRgb = hexToRgb(
+                        TILE_BOUNDS_COLORS[index % TILE_BOUNDS_COLORS.length],
+                    );
+                    const color = new runtime.Scalar(colorRgb.b, colorRgb.g, colorRgb.r, 230);
+                    runtime.rectangle(
+                        overlayMat,
+                        new runtime.Point(Math.round(localLeft), Math.round(localTop)),
+                        new runtime.Point(Math.round(localRight), Math.round(localBottom)),
+                        color,
+                        2,
+                        runtime.LINE_AA,
+                    );
+                    runtime.putText(
+                        overlayMat,
+                        entry.key,
+                        new runtime.Point(Math.round(localLeft + 4), Math.round(localTop + 14)),
+                        runtime.FONT_HERSHEY_SIMPLEX,
+                        0.35,
+                        color,
+                        1,
+                        runtime.LINE_AA,
+                    );
+                });
+            };
+
             try {
                 drawBlobsCv();
                 drawAlignmentCv();
+                drawGlobalBoundsCv();
+                drawTileBoundsCv();
                 runtime.imshow(canvas, overlayMat);
             } finally {
                 overlayMat.delete();
@@ -1302,6 +1516,8 @@ export const useCameraPipeline = ({
         resetRoi,
         nativeBlobDetectorAvailable,
         setAlignmentOverlaySummary,
+        setGlobalBoundsOverlayBounds,
+        setTileBoundsOverlayEntries,
         blobsOverlayEnabled,
         setBlobsOverlayEnabled,
     };

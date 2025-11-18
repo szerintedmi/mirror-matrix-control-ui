@@ -104,7 +104,9 @@ const App: React.FC = () => {
         snapshotBootstrap.selectedName,
     );
     const [lastSavedFingerprint, setLastSavedFingerprint] = useState<string | null>(() =>
-        snapshotBootstrap.snapshot ? getGridStateFingerprint(snapshotBootstrap.snapshot) : null,
+        snapshotBootstrap.snapshot
+            ? getGridStateFingerprint(snapshotBootstrap.snapshot).hash
+            : null,
     );
 
     const currentGridSnapshot = useMemo(
@@ -115,7 +117,7 @@ const App: React.FC = () => {
         [gridSize, mirrorConfig],
     );
     const currentGridFingerprint = useMemo(
-        () => getGridStateFingerprint(currentGridSnapshot),
+        () => getGridStateFingerprint(currentGridSnapshot).hash,
         [currentGridSnapshot],
     );
     const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>({ kind: 'idle' });
@@ -245,7 +247,7 @@ const App: React.FC = () => {
                 gridSize: snapshot.gridSize,
                 mirrorConfig: normalizedConfig,
             });
-            setLastSavedFingerprint(fingerprint);
+            setLastSavedFingerprint(fingerprint.hash);
             setActiveSnapshotName(trimmed);
             persistLastSelectedSnapshotName(resolvedStorage, trimmed);
             setPersistenceStatus({

@@ -261,7 +261,7 @@ export interface BlobMeasurementStats {
         y: number;
         size: number;
     };
-    medianAbsoluteDeviation: {
+    nMad: {
         x: number;
         y: number;
         size: number;
@@ -288,21 +288,62 @@ export type CalibrationTileStatus =
     | 'failed'
     | 'skipped';
 
-export interface CalibrationProfileTile {
+export interface CalibrationProfileBlobStats {
+    minDiameter: number;
+    medianDiameter: number;
+    maxDiameter: number;
+    nMad: number;
+    sampleCount: number;
+}
+
+export interface CalibrationProfileBoundsAxis {
+    min: number;
+    max: number;
+}
+
+export interface CalibrationProfileBounds {
+    x: CalibrationProfileBoundsAxis;
+    y: CalibrationProfileBoundsAxis;
+}
+
+export interface TileAxisCalibration {
+    stepRange: { minSteps: number; maxSteps: number } | null;
+    stepScale: number | null;
+}
+
+export interface CalibrationTileOffset {
+    dx: number;
+    dy: number;
+    stepsX: number | null;
+    stepsY: number | null;
+}
+
+export interface CalibrationTilePosition {
+    x: number;
+    y: number;
+    stepsX: number | null;
+    stepsY: number | null;
+}
+
+export interface TileCalibrationResults {
     key: string;
     row: number;
     col: number;
     status: CalibrationTileStatus;
     error?: string | null;
-    adjustedHome: { x: number; y: number } | null;
-    homeOffset: { dx: number; dy: number } | null;
+    adjustedHome: CalibrationTilePosition | null;
+    homeOffset: CalibrationTileOffset | null;
     homeMeasurement: BlobMeasurement | null;
     stepToDisplacement: {
         x: number | null;
         y: number | null;
     };
     sizeDeltaAtStepTest: number | null;
-    blobSize: number | null;
+    axes: {
+        x: TileAxisCalibration;
+        y: TileAxisCalibration;
+    };
+    inferredBounds: CalibrationProfileBounds | null;
 }
 
 export interface CalibrationProfileMetrics {
@@ -312,15 +353,31 @@ export interface CalibrationProfileMetrics {
     skippedTiles: number;
 }
 
+export interface CalibrationProfileFingerprint {
+    hash: string;
+    snapshot: {
+        version: number;
+        gridSize: { rows: number; cols: number };
+        assignments: Record<string, { x: Motor | null; y: Motor | null }>;
+    };
+}
+
+export interface CalibrationProfileCalibrationSpace {
+    blobStats: CalibrationProfileBlobStats | null;
+    globalBounds: CalibrationProfileBounds | null;
+}
+
 export interface CalibrationProfile {
     id: string;
+    schemaVersion: number;
     name: string;
     createdAt: string;
     updatedAt: string;
     gridSize: { rows: number; cols: number };
     gridBlueprint: CalibrationGridBlueprint | null;
     stepTestSettings: { deltaSteps: number };
-    gridStateFingerprint: string;
-    tiles: Record<string, CalibrationProfileTile>;
+    gridStateFingerprint: CalibrationProfileFingerprint;
+    calibrationSpace: CalibrationProfileCalibrationSpace;
+    tiles: Record<string, TileCalibrationResults>;
     metrics: CalibrationProfileMetrics;
 }

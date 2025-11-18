@@ -80,7 +80,7 @@ export const useCalibrationProfilesController = ({
             gridSize,
             mirrorConfig,
         };
-        return getGridStateFingerprint(snapshot);
+        return getGridStateFingerprint(snapshot).hash;
     }, [gridSize, mirrorConfig]);
 
     const selectedProfile = useMemo(

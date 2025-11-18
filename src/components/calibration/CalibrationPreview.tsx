@@ -29,6 +29,9 @@ interface CalibrationPreviewProps {
     alignmentOverlayEnabled: boolean;
     alignmentOverlayAvailable: boolean;
     onToggleAlignmentOverlay: () => void;
+    tileBoundsOverlayEnabled: boolean;
+    tileBoundsOverlayAvailable: boolean;
+    onToggleTileBoundsOverlay: () => void;
 }
 
 const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
@@ -51,6 +54,9 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     alignmentOverlayEnabled,
     alignmentOverlayAvailable,
     onToggleAlignmentOverlay,
+    tileBoundsOverlayEnabled,
+    tileBoundsOverlayAvailable,
+    onToggleTileBoundsOverlay,
 }) => {
     const roiAspectRatio = useMemo(() => {
         if (!roiViewEnabled || !roi.enabled) {
@@ -199,15 +205,30 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         overlayButtonActive
                             ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
                             : 'border-gray-700 bg-gray-900 text-gray-400'
-                    }`}
+                    } ${!alignmentOverlayAvailable ? 'opacity-50' : ''}`}
                     title={
                         alignmentOverlayAvailable
                             ? 'Overlay calibration grid on the processed feed'
                             : 'Toggle on to watch calibration points appear as soon as measurements are captured'
                     }
                     aria-pressed={overlayButtonActive}
+                    disabled={!alignmentOverlayAvailable}
                 >
                     Calibration View
+                </button>
+                <button
+                    type="button"
+                    onClick={onToggleTileBoundsOverlay}
+                    className={`rounded-md border px-3 py-1 text-sm transition ${
+                        tileBoundsOverlayEnabled
+                            ? 'border-amber-400/70 bg-amber-400/15 text-amber-200'
+                            : 'border-gray-700 bg-gray-900 text-gray-400'
+                    } ${!tileBoundsOverlayAvailable ? 'opacity-50' : ''}`}
+                    title="Visualize each tile's inferred reach bounds"
+                    aria-pressed={tileBoundsOverlayEnabled}
+                    disabled={!tileBoundsOverlayAvailable}
+                >
+                    Per Tile Bounds
                 </button>
                 <button
                     type="button"
@@ -332,6 +353,11 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                 <p className="mt-3 text-center text-xs text-gray-500">
                     Calibration overlay: teal squares show target footprints, yellow dots mark
                     measured homes.
+                </p>
+            )}
+            {tileBoundsOverlayEnabled && (
+                <p className="mt-1 text-center text-xs text-amber-200">
+                    Tile bounds overlay: colored boxes outline each tile&rsquo;s inferred reach.
                 </p>
             )}
         </section>

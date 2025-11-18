@@ -1,3 +1,4 @@
+import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type {
     CalibrationRunSummary,
     CalibrationRunnerState,
@@ -7,240 +8,256 @@ import type {
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type {
     BlobMeasurement,
-    BlobMeasurementStats,
-    CalibrationGridBlueprint,
     CalibrationProfile,
+    CalibrationProfileBlobStats,
+    CalibrationProfileBounds,
+    CalibrationProfileCalibrationSpace,
     CalibrationProfileMetrics,
-    CalibrationProfileTile,
-    CalibrationTileStatus,
+    CalibrationTileOffset,
+    CalibrationTilePosition,
+    TileAxisCalibration,
+    TileCalibrationResults,
 } from '@/types';
 
 const STORAGE_KEY = 'mirror:calibration:profiles';
 const LAST_SELECTED_PROFILE_KEY = 'mirror:calibration:last-profile-id';
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
+const PROFILE_SCHEMA_VERSION = 2;
 
 interface StoredPayload {
     version: number;
     entries: CalibrationProfile[];
 }
 
-const TILE_STATUSES: CalibrationTileStatus[] = [
-    'pending',
-    'staged',
-    'measuring',
-    'completed',
-    'failed',
-    'skipped',
-];
-
-const isFiniteNumber = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isFinite(value);
-
-const isNonEmptyString = (value: unknown): value is string =>
-    typeof value === 'string' && value.trim().length > 0;
-
-const isCalibrationTileStatus = (value: unknown): value is CalibrationTileStatus =>
-    typeof value === 'string' && TILE_STATUSES.includes(value as CalibrationTileStatus);
-
-const sanitizeMeasurementStats = (
-    stats?: BlobMeasurementStats | null,
-): BlobMeasurementStats | undefined => {
-    if (!stats) {
-        return undefined;
-    }
-    const { sampleCount, thresholds, median, medianAbsoluteDeviation, passed } = stats;
-    if (
-        !isFiniteNumber(sampleCount) ||
-        !thresholds ||
-        !isFiniteNumber(thresholds.minSamples) ||
-        !isFiniteNumber(thresholds.maxMedianDeviationPt) ||
-        !median ||
-        !isFiniteNumber(median.x) ||
-        !isFiniteNumber(median.y) ||
-        !isFiniteNumber(median.size) ||
-        !medianAbsoluteDeviation ||
-        !isFiniteNumber(medianAbsoluteDeviation.x) ||
-        !isFiniteNumber(medianAbsoluteDeviation.y) ||
-        !isFiniteNumber(medianAbsoluteDeviation.size) ||
-        typeof passed !== 'boolean'
-    ) {
-        return undefined;
-    }
-    return {
-        sampleCount,
-        thresholds: {
-            minSamples: thresholds.minSamples,
-            maxMedianDeviationPt: thresholds.maxMedianDeviationPt,
-        },
-        median: {
-            x: median.x,
-            y: median.y,
-            size: median.size,
-        },
-        medianAbsoluteDeviation: {
-            x: medianAbsoluteDeviation.x,
-            y: medianAbsoluteDeviation.y,
-            size: medianAbsoluteDeviation.size,
-        },
-        passed,
-    };
+type StepVector = {
+    x: number | null;
+    y: number | null;
 };
 
-const sanitizeMeasurement = (measurement?: BlobMeasurement | null): BlobMeasurement | null => {
-    if (!measurement) {
-        return null;
-    }
-    const { x, y, size, response, capturedAt } = measurement;
-    if (
-        !isFiniteNumber(x) ||
-        !isFiniteNumber(y) ||
-        !isFiniteNumber(size) ||
-        !isFiniteNumber(response) ||
-        !isFiniteNumber(capturedAt)
-    ) {
-        return null;
-    }
-    return {
-        x,
-        y,
-        size,
-        response,
-        capturedAt,
-        stats: sanitizeMeasurementStats(measurement.stats),
-    };
+type PositionInput = {
+    x: number;
+    y: number;
+    stepsX?: number | null;
+    stepsY?: number | null;
 };
 
-const sanitizeOffset = (
-    offset?: { dx: number; dy: number } | null,
-): { dx: number; dy: number } | null => {
+const STEP_EPSILON = 1e-9;
+const NORMALIZED_MAD_FACTOR = 1.4826;
+
+const clampNormalized = (value: number): number => {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+    if (value < -1) {
+        return -1;
+    }
+    if (value > 1) {
+        return 1;
+    }
+    return value;
+};
+
+const computeMedian = (values: number[]): number => {
+    if (values.length === 0) {
+        return 0;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) {
+        return (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+    return sorted[mid];
+};
+
+const convertDeltaToSteps = (
+    delta: number | null | undefined,
+    perStep: number | null | undefined,
+): number | null => {
+    if (delta == null || perStep == null || Math.abs(perStep) < STEP_EPSILON) {
+        return null;
+    }
+    const steps = delta / perStep;
+    return Number.isFinite(steps) ? steps : null;
+};
+
+const normalizeStepVector = (input?: StepVector | null): StepVector => ({
+    x: input?.x ?? null,
+    y: input?.y ?? null,
+});
+
+const buildVectorFromOffset = (
+    offset: { dx: number; dy: number } | null | undefined,
+    stepToDisplacement: StepVector,
+): CalibrationTileOffset | null => {
     if (!offset) {
-        return null;
-    }
-    if (!isFiniteNumber(offset.dx) || !isFiniteNumber(offset.dy)) {
         return null;
     }
     return {
         dx: offset.dx,
         dy: offset.dy,
+        stepsX: convertDeltaToSteps(offset.dx, stepToDisplacement.x),
+        stepsY: convertDeltaToSteps(offset.dy, stepToDisplacement.y),
     };
 };
 
-const sanitizePoint = (
-    point?: { x: number; y: number } | null,
-): { x: number; y: number } | null => {
-    if (!point) {
+const buildVectorFromPosition = (
+    position: PositionInput | null | undefined,
+    reference: BlobMeasurement | null,
+    stepToDisplacement: StepVector,
+): CalibrationTilePosition | null => {
+    if (!position) {
         return null;
     }
-    if (!isFiniteNumber(point.x) || !isFiniteNumber(point.y)) {
-        return null;
-    }
+    const deltaX = reference ? position.x - reference.x : null;
+    const deltaY = reference ? position.y - reference.y : null;
     return {
-        x: point.x,
-        y: point.y,
+        x: position.x,
+        y: position.y,
+        stepsX:
+            position.stepsX ??
+            (deltaX !== null ? convertDeltaToSteps(deltaX, stepToDisplacement.x) : null),
+        stepsY:
+            position.stepsY ??
+            (deltaY !== null ? convertDeltaToSteps(deltaY, stepToDisplacement.y) : null),
     };
 };
 
-const sanitizeStepValue = (value?: number | null): number | null => {
-    if (!isFiniteNumber(value)) {
-        return null;
-    }
-    return value;
-};
+const computeAxisCalibration = (
+    perStep: number | null,
+    hasMotor: boolean,
+): TileAxisCalibration => ({
+    stepRange: hasMotor
+        ? { minSteps: MOTOR_MIN_POSITION_STEPS, maxSteps: MOTOR_MAX_POSITION_STEPS }
+        : null,
+    stepScale: perStep && Math.abs(perStep) >= STEP_EPSILON ? 1 / perStep : null,
+});
 
-const sanitizeGridBlueprint = (
-    blueprint?: CalibrationGridBlueprint | null,
-): CalibrationGridBlueprint | null => {
-    if (!blueprint) {
-        return null;
-    }
-    const { adjustedTileFootprint, tileGap, gridOrigin } = blueprint;
+const computeAxisBounds = (
+    center: number | null,
+    centerSteps: number | null,
+    perStep: number | null,
+): { min: number; max: number } | null => {
     if (
-        !adjustedTileFootprint ||
-        !isFiniteNumber(adjustedTileFootprint.width) ||
-        !isFiniteNumber(adjustedTileFootprint.height) ||
-        !tileGap ||
-        !isFiniteNumber(tileGap.x) ||
-        !isFiniteNumber(tileGap.y) ||
-        !gridOrigin ||
-        !isFiniteNumber(gridOrigin.x) ||
-        !isFiniteNumber(gridOrigin.y)
+        center == null ||
+        centerSteps == null ||
+        perStep == null ||
+        Math.abs(perStep) < STEP_EPSILON
     ) {
         return null;
     }
+    const deltaMin = MOTOR_MIN_POSITION_STEPS - centerSteps;
+    const deltaMax = MOTOR_MAX_POSITION_STEPS - centerSteps;
+    const candidateA = clampNormalized(center + deltaMin * perStep);
+    const candidateB = clampNormalized(center + deltaMax * perStep);
     return {
-        adjustedTileFootprint: {
-            width: adjustedTileFootprint.width,
-            height: adjustedTileFootprint.height,
-        },
-        tileGap: {
-            x: tileGap.x,
-            y: tileGap.y,
-        },
-        gridOrigin: {
-            x: gridOrigin.x,
-            y: gridOrigin.y,
-        },
+        min: Math.min(candidateA, candidateB),
+        max: Math.max(candidateA, candidateB),
     };
 };
 
-const buildTileEntry = (
-    tile: TileRunState,
-    summaryTile?: TileCalibrationResult,
-): CalibrationProfileTile => {
-    const measurement = summaryTile?.homeMeasurement ?? tile.metrics?.home ?? null;
-    const sanitizedMeasurement = sanitizeMeasurement(measurement);
-    return {
-        key: tile.tile.key,
-        row: tile.tile.row,
-        col: tile.tile.col,
-        status: isCalibrationTileStatus(summaryTile?.status) ? summaryTile?.status : tile.status,
-        error: summaryTile?.error ?? tile.error ?? null,
-        adjustedHome: sanitizePoint(
-            summaryTile?.adjustedHome ?? tile.metrics?.adjustedHome ?? null,
-        ),
-        homeOffset: sanitizeOffset(summaryTile?.homeOffset ?? tile.metrics?.homeOffset ?? null),
-        homeMeasurement: sanitizedMeasurement,
-        stepToDisplacement: {
-            x: sanitizeStepValue(
-                summaryTile?.stepToDisplacement?.x ?? tile.metrics?.stepToDisplacement?.x ?? null,
-            ),
-            y: sanitizeStepValue(
-                summaryTile?.stepToDisplacement?.y ?? tile.metrics?.stepToDisplacement?.y ?? null,
-            ),
-        },
-        sizeDeltaAtStepTest: sanitizeStepValue(
-            summaryTile?.sizeDeltaAtStepTest ?? tile.metrics?.sizeDeltaAtStepTest ?? null,
-        ),
-        blobSize: sanitizedMeasurement?.size ?? null,
-    };
-};
-
-const buildProfileTiles = (
-    tiles: Record<string, TileRunState>,
-    summaryTiles: CalibrationRunSummary['tiles'] | undefined,
-): Record<string, CalibrationProfileTile> => {
-    const entries: Record<string, CalibrationProfileTile> = {};
-    Object.values(tiles).forEach((tile) => {
-        const summaryTile = summaryTiles?.[tile.tile.key];
-        entries[tile.tile.key] = buildTileEntry(tile, summaryTile);
-    });
-    if (summaryTiles) {
-        Object.entries(summaryTiles).forEach(([key, summaryTile]) => {
-            if (!entries[key]) {
-                const fallback: TileRunState = {
-                    tile: summaryTile.tile,
-                    status: summaryTile.status as CalibrationTileStatus,
-                    assignment: { x: null, y: null },
-                };
-                entries[key] = buildTileEntry(fallback, summaryTile);
-            }
-        });
+const computeTileBounds = (
+    adjustedHome: CalibrationTilePosition | null,
+    stepToDisplacement: StepVector,
+): CalibrationProfileBounds | null => {
+    if (!adjustedHome) {
+        return null;
     }
-    return entries;
+    const boundsX = computeAxisBounds(adjustedHome.x, adjustedHome.stepsX, stepToDisplacement.x);
+    const boundsY = computeAxisBounds(adjustedHome.y, adjustedHome.stepsY, stepToDisplacement.y);
+    if (!boundsX || !boundsY) {
+        return null;
+    }
+    return {
+        x: boundsX,
+        y: boundsY,
+    };
 };
+
+const mergeBoundsIntersection = (
+    current: CalibrationProfileBounds | null,
+    candidate: CalibrationProfileBounds,
+): CalibrationProfileBounds | null => {
+    if (!current) {
+        return {
+            x: { ...candidate.x },
+            y: { ...candidate.y },
+        };
+    }
+    const minX = Math.max(current.x.min, candidate.x.min);
+    const maxX = Math.min(current.x.max, candidate.x.max);
+    const minY = Math.max(current.y.min, candidate.y.min);
+    const maxY = Math.min(current.y.max, candidate.y.max);
+    if (minX > maxX || minY > maxY) {
+        return null;
+    }
+    return {
+        x: { min: minX, max: maxX },
+        y: { min: minY, max: maxY },
+    };
+};
+
+const computeProfileBlobStats = (
+    tiles: Record<string, TileCalibrationResults>,
+): CalibrationProfileBlobStats | null => {
+    const sizes = Object.values(tiles)
+        .map((tile) => tile.homeMeasurement?.size)
+        .filter((size): size is number => typeof size === 'number' && Number.isFinite(size));
+    if (sizes.length === 0) {
+        return null;
+    }
+    const sorted = [...sizes].sort((a, b) => a - b);
+    const median = computeMedian(sorted);
+    const deviations = sorted.map((size) => Math.abs(size - median));
+    const mad = computeMedian(deviations);
+    return {
+        minDiameter: sorted[0],
+        maxDiameter: sorted[sorted.length - 1],
+        medianDiameter: median,
+        nMad: mad * NORMALIZED_MAD_FACTOR,
+        sampleCount: sorted.length,
+    };
+};
+
+export const recenterBounds = (bounds: CalibrationProfileBounds): CalibrationProfileBounds => {
+    const centerX = (bounds.x.min + bounds.x.max) / 2;
+    const centerY = (bounds.y.min + bounds.y.max) / 2;
+    if (Math.abs(centerX) <= STEP_EPSILON && Math.abs(centerY) <= STEP_EPSILON) {
+        return bounds;
+    }
+    return {
+        x: { min: bounds.x.min - centerX, max: bounds.x.max - centerX },
+        y: { min: bounds.y.min - centerY, max: bounds.y.max - centerY },
+    };
+};
+
+export const computeGlobalBoundsFromTiles = (
+    tiles: Record<string, TileCalibrationResults>,
+): CalibrationProfileBounds | null => {
+    let aggregate: CalibrationProfileBounds | null = null;
+    Object.values(tiles).forEach((tile) => {
+        if (tile.inferredBounds) {
+            aggregate = mergeBoundsIntersection(aggregate, tile.inferredBounds);
+        }
+    });
+    if (!aggregate) {
+        return null;
+    }
+    const finalBounds = aggregate as CalibrationProfileBounds;
+    return {
+        x: { ...finalBounds.x },
+        y: { ...finalBounds.y },
+    };
+};
+
+const buildCalibrationSpace = (
+    tiles: Record<string, TileCalibrationResults>,
+): CalibrationProfileCalibrationSpace => ({
+    blobStats: computeProfileBlobStats(tiles),
+    globalBounds: computeGlobalBoundsFromTiles(tiles),
+});
 
 const computeMetrics = (
-    tiles: Record<string, CalibrationProfileTile>,
+    tiles: Record<string, TileCalibrationResults>,
 ): CalibrationProfileMetrics => {
     const metrics: CalibrationProfileMetrics = {
         totalTiles: 0,
@@ -261,230 +278,77 @@ const computeMetrics = (
     return metrics;
 };
 
-const cloneTile = (tile: CalibrationProfileTile): CalibrationProfileTile => ({
-    key: tile.key,
-    row: tile.row,
-    col: tile.col,
-    status: tile.status,
-    error: tile.error ?? null,
-    adjustedHome: tile.adjustedHome ? { x: tile.adjustedHome.x, y: tile.adjustedHome.y } : null,
-    homeOffset: tile.homeOffset ? { dx: tile.homeOffset.dx, dy: tile.homeOffset.dy } : null,
-    homeMeasurement: tile.homeMeasurement ? sanitizeMeasurement(tile.homeMeasurement) : null,
-    stepToDisplacement: {
-        x: tile.stepToDisplacement.x,
-        y: tile.stepToDisplacement.y,
-    },
-    sizeDeltaAtStepTest: tile.sizeDeltaAtStepTest ?? null,
-    blobSize: tile.blobSize ?? null,
-});
+const buildTileEntry = (
+    tile: TileRunState,
+    summaryTile: TileCalibrationResult | undefined,
+): TileCalibrationResults => {
+    const measurement = summaryTile?.homeMeasurement ?? tile.metrics?.home ?? null;
+    const stepToDisplacement = normalizeStepVector(
+        summaryTile?.stepToDisplacement ?? tile.metrics?.stepToDisplacement ?? null,
+    );
+    const adjustedHomeSource = summaryTile?.adjustedHome ?? tile.metrics?.adjustedHome ?? null;
+    const adjustedHome = buildVectorFromPosition(
+        adjustedHomeSource ?? null,
+        measurement,
+        stepToDisplacement,
+    );
+    const homeOffsetSource = summaryTile?.homeOffset ?? tile.metrics?.homeOffset ?? null;
+    const homeOffset = buildVectorFromOffset(homeOffsetSource ?? null, stepToDisplacement);
+    return {
+        key: tile.tile.key,
+        row: tile.tile.row,
+        col: tile.tile.col,
+        status: summaryTile?.status ?? tile.status,
+        error: summaryTile?.error ?? tile.error ?? null,
+        adjustedHome,
+        homeOffset,
+        homeMeasurement: measurement,
+        stepToDisplacement,
+        sizeDeltaAtStepTest:
+            summaryTile?.sizeDeltaAtStepTest ?? tile.metrics?.sizeDeltaAtStepTest ?? null,
+        axes: {
+            x: computeAxisCalibration(stepToDisplacement.x, Boolean(tile.assignment.x)),
+            y: computeAxisCalibration(stepToDisplacement.y, Boolean(tile.assignment.y)),
+        },
+        inferredBounds:
+            summaryTile?.inferredBounds ?? computeTileBounds(adjustedHome, stepToDisplacement),
+    };
+};
 
-const serializeProfile = (profile: CalibrationProfile): CalibrationProfile => ({
-    id: profile.id,
-    name: profile.name,
-    createdAt: profile.createdAt,
-    updatedAt: profile.updatedAt,
-    gridSize: { rows: profile.gridSize.rows, cols: profile.gridSize.cols },
-    gridBlueprint: sanitizeGridBlueprint(profile.gridBlueprint),
-    stepTestSettings: {
-        deltaSteps: profile.stepTestSettings.deltaSteps,
-    },
-    gridStateFingerprint: profile.gridStateFingerprint,
-    tiles: Object.fromEntries(
-        Object.entries(profile.tiles).map(([key, tile]) => [key, cloneTile(tile)]),
-    ),
-    metrics: {
-        totalTiles: profile.metrics.totalTiles,
-        completedTiles: profile.metrics.completedTiles,
-        failedTiles: profile.metrics.failedTiles,
-        skippedTiles: profile.metrics.skippedTiles,
-    },
-});
+const buildProfileTiles = (
+    tiles: Record<string, TileRunState>,
+    summaryTiles: CalibrationRunSummary['tiles'] | undefined,
+): Record<string, TileCalibrationResults> => {
+    const entries: Record<string, TileCalibrationResults> = {};
+    Object.values(tiles).forEach((tile) => {
+        const summaryTile = summaryTiles?.[tile.tile.key];
+        entries[tile.tile.key] = buildTileEntry(tile, summaryTile);
+    });
+    if (summaryTiles) {
+        Object.entries(summaryTiles).forEach(([key, summaryTile]) => {
+            if (!entries[key]) {
+                const fallback: TileRunState = {
+                    tile: summaryTile.tile,
+                    status: summaryTile.status,
+                    assignment: { x: null, y: null },
+                };
+                entries[key] = buildTileEntry(fallback, summaryTile);
+            }
+        });
+    }
+    return entries;
+};
 
-const persistProfiles = (storage: Storage, profiles: CalibrationProfile[]) => {
+const persistProfiles = (storage: Storage, profiles: CalibrationProfile[]): void => {
     const payload: StoredPayload = {
         version: STORAGE_VERSION,
-        entries: profiles.map((profile) => serializeProfile(profile)),
+        entries: profiles,
     };
     try {
         storage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (error) {
         console.warn('Failed to persist calibration profiles', error);
     }
-};
-
-const parseMeasurementStats = (input: unknown): BlobMeasurementStats | undefined => {
-    if (!input || typeof input !== 'object') {
-        return undefined;
-    }
-    const candidate = input as BlobMeasurementStats;
-    if (
-        !isFiniteNumber(candidate.sampleCount) ||
-        !candidate.thresholds ||
-        !isFiniteNumber(candidate.thresholds.minSamples) ||
-        !isFiniteNumber(candidate.thresholds.maxMedianDeviationPt) ||
-        !candidate.median ||
-        !isFiniteNumber(candidate.median.x) ||
-        !isFiniteNumber(candidate.median.y) ||
-        !isFiniteNumber(candidate.median.size) ||
-        !candidate.medianAbsoluteDeviation ||
-        !isFiniteNumber(candidate.medianAbsoluteDeviation.x) ||
-        !isFiniteNumber(candidate.medianAbsoluteDeviation.y) ||
-        !isFiniteNumber(candidate.medianAbsoluteDeviation.size) ||
-        typeof candidate.passed !== 'boolean'
-    ) {
-        return undefined;
-    }
-    return {
-        sampleCount: candidate.sampleCount,
-        thresholds: {
-            minSamples: candidate.thresholds.minSamples,
-            maxMedianDeviationPt: candidate.thresholds.maxMedianDeviationPt,
-        },
-        median: {
-            x: candidate.median.x,
-            y: candidate.median.y,
-            size: candidate.median.size,
-        },
-        medianAbsoluteDeviation: {
-            x: candidate.medianAbsoluteDeviation.x,
-            y: candidate.medianAbsoluteDeviation.y,
-            size: candidate.medianAbsoluteDeviation.size,
-        },
-        passed: candidate.passed,
-    };
-};
-
-const parseMeasurement = (input: unknown): BlobMeasurement | null => {
-    if (!input || typeof input !== 'object') {
-        return null;
-    }
-    const candidate = input as BlobMeasurement;
-    if (
-        !isFiniteNumber(candidate.x) ||
-        !isFiniteNumber(candidate.y) ||
-        !isFiniteNumber(candidate.size) ||
-        !isFiniteNumber(candidate.response) ||
-        !isFiniteNumber(candidate.capturedAt)
-    ) {
-        return null;
-    }
-    return {
-        x: candidate.x,
-        y: candidate.y,
-        size: candidate.size,
-        response: candidate.response,
-        capturedAt: candidate.capturedAt,
-        stats: parseMeasurementStats(candidate.stats),
-    };
-};
-
-const parseTile = (input: unknown): CalibrationProfileTile | null => {
-    if (!input || typeof input !== 'object') {
-        return null;
-    }
-    const candidate = input as CalibrationProfileTile;
-    if (!isNonEmptyString(candidate.key)) {
-        return null;
-    }
-    if (!isFiniteNumber(candidate.row) || !isFiniteNumber(candidate.col)) {
-        return null;
-    }
-    const status = isCalibrationTileStatus(candidate.status) ? candidate.status : 'pending';
-    return {
-        key: candidate.key,
-        row: candidate.row,
-        col: candidate.col,
-        status,
-        error: isNonEmptyString(candidate.error) ? candidate.error : null,
-        adjustedHome: sanitizePoint(candidate.adjustedHome),
-        homeOffset: sanitizeOffset(candidate.homeOffset),
-        homeMeasurement: parseMeasurement(candidate.homeMeasurement ?? undefined),
-        stepToDisplacement: {
-            x: sanitizeStepValue(candidate.stepToDisplacement?.x ?? null),
-            y: sanitizeStepValue(candidate.stepToDisplacement?.y ?? null),
-        },
-        sizeDeltaAtStepTest: sanitizeStepValue(candidate.sizeDeltaAtStepTest ?? null),
-        blobSize: sanitizeStepValue(candidate.blobSize ?? null),
-    };
-};
-
-const parseMetrics = (input: unknown): CalibrationProfileMetrics | null => {
-    if (!input || typeof input !== 'object') {
-        return null;
-    }
-    const candidate = input as CalibrationProfileMetrics;
-    if (
-        !isFiniteNumber(candidate.totalTiles) ||
-        !isFiniteNumber(candidate.completedTiles) ||
-        !isFiniteNumber(candidate.failedTiles) ||
-        !isFiniteNumber(candidate.skippedTiles)
-    ) {
-        return null;
-    }
-    return {
-        totalTiles: candidate.totalTiles,
-        completedTiles: candidate.completedTiles,
-        failedTiles: candidate.failedTiles,
-        skippedTiles: candidate.skippedTiles,
-    };
-};
-
-const parseProfile = (input: unknown): CalibrationProfile | null => {
-    if (!input || typeof input !== 'object') {
-        return null;
-    }
-    const candidate = input as CalibrationProfile;
-    if (!isNonEmptyString(candidate.id) || !isNonEmptyString(candidate.name)) {
-        return null;
-    }
-    if (!isNonEmptyString(candidate.createdAt) || !isNonEmptyString(candidate.updatedAt)) {
-        return null;
-    }
-    if (
-        !candidate.gridSize ||
-        !isFiniteNumber(candidate.gridSize.rows) ||
-        !isFiniteNumber(candidate.gridSize.cols)
-    ) {
-        return null;
-    }
-    if (!isNonEmptyString(candidate.gridStateFingerprint)) {
-        return null;
-    }
-    if (!candidate.stepTestSettings || !isFiniteNumber(candidate.stepTestSettings.deltaSteps)) {
-        return null;
-    }
-    const tilesInput = candidate.tiles;
-    if (!tilesInput || typeof tilesInput !== 'object') {
-        return null;
-    }
-    const tiles: Record<string, CalibrationProfileTile> = {};
-    Object.entries(tilesInput).forEach(([key, value]) => {
-        const tile = parseTile(value);
-        if (tile) {
-            tiles[key] = tile;
-        }
-    });
-    if (Object.keys(tiles).length === 0) {
-        return null;
-    }
-    const metrics = parseMetrics(candidate.metrics) ?? computeMetrics(tiles);
-    return {
-        id: candidate.id,
-        name: candidate.name,
-        createdAt: candidate.createdAt,
-        updatedAt: candidate.updatedAt,
-        gridSize: {
-            rows: candidate.gridSize.rows,
-            cols: candidate.gridSize.cols,
-        },
-        gridBlueprint: sanitizeGridBlueprint(candidate.gridBlueprint),
-        stepTestSettings: {
-            deltaSteps: candidate.stepTestSettings.deltaSteps,
-        },
-        gridStateFingerprint: candidate.gridStateFingerprint,
-        tiles,
-        metrics,
-    };
 };
 
 const readProfilesFromStorage = (storage?: Storage): CalibrationProfile[] => {
@@ -500,14 +364,7 @@ const readProfilesFromStorage = (storage?: Storage): CalibrationProfile[] => {
         if (!payload || payload.version !== STORAGE_VERSION || !Array.isArray(payload.entries)) {
             return [];
         }
-        const profiles: CalibrationProfile[] = [];
-        payload.entries.forEach((entry) => {
-            const profile = parseProfile(entry);
-            if (profile) {
-                profiles.push(profile);
-            }
-        });
-        return profiles;
+        return payload.entries.filter((entry) => entry.schemaVersion === PROFILE_SCHEMA_VERSION);
     } catch (error) {
         console.warn('Failed to parse calibration profiles', error);
         return [];
@@ -543,43 +400,45 @@ export const saveCalibrationProfile = (
         console.warn('Cannot save calibration profile before a summary is available.');
         return null;
     }
-    const name = isNonEmptyString(options.name) ? options.name.trim() : 'Untitled calibration';
     const tiles = buildProfileTiles(options.runnerState.tiles, summary.tiles);
     const metrics = computeMetrics(tiles);
     const fingerprint = getGridStateFingerprint(options.gridSnapshot);
     const now = new Date().toISOString();
-    const baseProfile: CalibrationProfile = {
+    const profile: CalibrationProfile = {
         id: options.id ?? generateProfileId(),
-        name,
+        schemaVersion: PROFILE_SCHEMA_VERSION,
+        name: options.name.trim() || 'Untitled calibration',
         createdAt: now,
         updatedAt: now,
         gridSize: {
             rows: options.gridSnapshot.gridSize.rows,
             cols: options.gridSnapshot.gridSize.cols,
         },
-        gridBlueprint: sanitizeGridBlueprint(summary.gridBlueprint),
+        gridBlueprint: summary.gridBlueprint ?? null,
         stepTestSettings: {
             deltaSteps: summary.stepTestSettings.deltaSteps,
         },
         gridStateFingerprint: fingerprint,
+        calibrationSpace: buildCalibrationSpace(tiles),
         tiles,
         metrics,
     };
     const existing = readProfilesFromStorage(storage);
-    const index = options.id ? existing.findIndex((entry) => entry.id === options.id) : -1;
-    if (index >= 0) {
-        const previous = existing[index];
+    const existingIndex = options.id ? existing.findIndex((entry) => entry.id === options.id) : -1;
+    if (existingIndex >= 0) {
+        const previous = existing[existingIndex];
         const updatedProfile: CalibrationProfile = {
-            ...baseProfile,
+            ...profile,
             id: previous.id,
             createdAt: previous.createdAt,
         };
-        existing[index] = updatedProfile;
-    } else {
-        existing.push(baseProfile);
+        existing[existingIndex] = updatedProfile;
+        persistProfiles(storage, existing);
+        return updatedProfile;
     }
+    existing.push(profile);
     persistProfiles(storage, existing);
-    return index >= 0 ? existing[index] : baseProfile;
+    return profile;
 };
 
 export const deleteCalibrationProfile = (storage: Storage | undefined, profileId: string): void => {
@@ -642,16 +501,26 @@ export const profileToRunSummary = (profile: CalibrationProfile): CalibrationRun
             result.homeMeasurement = entry.homeMeasurement;
         }
         if (entry.homeOffset) {
-            result.homeOffset = entry.homeOffset;
+            result.homeOffset = { dx: entry.homeOffset.dx, dy: entry.homeOffset.dy };
         }
         if (entry.adjustedHome) {
-            result.adjustedHome = entry.adjustedHome;
+            result.adjustedHome = { x: entry.adjustedHome.x, y: entry.adjustedHome.y };
         }
         if (entry.stepToDisplacement) {
             result.stepToDisplacement = entry.stepToDisplacement;
         }
         if (typeof entry.sizeDeltaAtStepTest === 'number') {
             result.sizeDeltaAtStepTest = entry.sizeDeltaAtStepTest;
+        }
+        if (entry.inferredBounds) {
+            result.inferredBounds = entry.inferredBounds;
+        }
+        const stepScale = {
+            x: entry.axes.x.stepScale ?? null,
+            y: entry.axes.y.stepScale ?? null,
+        };
+        if (stepScale.x !== null || stepScale.y !== null) {
+            result.stepScale = stepScale;
         }
         tiles[entry.key] = result;
     });

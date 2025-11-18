@@ -3,7 +3,7 @@ import { getMirrorAssignment } from '../utils/grid';
 import type {
     Pattern,
     CalibrationProfile,
-    CalibrationProfileTile,
+    TileCalibrationResults,
     MirrorConfig,
     PlaybackMirrorPlan,
     PlaybackPlanResult,
@@ -26,8 +26,8 @@ const cloneAssignment = (
 const getTileKey = (row: number, col: number): string => `${row}-${col}`;
 
 const isTileCalibrated = (
-    tile: CalibrationProfileTile | undefined,
-): tile is CalibrationProfileTile =>
+    tile: TileCalibrationResults | undefined,
+): tile is TileCalibrationResults =>
     Boolean(
         tile &&
             tile.status === 'completed' &&

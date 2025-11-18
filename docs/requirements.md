@@ -174,7 +174,24 @@ Storage: `localStorage` (single active grid configuration in MVP).
 - A motor represents one tile axis; prevent sharing the same motor across multiple tiles.
 - Unassigned tiles are permitted; playback skips them.
 
-### 7.3 Projection Settings (persisted)
+### 7.3 Calibration Profiles (local storage)
+
+- Browser key `mirror:calibration:profiles` persists entries with `schemaVersion` (now `2`) plus the full normalized data model.
+- `gridStateFingerprint` is now `{ hash, snapshot }`, where `snapshot = { version:1, gridSize:{rows,cols}, assignments:{"row-col":{x,y}} }`. No more double-stringified JSON.
+- `calibrationSpace` summarizes the run:
+  - `blobStats`: `{ minDiameter, medianDiameter, maxDiameter, nMad, sampleCount }` — every value sits in the shared [-1, 1] coordinate system so downstream code can convert to px/mm only when needed.
+  - `globalBounds`: `{ x:{min,max}, y:{min,max} }`, the intersection of each tile’s inferred reach in the shared normalized coordinate system (origin at the calibrated physical center). Pattern Designer clamps drawing and overlays this rectangle.
+- Each `tiles["row-col"]` entry now contains:
+  - `homeMeasurement` (normalized center + `nMad` stats).
+  - `homeOffset` `{ dx, dy, stepsX, stepsY }` capturing both the normalized drift and the equivalent step delta.
+  - `adjustedHome` `{ x, y, stepsX, stepsY }` describing the corrected grid center after applying alignment moves.
+  - `stepToDisplacement` (normalized-per-step) plus `axes.{x,y}.stepScale` (signed steps-per-normalized-unit) and `{ minSteps, maxSteps }` ranges so playback can map directly from normalized coordinates to steps.
+  - `sizeDeltaAtStepTest` and `inferredBounds` for per-tile reach boxes (used to build `globalBounds`).
+- All geometry stays normalized [-1, 1]; conversions to px/mm happen at the visualization/playback layer using the stored `stepScale` factors and `stepsX/stepsY` offsets.
+
+Pattern Designer surfaces `calibrationSpace.globalBounds` by default (with optional per-tile `inferredBounds` overlays), and Playback converts pattern coordinates via each tile’s `stepScale` + stored offsets instead of recomputing from scratch.
+
+### 7.4 Projection Settings (persisted)
 
 ```json
 {
@@ -188,7 +205,7 @@ Storage: `localStorage` (single active grid configuration in MVP).
 }
 ```
 
-### 7.4 Pattern (example skeleton)
+### 7.5 Pattern (example skeleton)
 
 ```json
 {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
@@ -8,7 +8,7 @@ import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPa
 import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
 import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
-import { useCameraPipeline } from '@/hooks/useCameraPipeline';
+import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import type { MirrorConfig } from '@/types';
@@ -57,6 +57,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const [isRotationAdjusting, setIsRotationAdjusting] = useState(false);
     const [alignmentOverlayVisible, setAlignmentOverlayVisible] = useState(false);
+    const [tileBoundsOverlayVisible, setTileBoundsOverlayVisible] = useState(false);
 
     const cameraPipeline = useCameraPipeline({
         detectionSettingsLoaded,
@@ -98,6 +99,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         resetRoi,
         nativeBlobDetectorAvailable,
         setAlignmentOverlaySummary,
+        setGlobalBoundsOverlayBounds,
+        setTileBoundsOverlayEntries,
         blobsOverlayEnabled,
         setBlobsOverlayEnabled,
     } = cameraPipeline;
@@ -134,8 +137,29 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         skipped: runnerState.progress.skipped,
     };
 
+    const isCalibrationActive = !['idle', 'completed', 'error', 'aborted'].includes(
+        runnerState.phase,
+    );
+
     const alignmentSourceSummary =
-        runnerState.summary ?? calibrationProfilesController.activeProfileSummary;
+        runnerState.summary ??
+        (isCalibrationActive ? null : calibrationProfilesController.activeProfileSummary);
+
+    const activeProfile = calibrationProfilesController.activeProfile;
+
+    const activeTileBounds = useMemo<TileBoundsOverlayEntry[]>(() => {
+        if (!activeProfile) {
+            return [];
+        }
+        return Object.values(activeProfile.tiles)
+            .filter((tile) => Boolean(tile.inferredBounds))
+            .map((tile) => ({
+                key: tile.key,
+                row: tile.row,
+                col: tile.col,
+                bounds: tile.inferredBounds!,
+            }));
+    }, [activeProfile]);
 
     useEffect(() => {
         setAlignmentOverlaySummary(alignmentSourceSummary ?? null);
@@ -143,6 +167,27 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const alignmentOverlayAvailable = Boolean(alignmentSourceSummary?.gridBlueprint);
     const displayedAlignmentOverlayEnabled = alignmentOverlayVisible && alignmentOverlayAvailable;
+
+    const activeGlobalBounds = activeProfile?.calibrationSpace.globalBounds ?? null;
+
+    useEffect(() => {
+        const shouldShowBounds =
+            displayedAlignmentOverlayEnabled && !isCalibrationActive && Boolean(activeGlobalBounds);
+        setGlobalBoundsOverlayBounds(shouldShowBounds ? activeGlobalBounds : null);
+    }, [
+        activeGlobalBounds,
+        displayedAlignmentOverlayEnabled,
+        isCalibrationActive,
+        setGlobalBoundsOverlayBounds,
+    ]);
+
+    const tileBoundsOverlayAvailable = !isCalibrationActive && activeTileBounds.length > 0;
+    const displayedTileBoundsOverlayEnabled =
+        tileBoundsOverlayVisible && tileBoundsOverlayAvailable;
+
+    useEffect(() => {
+        setTileBoundsOverlayEntries(displayedTileBoundsOverlayEnabled ? activeTileBounds : null);
+    }, [activeTileBounds, displayedTileBoundsOverlayEnabled, setTileBoundsOverlayEntries]);
 
     const rotationOverlayVisible = isRotationAdjusting;
 
@@ -244,6 +289,9 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     alignmentOverlayEnabled={displayedAlignmentOverlayEnabled}
                     alignmentOverlayAvailable={alignmentOverlayAvailable}
                     onToggleAlignmentOverlay={() => setAlignmentOverlayVisible((prev) => !prev)}
+                    tileBoundsOverlayEnabled={displayedTileBoundsOverlayEnabled}
+                    tileBoundsOverlayAvailable={tileBoundsOverlayAvailable}
+                    onToggleTileBoundsOverlay={() => setTileBoundsOverlayVisible((prev) => !prev)}
                 />
             </div>
         </div>

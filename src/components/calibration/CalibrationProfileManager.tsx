@@ -186,7 +186,9 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                                 onToggle={() => handleToggleDetails(profile.id)}
                                 onDelete={onDeleteProfile}
                                 onLoad={onLoadProfile}
-                                gridMatch={profile.gridStateFingerprint === currentGridFingerprint}
+                                gridMatch={
+                                    profile.gridStateFingerprint.hash === currentGridFingerprint
+                                }
                             />
                         ))}
                     </div>

@@ -47,8 +47,14 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
         metrics.stepToDisplacement ?? summaryTile?.stepToDisplacement ?? null;
     const sizeDeltaAtStepTest =
         metrics.sizeDeltaAtStepTest ?? summaryTile?.sizeDeltaAtStepTest ?? null;
+    const inferredBounds = summaryTile?.inferredBounds ?? null;
+    const axisStepScale = summaryTile?.stepScale ?? null;
     const perStepX = stepToDisplacement?.x ?? null;
     const perStepY = stepToDisplacement?.y ?? null;
+    const fallbackStepScaleX = perStepX && Math.abs(perStepX) > 1e-9 ? 1 / perStepX : null;
+    const fallbackStepScaleY = perStepY && Math.abs(perStepY) > 1e-9 ? 1 / perStepY : null;
+    const stepScaleX = axisStepScale?.x ?? fallbackStepScaleX;
+    const stepScaleY = axisStepScale?.y ?? fallbackStepScaleY;
 
     const alignmentStepsX = homeOffset
         ? convertNormalizedToSteps(
@@ -82,7 +88,9 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
         home ||
             adjustedHome ||
             homeOffset ||
-            (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)),
+            inferredBounds ||
+            (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)) ||
+            (axisStepScale && (axisStepScale.x || axisStepScale.y)),
     );
 
     const axisAssignmentLabel = (axis: 'x' | 'y'): string => {
@@ -160,6 +168,22 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                   digits: 6,
               })} × ${stepTestSettings.deltaSteps}\``
             : '`stepToDisplacement.y × deltaSteps`';
+    const stepScaleFormulaX =
+        axisStepScale?.x !== undefined && axisStepScale?.x !== null
+            ? '`axes.x.stepScale`'
+            : fallbackStepScaleX && perStepX
+              ? `\`1 ÷ stepToDisplacement.x = 1 ÷ ${formatDecimal(perStepX, {
+                    digits: 6,
+                })}\``
+              : '`1 ÷ stepToDisplacement.x`';
+    const stepScaleFormulaY =
+        axisStepScale?.y !== undefined && axisStepScale?.y !== null
+            ? '`axes.y.stepScale`'
+            : fallbackStepScaleY && perStepY
+              ? `\`1 ÷ stepToDisplacement.y = 1 ÷ ${formatDecimal(perStepY, {
+                    digits: 6,
+                })}\``
+              : '`1 ÷ stepToDisplacement.y`';
     const sizeDeltaFormula =
         sizeDeltaAtStepTest !== null && home?.size !== undefined && home?.size !== null
             ? `\`size_after_step - home.size = ${formatDecimal(sizeAfterStep, {
@@ -297,26 +321,21 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                     formula="PASS indicates every sample stayed within the configured deviation window."
                                                 />
                                                 <DebugStat
-                                                    label="MAD.x"
-                                                    value={formatPercent(
-                                                        measurementStats.medianAbsoluteDeviation.x,
-                                                    )}
-                                                    formula="Median absolute deviation of normalized X across the sampled frames."
+                                                    label="nMAD.x"
+                                                    value={formatPercent(measurementStats.nMad.x)}
+                                                    formula="Normalized median absolute deviation (1.4826 × MAD) of normalized X across sampled frames."
                                                 />
                                                 <DebugStat
-                                                    label="MAD.y"
-                                                    value={formatPercent(
-                                                        measurementStats.medianAbsoluteDeviation.y,
-                                                    )}
-                                                    formula="Median absolute deviation of normalized Y across the sampled frames."
+                                                    label="nMAD.y"
+                                                    value={formatPercent(measurementStats.nMad.y)}
+                                                    formula="Normalized median absolute deviation of normalized Y across sampled frames."
                                                 />
                                                 <DebugStat
-                                                    label="MAD.size"
+                                                    label="nMAD.size"
                                                     value={formatPercent(
-                                                        measurementStats.medianAbsoluteDeviation
-                                                            .size,
+                                                        measurementStats.nMad.size,
                                                     )}
-                                                    formula="Median absolute deviation of the normalized blob size across the sampled frames."
+                                                    formula="Normalized median absolute deviation of the normalized blob size across sampled frames."
                                                 />
                                             </div>
                                         </section>
@@ -401,6 +420,27 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                 </div>
                                             </div>
                                             <div>
+                                                <p className="mb-1 text-[10px] uppercase tracking-wide text-emerald-300">
+                                                    Step scale (steps per normalized unit)
+                                                </p>
+                                                <div className="grid gap-2 sm:grid-cols-2">
+                                                    <DebugStat
+                                                        label="stepScale.x"
+                                                        value={formatDecimal(stepScaleX, {
+                                                            digits: 3,
+                                                        })}
+                                                        formula={stepScaleFormulaX}
+                                                    />
+                                                    <DebugStat
+                                                        label="stepScale.y"
+                                                        value={formatDecimal(stepScaleY, {
+                                                            digits: 3,
+                                                        })}
+                                                        formula={stepScaleFormulaY}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
                                                 <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-300">
                                                     Alignment steps
                                                 </p>
@@ -421,6 +461,47 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     </section>
                                 </div>
                             </div>
+                            {inferredBounds ? (
+                                <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4 text-sm text-gray-100">
+                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        Reach estimates (normalized)
+                                    </p>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <DebugStat
+                                            label="bounds.x.min"
+                                            value={formatDecimal(inferredBounds.x.min, {
+                                                digits: 4,
+                                                signed: true,
+                                            })}
+                                            formula="Intersection of per-tile X reach relative to the grid origin (normalized [-1,1])."
+                                        />
+                                        <DebugStat
+                                            label="bounds.x.max"
+                                            value={formatDecimal(inferredBounds.x.max, {
+                                                digits: 4,
+                                                signed: true,
+                                            })}
+                                            formula="Intersection of per-tile X reach relative to the grid origin (normalized [-1,1])."
+                                        />
+                                        <DebugStat
+                                            label="bounds.y.min"
+                                            value={formatDecimal(inferredBounds.y.min, {
+                                                digits: 4,
+                                                signed: true,
+                                            })}
+                                            formula="Intersection of per-tile Y reach relative to the grid origin (normalized [-1,1])."
+                                        />
+                                        <DebugStat
+                                            label="bounds.y.max"
+                                            value={formatDecimal(inferredBounds.y.max, {
+                                                digits: 4,
+                                                signed: true,
+                                            })}
+                                            formula="Intersection of per-tile Y reach relative to the grid origin (normalized [-1,1])."
+                                        />
+                                    </div>
+                                </section>
+                            ) : null}
                             <section className="rounded-lg border border-amber-600/40 bg-amber-500/10 p-4 text-sm text-amber-100">
                                 <p className="mb-2 text-xs uppercase tracking-wide">
                                     Informational (not used)

@@ -31,7 +31,7 @@ export const DETECTION_BLOB_IGNORE_SAMPLE_ABOVE_DEVIATION_PT = 0.1;
 export const DETECTION_BLOB_MIN_SAMPLES = 5; // samples within range required
 // allowed normalized jitter of considered samples (normalized deviation)
 export const DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT = 0.005;
-export const DETECTION_BLOB_CAPTURE_DELAY_MS = 80; // temporary settle delay before sampling (frame capture pipeline might be behind)
+export const DETECTION_BLOB_CAPTURE_DELAY_MS = 100; // temporary settle delay before sampling (frame capture pipeline might be behind)
 
 export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 

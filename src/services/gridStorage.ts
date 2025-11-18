@@ -1,4 +1,5 @@
-import type { MirrorAssignment, MirrorConfig } from '../types';
+import type { MirrorAssignment, MirrorConfig } from '@/types';
+import { fnv1aHash } from '@/utils/hash';
 
 const STORAGE_KEY = 'mirror:grid-config';
 const GRID_STATE_VERSION = 1;
@@ -9,13 +10,18 @@ interface SerializableAssignment {
     y: MirrorAssignment['y'];
 }
 
-interface StoredGridState {
+export interface StoredGridState {
     version: number;
     gridSize: {
         rows: number;
         cols: number;
     };
     assignments: Record<string, SerializableAssignment>;
+}
+
+export interface GridStateFingerprint {
+    hash: string;
+    snapshot: StoredGridState;
 }
 
 interface StoredSnapshotEntry {
@@ -86,11 +92,14 @@ const toStoredPayload = (state: GridStateSnapshot): StoredGridState => {
     };
 };
 
-const serializeGridState = (state: GridStateSnapshot): string =>
-    JSON.stringify(toStoredPayload(state));
-
-export const getGridStateFingerprint = (state: GridStateSnapshot): string =>
-    serializeGridState(state);
+export const getGridStateFingerprint = (state: GridStateSnapshot): GridStateFingerprint => {
+    const snapshot = toStoredPayload(state);
+    const serialized = JSON.stringify(snapshot);
+    return {
+        hash: fnv1aHash(serialized),
+        snapshot,
+    };
+};
 
 const hydrateStoredGridState = (payload: unknown): GridStateSnapshot | null => {
     if (!payload || typeof payload !== 'object') {

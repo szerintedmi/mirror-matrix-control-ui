@@ -133,7 +133,9 @@ describe('gridStorage snapshot collection', () => {
         const snapshotA = { gridSize: { rows: 2, cols: 2 }, mirrorConfig: first };
         const snapshotB = { gridSize: { rows: 2, cols: 2 }, mirrorConfig: second };
 
-        expect(getGridStateFingerprint(snapshotA)).toEqual(getGridStateFingerprint(snapshotB));
+        expect(getGridStateFingerprint(snapshotA).hash).toEqual(
+            getGridStateFingerprint(snapshotB).hash,
+        );
     });
 
     it('stores default snapshots via persistGridState', () => {

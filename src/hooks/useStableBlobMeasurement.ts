@@ -92,6 +92,7 @@ const aggregateBlobSamples = (
     const threshold = DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT;
     const passed = maxDeviation <= threshold && maxMedianAbsoluteDeviation <= threshold;
 
+    const NORMALIZED_MAD_FACTOR = 1.4826;
     const stats: BlobMeasurementStats = {
         sampleCount: samples.length,
         thresholds: {
@@ -103,10 +104,10 @@ const aggregateBlobSamples = (
             y: medianY,
             size: medianSize,
         },
-        medianAbsoluteDeviation: {
-            x: madX,
-            y: madY,
-            size: madSize,
+        nMad: {
+            x: madX * NORMALIZED_MAD_FACTOR,
+            y: madY * NORMALIZED_MAD_FACTOR,
+            size: madSize * NORMALIZED_MAD_FACTOR,
         },
         passed,
     };
@@ -210,10 +211,10 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
                   y: viewToCentered(measurement.stats.median.y),
                   size: viewDeltaToCentered(measurement.stats.median.size),
               },
-              medianAbsoluteDeviation: {
-                  x: viewDeltaToCentered(measurement.stats.medianAbsoluteDeviation.x),
-                  y: viewDeltaToCentered(measurement.stats.medianAbsoluteDeviation.y),
-                  size: viewDeltaToCentered(measurement.stats.medianAbsoluteDeviation.size),
+              nMad: {
+                  x: viewDeltaToCentered(measurement.stats.nMad.x),
+                  y: viewDeltaToCentered(measurement.stats.nMad.y),
+                  size: viewDeltaToCentered(measurement.stats.nMad.size),
               },
           }
         : undefined;

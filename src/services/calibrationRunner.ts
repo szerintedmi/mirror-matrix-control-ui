@@ -7,6 +7,7 @@ import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import type {
     BlobMeasurement,
     CalibrationGridBlueprint,
+    CalibrationProfileBounds,
     MirrorAssignment,
     MirrorConfig,
     Motor,
@@ -74,6 +75,8 @@ export interface TileCalibrationResult {
     adjustedHome?: { x: number; y: number };
     stepToDisplacement?: { x: number | null; y: number | null };
     sizeDeltaAtStepTest?: number | null;
+    inferredBounds?: CalibrationProfileBounds | null;
+    stepScale?: { x: number | null; y: number | null };
 }
 
 export interface CalibrationRunSummary {
