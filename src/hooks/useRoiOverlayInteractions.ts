@@ -11,6 +11,7 @@ import {
 
 import { clamp01 } from '@/constants/calibration';
 import type { NormalizedRoi } from '@/types';
+import { buildLetterboxTransform, viewportToCamera } from '@/utils/letterbox';
 
 export type RoiEditingMode = 'idle' | 'drag' | 'resize' | 'draw';
 
@@ -27,6 +28,7 @@ interface UseRoiOverlayInteractionsParams {
     roiViewEnabled: boolean;
     setRoiViewEnabled: Dispatch<SetStateAction<boolean>>;
     roiRef: MutableRefObject<NormalizedRoi>;
+    cameraAspectRatio: number;
 }
 
 export const useRoiOverlayInteractions = ({
@@ -35,6 +37,7 @@ export const useRoiOverlayInteractions = ({
     roiViewEnabled,
     setRoiViewEnabled,
     roiRef,
+    cameraAspectRatio,
 }: UseRoiOverlayInteractionsParams): {
     roiEditingMode: RoiEditingMode;
     overlayHandlers: CameraPipelineOverlayHandlers;
@@ -70,6 +73,21 @@ export const useRoiOverlayInteractions = ({
         };
     }, [roi.enabled, roiViewEnabled, setRoiViewEnabled]);
 
+    const mapPointerToCamera = useCallback(
+        (event: ReactPointerEvent<HTMLDivElement>, container: HTMLDivElement) => {
+            const rect = container.getBoundingClientRect();
+            const relativeX = clamp01((event.clientX - rect.left) / rect.width);
+            const relativeY = clamp01((event.clientY - rect.top) / rect.height);
+            const viewportAspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1;
+            const transform = buildLetterboxTransform(cameraAspectRatio || 1, viewportAspect || 1);
+            return {
+                x: viewportToCamera(relativeX, 'x', transform),
+                y: viewportToCamera(relativeY, 'y', transform),
+            };
+        },
+        [cameraAspectRatio],
+    );
+
     const handleOverlayPointerDown = useCallback(
         (event: ReactPointerEvent<HTMLDivElement>) => {
             if (event.button !== 0) {
@@ -82,9 +100,7 @@ export const useRoiOverlayInteractions = ({
             if (!container) {
                 return;
             }
-            const rect = container.getBoundingClientRect();
-            const relativeX = clamp01((event.clientX - rect.left) / rect.width);
-            const relativeY = clamp01((event.clientY - rect.top) / rect.height);
+            const { x: cameraX, y: cameraY } = mapPointerToCamera(event, container);
             const target = event.target as HTMLElement;
             const handle = target.dataset.roiHandle as
                 | 'n'
@@ -105,14 +121,14 @@ export const useRoiOverlayInteractions = ({
             pointerStateRef.current = {
                 pointerId: event.pointerId,
                 mode,
-                origin: { x: relativeX, y: relativeY },
+                origin: { x: cameraX, y: cameraY },
                 initialRoi: roiRef.current,
                 handle,
             };
             setRoiEditingMode(mode === 'draw' ? 'draw' : mode === 'move' ? 'drag' : 'resize');
             container.setPointerCapture(event.pointerId);
         },
-        [roi.enabled, roiViewEnabled, roiRef],
+        [mapPointerToCamera, roi.enabled, roiViewEnabled, roiRef],
     );
 
     const handleOverlayPointerMove = useCallback(
@@ -122,22 +138,20 @@ export const useRoiOverlayInteractions = ({
             if (!state || !container || state.pointerId !== event.pointerId) {
                 return;
             }
-            const rect = container.getBoundingClientRect();
-            const relativeX = clamp01((event.clientX - rect.left) / rect.width);
-            const relativeY = clamp01((event.clientY - rect.top) / rect.height);
+            const { x: cameraX, y: cameraY } = mapPointerToCamera(event, container);
             if (state.mode === 'draw') {
                 const startX = state.origin.x;
                 const startY = state.origin.y;
-                const x = Math.min(startX, relativeX);
-                const y = Math.min(startY, relativeY);
-                const width = Math.abs(relativeX - startX);
-                const height = Math.abs(relativeY - startY);
+                const x = Math.min(startX, cameraX);
+                const y = Math.min(startY, cameraY);
+                const width = Math.abs(cameraX - startX);
+                const height = Math.abs(cameraY - startY);
                 setRoi((prev) => ({ ...prev, x, y, width, height }));
                 return;
             }
             if (state.mode === 'move') {
-                const deltaX = relativeX - state.origin.x;
-                const deltaY = relativeY - state.origin.y;
+                const deltaX = cameraX - state.origin.x;
+                const deltaY = cameraY - state.origin.y;
                 const next = {
                     ...state.initialRoi,
                     x: state.initialRoi.x + deltaX,
@@ -152,26 +166,26 @@ export const useRoiOverlayInteractions = ({
                 let next = { ...initial };
                 if (handle.includes('n')) {
                     const bottom = initial.y + initial.height;
-                    next.y = Math.min(relativeY, bottom - 0.02);
+                    next.y = Math.min(cameraY, bottom - 0.02);
                     next.height = bottom - next.y;
                 }
                 if (handle.includes('s')) {
                     const top = initial.y;
-                    next.height = clamp01(relativeY - top);
+                    next.height = clamp01(cameraY - top);
                 }
                 if (handle.includes('w')) {
                     const right = initial.x + initial.width;
-                    next.x = Math.min(relativeX, right - 0.02);
+                    next.x = Math.min(cameraX, right - 0.02);
                     next.width = right - next.x;
                 }
                 if (handle.includes('e')) {
                     const left = initial.x;
-                    next.width = clamp01(relativeX - left);
+                    next.width = clamp01(cameraX - left);
                 }
                 setRoi(next);
             }
         },
-        [setRoi],
+        [mapPointerToCamera, setRoi],
     );
 
     const handleOverlayPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

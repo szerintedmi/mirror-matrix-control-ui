@@ -9,6 +9,7 @@ import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/grid
 import type {
     BlobMeasurement,
     CalibrationProfile,
+    CalibrationCameraResolution,
     CalibrationProfileBlobStats,
     CalibrationProfileBounds,
     CalibrationProfileCalibrationSpace,
@@ -52,6 +53,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
+
+const isPositiveFiniteNumber = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 const computeMedian = (values: number[]): number => {
     if (values.length === 0) {
@@ -324,6 +328,30 @@ const buildProfileTiles = (
     return entries;
 };
 
+const deriveCalibrationCameraMetadata = (
+    summary: CalibrationRunSummary,
+): { aspect: number | null; resolution: CalibrationCameraResolution | null } => {
+    for (const tile of Object.values(summary.tiles)) {
+        const measurement = tile.homeMeasurement;
+        if (
+            measurement &&
+            isPositiveFiniteNumber(measurement.sourceWidth) &&
+            isPositiveFiniteNumber(measurement.sourceHeight)
+        ) {
+            const width = measurement.sourceWidth!;
+            const height = measurement.sourceHeight!;
+            return {
+                aspect: width / height,
+                resolution: { width, height },
+            };
+        }
+    }
+    return {
+        aspect: null,
+        resolution: null,
+    };
+};
+
 const persistProfiles = (storage: Storage, profiles: CalibrationProfile[]): void => {
     const payload: StoredPayload = {
         version: STORAGE_VERSION,
@@ -395,6 +423,10 @@ export const saveCalibrationProfile = (
     const metrics = computeMetrics(tiles);
     const fingerprint = getGridStateFingerprint(options.gridSnapshot);
     const now = new Date().toISOString();
+    const {
+        aspect: calibrationCameraAspect,
+        resolution: calibrationCameraResolution,
+    } = deriveCalibrationCameraMetadata(summary);
     const profile: CalibrationProfile = {
         id: options.id ?? generateProfileId(),
         schemaVersion: PROFILE_SCHEMA_VERSION,
@@ -410,6 +442,8 @@ export const saveCalibrationProfile = (
             deltaSteps: summary.stepTestSettings.deltaSteps,
         },
         gridStateFingerprint: fingerprint,
+        calibrationCameraAspect,
+        calibrationCameraResolution,
         calibrationSpace: buildCalibrationSpace(tiles),
         tiles,
         metrics,
@@ -528,6 +562,16 @@ const isCalibrationFingerprint = (value: unknown): value is CalibrationProfileFi
     return isRecord(value.snapshot.assignments ?? {});
 };
 
+const isCalibrationCameraResolution = (value: unknown): value is CalibrationCameraResolution => {
+    if (!isRecord(value)) {
+        return false;
+    }
+    const record = value as Record<string, unknown>;
+    return (
+        isPositiveFiniteNumber(record.width) && isPositiveFiniteNumber(record.height)
+    );
+};
+
 const validateCalibrationProfileCandidate = (
     input: unknown,
 ): { profile: CalibrationProfile | null; error?: string } => {
@@ -563,6 +607,20 @@ const validateCalibrationProfileCandidate = (
     }
     if (!isCalibrationFingerprint(input.gridStateFingerprint)) {
         return { profile: null, error: 'Profile fingerprint is invalid.' };
+    }
+    if (
+        input.calibrationCameraAspect !== undefined &&
+        input.calibrationCameraAspect !== null &&
+        !isFiniteNumber(input.calibrationCameraAspect)
+    ) {
+        return { profile: null, error: 'Profile camera aspect ratio is invalid.' };
+    }
+    if (
+        input.calibrationCameraResolution !== undefined &&
+        input.calibrationCameraResolution !== null &&
+        !isCalibrationCameraResolution(input.calibrationCameraResolution)
+    ) {
+        return { profile: null, error: 'Profile camera resolution is invalid.' };
     }
     if (!isRecord(input.calibrationSpace)) {
         return { profile: null, error: 'Calibration space is invalid.' };
@@ -615,6 +673,17 @@ const sanitizeImportedProfile = (
         stepTestSettings: {
             deltaSteps: candidate.stepTestSettings.deltaSteps,
         },
+        calibrationCameraAspect:
+            typeof candidate.calibrationCameraAspect === 'number' &&
+            Number.isFinite(candidate.calibrationCameraAspect)
+                ? candidate.calibrationCameraAspect
+                : null,
+        calibrationCameraResolution: isCalibrationCameraResolution(candidate.calibrationCameraResolution)
+            ? {
+                  width: candidate.calibrationCameraResolution.width,
+                  height: candidate.calibrationCameraResolution.height,
+              }
+            : null,
     };
     return {
         profile: sanitized,

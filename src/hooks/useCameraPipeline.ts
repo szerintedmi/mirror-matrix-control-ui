@@ -18,6 +18,11 @@ import type {
 import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
 import type { CalibrationProfileBounds, NormalizedRoi } from '@/types';
 import { centeredDeltaToView, centeredToView } from '@/utils/centeredCoordinates';
+import {
+    buildLetterboxTransform,
+    cameraDeltaToViewport,
+    cameraToViewport,
+} from '@/utils/letterbox';
 
 import type React from 'react';
 
@@ -198,6 +203,12 @@ export const useCameraPipeline = ({
     const [cameraStatus, setCameraStatus] = useState<CameraStatus>('idle');
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
+    const cameraAspectRatio = useMemo(() => {
+        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
+            return videoDimensions.width / videoDimensions.height;
+        }
+        return 1;
+    }, [videoDimensions.height, videoDimensions.width]);
     const [detectedBlobCount, setDetectedBlobCount] = useState(0);
     const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
     const [opencvError, setOpenCvError] = useState<string | null>(null);
@@ -218,6 +229,7 @@ export const useCameraPipeline = ({
     const rotatedOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const roiRef = useRef<NormalizedRoi>(roi);
+    const lastReportedVideoDimensionsRef = useRef({ width: 0, height: 0 });
     const detectionResultsRef = useRef<DetectedBlob[]>([]);
     const processedFrameMetaRef = useRef<{
         sourceWidth: number;
@@ -396,6 +408,7 @@ export const useCameraPipeline = ({
         roiViewEnabled,
         setRoiViewEnabled,
         roiRef,
+        cameraAspectRatio,
     });
 
     const stopCurrentStream = useCallback(() => {
@@ -586,17 +599,54 @@ export const useCameraPipeline = ({
             if (!meta) {
                 return;
             }
+            const captureWidth = meta.sourceWidth || width;
+            const captureHeight = meta.sourceHeight || height;
             const baseRect = options?.displayRectOverride ?? {
                 x: 0,
                 y: 0,
-                width: meta.sourceWidth || width,
-                height: meta.sourceHeight || height,
+                width: captureWidth,
+                height: captureHeight,
             };
-            if (!baseRect.width || !baseRect.height) {
+            if (!baseRect.width || !baseRect.height || !width || !height) {
                 return;
             }
-            const scaleX = width / baseRect.width;
-            const scaleY = height / baseRect.height;
+            const viewportAspect = width / height;
+            const contentAspect = baseRect.width / baseRect.height;
+            const letterbox = buildLetterboxTransform(contentAspect || 1, viewportAspect || 1);
+            const projectCameraValue = (value: number, axis: 'x' | 'y'): number | null => {
+                const baseStart = axis === 'x' ? baseRect.x : baseRect.y;
+                const baseSize = axis === 'x' ? baseRect.width : baseRect.height;
+                if (!baseSize) {
+                    return null;
+                }
+                const normalized = (value - baseStart) / baseSize;
+                if (normalized < 0 || normalized > 1 || Number.isNaN(normalized)) {
+                    return null;
+                }
+                const viewportNormalized = cameraToViewport(normalized, axis, letterbox);
+                const dimension = axis === 'x' ? width : height;
+                return viewportNormalized * dimension;
+            };
+            const projectCameraDelta = (delta: number, axis: 'x' | 'y'): number => {
+                const baseSize = axis === 'x' ? baseRect.width : baseRect.height;
+                if (!baseSize) {
+                    return 0;
+                }
+                const viewportDelta = cameraDeltaToViewport(delta / baseSize, axis, letterbox);
+                const dimension = axis === 'x' ? width : height;
+                return viewportDelta * dimension;
+            };
+            const projectCameraPoint = (point: {
+                x: number;
+                y: number;
+            }): { x: number; y: number } | null => {
+                const projectedX = projectCameraValue(point.x, 'x');
+                const projectedY = projectCameraValue(point.y, 'y');
+                if (projectedX == null || projectedY == null) {
+                    return null;
+                }
+                return { x: projectedX, y: projectedY };
+            };
             const summary = alignmentOverlaySummaryRef.current;
             const blobEntries = detectionResultsRef.current;
             const counterRotationRadians = options?.calibrationOverlayCounterRotationRadians ?? 0;
@@ -626,21 +676,15 @@ export const useCameraPipeline = ({
                 ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.003);
                 blobEntries.forEach((blob) => {
                     const rotatedPoint = rotatePoint(blob);
-                    const adjustedX = rotatedPoint.x - baseRect.x;
-                    const adjustedY = rotatedPoint.y - baseRect.y;
-                    if (
-                        adjustedX < 0 ||
-                        adjustedY < 0 ||
-                        adjustedX > baseRect.width ||
-                        adjustedY > baseRect.height
-                    ) {
+                    const projected = projectCameraPoint(rotatedPoint);
+                    if (!projected) {
                         return;
                     }
-                    const drawX = adjustedX * scaleX;
-                    const drawY = adjustedY * scaleY;
-                    const radius = Math.max(2, (blob.size / 2) * ((scaleX + scaleY) / 2));
+                    const radiusX = projectCameraDelta(blob.size, 'x') / 2;
+                    const radiusY = projectCameraDelta(blob.size, 'y') / 2;
+                    const radius = Math.max(2, (radiusX + radiusY) / 2);
                     ctx.beginPath();
-                    ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
+                    ctx.arc(projected.x, projected.y, radius, 0, Math.PI * 2);
                     ctx.stroke();
                 });
                 ctx.restore();
@@ -652,8 +696,8 @@ export const useCameraPipeline = ({
                     return;
                 }
                 const { bounds, cameraOriginOffset } = payload;
-                const sourceWidth = meta.sourceWidth || width;
-                const sourceHeight = meta.sourceHeight || height;
+                const sourceWidth = captureWidth;
+                const sourceHeight = captureHeight;
                 const normalizedWidth = bounds.x.max - bounds.x.min;
                 const normalizedHeight = bounds.y.max - bounds.y.min;
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
@@ -669,11 +713,11 @@ export const useCameraPipeline = ({
                 );
                 const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                 const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
-                const localLeft = (pxLeft - baseRect.x) * scaleX;
-                const localTop = (pxTop - baseRect.y) * scaleY;
-                const rectWidth = pxWidth * scaleX;
-                const rectHeight = pxHeight * scaleY;
-                if (rectWidth <= 0 || rectHeight <= 0) {
+                const localLeft = projectCameraValue(pxLeft, 'x');
+                const localTop = projectCameraValue(pxTop, 'y');
+                const rectWidth = projectCameraDelta(pxWidth, 'x');
+                const rectHeight = projectCameraDelta(pxHeight, 'y');
+                if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
                     return;
                 }
                 ctx.save();
@@ -695,8 +739,8 @@ export const useCameraPipeline = ({
                     return;
                 }
                 const { entries, cameraOriginOffset } = payload;
-                const sourceWidth = meta.sourceWidth || width;
-                const sourceHeight = meta.sourceHeight || height;
+                const sourceWidth = captureWidth;
+                const sourceHeight = captureHeight;
                 ctx.save();
                 ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.0035);
                 entries.forEach((entry, index) => {
@@ -715,11 +759,16 @@ export const useCameraPipeline = ({
                     );
                     const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                     const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
-                    const localLeft = (pxLeft - baseRect.x) * scaleX;
-                    const localTop = (pxTop - baseRect.y) * scaleY;
-                    const rectWidth = pxWidth * scaleX;
-                    const rectHeight = pxHeight * scaleY;
-                    if (rectWidth <= 0 || rectHeight <= 0) {
+                    const localLeft = projectCameraValue(pxLeft, 'x');
+                    const localTop = projectCameraValue(pxTop, 'y');
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    if (
+                        rectWidth <= 0 ||
+                        rectHeight <= 0 ||
+                        localLeft == null ||
+                        localTop == null
+                    ) {
                         return;
                     }
                     const color = TILE_BOUNDS_COLORS[index % TILE_BOUNDS_COLORS.length];
@@ -757,8 +806,8 @@ export const useCameraPipeline = ({
                     blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
-                const sourceWidth = meta.sourceWidth || width;
-                const sourceHeight = meta.sourceHeight || height;
+                const sourceWidth = captureWidth;
+                const sourceHeight = captureHeight;
                 ctx.save();
                 ctx.lineWidth = 2;
                 const alignmentStrokeColor = formatAlignmentRgba(0.7);
@@ -787,10 +836,13 @@ export const useCameraPipeline = ({
                         blueprint.adjustedTileFootprint.height,
                         sourceHeight,
                     );
-                    const localLeft = (pxLeft - baseRect.x) * scaleX;
-                    const localTop = (pxTop - baseRect.y) * scaleY;
-                    const rectWidth = pxWidth * scaleX;
-                    const rectHeight = pxHeight * scaleY;
+                    const localLeft = projectCameraValue(pxLeft, 'x');
+                    const localTop = projectCameraValue(pxTop, 'y');
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    if (localLeft == null || localTop == null) {
+                        return;
+                    }
                     const rectCenterX = localLeft + rectWidth / 2;
                     const rectCenterY = localTop + rectHeight / 2;
                     ctx.save();
@@ -822,12 +874,17 @@ export const useCameraPipeline = ({
                           })
                         : undefined;
                     if (measurement) {
-                        const measurementX =
-                            (convertCoordToPixels(measurement.x, sourceWidth) - baseRect.x) *
-                            scaleX;
-                        const measurementY =
-                            (convertCoordToPixels(measurement.y, sourceHeight) - baseRect.y) *
-                            scaleY;
+                        const measurementX = projectCameraValue(
+                            convertCoordToPixels(measurement.x, sourceWidth),
+                            'x',
+                        );
+                        const measurementY = projectCameraValue(
+                            convertCoordToPixels(measurement.y, sourceHeight),
+                            'y',
+                        );
+                        if (measurementX == null || measurementY == null) {
+                            return;
+                        }
                         ctx.fillStyle = '#facc15';
                         ctx.beginPath();
                         ctx.arc(measurementX, measurementY, 4, 0, Math.PI * 2);
@@ -886,25 +943,21 @@ export const useCameraPipeline = ({
                 const thickness = Math.max(1, Math.round(Math.min(width, height) * 0.003));
                 blobEntries.forEach((blob) => {
                     const rotatedPoint = rotatePoint(blob);
-                    const adjustedX = rotatedPoint.x - baseRect.x;
-                    const adjustedY = rotatedPoint.y - baseRect.y;
-                    if (
-                        adjustedX < 0 ||
-                        adjustedY < 0 ||
-                        adjustedX > baseRect.width ||
-                        adjustedY > baseRect.height
-                    ) {
+                    const projected = projectCameraPoint(rotatedPoint);
+                    if (!projected) {
                         return;
                     }
-                    const drawX = Math.round(adjustedX * scaleX);
-                    const drawY = Math.round(adjustedY * scaleY);
                     const radius = Math.max(
                         2,
-                        Math.round((blob.size / 2) * ((scaleX + scaleY) / 2)),
+                        Math.round(
+                            (projectCameraDelta(blob.size, 'x') +
+                                projectCameraDelta(blob.size, 'y')) /
+                                4,
+                        ),
                     );
                     runtime.circle(
                         overlayMat,
-                        new runtime.Point(drawX, drawY),
+                        new runtime.Point(Math.round(projected.x), Math.round(projected.y)),
                         radius,
                         circleColor,
                         thickness,
@@ -966,10 +1019,15 @@ export const useCameraPipeline = ({
                         blueprint.adjustedTileFootprint.height,
                         sourceHeight,
                     );
-                    const localLeft = (pxLeft - baseRect.x) * scaleX;
-                    const localTop = (pxTop - baseRect.y) * scaleY;
-                    const localRight = localLeft + pxWidth * scaleX;
-                    const localBottom = localTop + pxHeight * scaleY;
+                    const localLeft = projectCameraValue(pxLeft, 'x');
+                    const localTop = projectCameraValue(pxTop, 'y');
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    if (localLeft == null || localTop == null) {
+                        return;
+                    }
+                    const localRight = localLeft + rectWidth;
+                    const localBottom = localTop + rectHeight;
                     if (
                         localRight < 0 ||
                         localBottom < 0 ||
@@ -1013,12 +1071,17 @@ export const useCameraPipeline = ({
                           })
                         : undefined;
                     if (measurement) {
-                        const measurementX =
-                            (convertCoordToPixels(measurement.x, sourceWidth) - baseRect.x) *
-                            scaleX;
-                        const measurementY =
-                            (convertCoordToPixels(measurement.y, sourceHeight) - baseRect.y) *
-                            scaleY;
+                        const measurementX = projectCameraValue(
+                            convertCoordToPixels(measurement.x, sourceWidth),
+                            'x',
+                        );
+                        const measurementY = projectCameraValue(
+                            convertCoordToPixels(measurement.y, sourceHeight),
+                            'y',
+                        );
+                        if (measurementX == null || measurementY == null) {
+                            return;
+                        }
                         runtime.circle(
                             overlayMat,
                             new runtime.Point(Math.round(measurementX), Math.round(measurementY)),
@@ -1056,8 +1119,8 @@ export const useCameraPipeline = ({
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                     return;
                 }
-                const sourceWidth = meta.sourceWidth || width;
-                const sourceHeight = meta.sourceHeight || height;
+                const sourceWidth = captureWidth;
+                const sourceHeight = captureHeight;
                 const pxLeft = convertCoordToPixels(
                     bounds.x.min + cameraOriginOffset.x,
                     sourceWidth,
@@ -1068,11 +1131,11 @@ export const useCameraPipeline = ({
                 );
                 const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                 const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
-                const localLeft = (pxLeft - baseRect.x) * scaleX;
-                const localTop = (pxTop - baseRect.y) * scaleY;
-                const rectWidth = pxWidth * scaleX;
-                const rectHeight = pxHeight * scaleY;
-                if (rectWidth <= 0 || rectHeight <= 0) {
+                const localLeft = projectCameraValue(pxLeft, 'x');
+                const localTop = projectCameraValue(pxTop, 'y');
+                const rectWidth = projectCameraDelta(pxWidth, 'x');
+                const rectHeight = projectCameraDelta(pxHeight, 'y');
+                if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
                     return;
                 }
                 const topLeft = new runtime.Point(Math.round(localLeft), Math.round(localTop));
@@ -1090,8 +1153,8 @@ export const useCameraPipeline = ({
                     return;
                 }
                 const { entries, cameraOriginOffset } = payload;
-                const sourceWidth = meta.sourceWidth || width;
-                const sourceHeight = meta.sourceHeight || height;
+                const sourceWidth = captureWidth;
+                const sourceHeight = captureHeight;
                 entries.forEach((entry, index) => {
                     const normalizedWidth = entry.bounds.x.max - entry.bounds.x.min;
                     const normalizedHeight = entry.bounds.y.max - entry.bounds.y.min;
@@ -1108,10 +1171,15 @@ export const useCameraPipeline = ({
                     );
                     const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                     const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
-                    const localLeft = (pxLeft - baseRect.x) * scaleX;
-                    const localTop = (pxTop - baseRect.y) * scaleY;
-                    const localRight = localLeft + pxWidth * scaleX;
-                    const localBottom = localTop + pxHeight * scaleY;
+                    const localLeft = projectCameraValue(pxLeft, 'x');
+                    const localTop = projectCameraValue(pxTop, 'y');
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    if (localLeft == null || localTop == null) {
+                        return;
+                    }
+                    const localRight = localLeft + rectWidth;
+                    const localBottom = localTop + rectHeight;
                     if (
                         localRight < 0 ||
                         localBottom < 0 ||
@@ -1223,6 +1291,15 @@ export const useCameraPipeline = ({
             pending = true;
             const width = video.videoWidth;
             const height = video.videoHeight;
+            if (
+                width > 0 &&
+                height > 0 &&
+                (width !== lastReportedVideoDimensionsRef.current.width ||
+                    height !== lastReportedVideoDimensionsRef.current.height)
+            ) {
+                lastReportedVideoDimensionsRef.current = { width, height };
+                reportVideoDimensions(width, height);
+            }
             const roiSnapshot = roiRef.current;
 
             void (async () => {
@@ -1302,6 +1379,7 @@ export const useCameraPipeline = ({
         nativeBlobDetectorAvailable,
         opencvStatus,
         previewMode,
+        reportVideoDimensions,
         useWasmDetector,
         workerSupported,
     ]);

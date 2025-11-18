@@ -289,6 +289,11 @@ export interface BlobMeasurement {
     stats?: BlobMeasurementStats;
 }
 
+export interface CalibrationCameraResolution {
+    width: number;
+    height: number;
+}
+
 export type CalibrationTileStatus =
     | 'pending'
     | 'staged'
@@ -386,6 +391,8 @@ export interface CalibrationProfile {
     gridBlueprint: CalibrationGridBlueprint | null;
     stepTestSettings: { deltaSteps: number };
     gridStateFingerprint: CalibrationProfileFingerprint;
+    calibrationCameraAspect?: number | null;
+    calibrationCameraResolution?: CalibrationCameraResolution | null;
     calibrationSpace: CalibrationProfileCalibrationSpace;
     tiles: Record<string, TileCalibrationResults>;
     metrics: CalibrationProfileMetrics;

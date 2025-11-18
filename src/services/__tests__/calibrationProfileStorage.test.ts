@@ -252,6 +252,8 @@ describe('calibrationProfileStorage', () => {
             expect(measurementRecord).not.toBeNull();
             expect(measurementRecord!.sourceWidth).toBe(1920);
             expect(measurementRecord!.sourceHeight).toBe(1080);
+            expect(saved!.calibrationCameraAspect).toBeCloseTo(1920 / 1080, 8);
+            expect(saved!.calibrationCameraResolution).toEqual({ width: 1920, height: 1080 });
             expect(saved!.metrics).toEqual({
                 totalTiles: 4,
                 completedTiles: 4,

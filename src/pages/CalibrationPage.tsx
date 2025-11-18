@@ -11,12 +11,74 @@ import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerCont
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
-import type { MirrorConfig } from '@/types';
+import type { CalibrationCameraResolution, MirrorConfig } from '@/types';
 
 interface CalibrationPageProps {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
 }
+
+const CAMERA_ASPECT_RATIO_EPSILON = 0.01;
+
+const gcd = (a: number, b: number): number => {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    if (x === 0) {
+        return y;
+    }
+    if (y === 0) {
+        return x;
+    }
+    while (y) {
+        const temp = y;
+        y = x % y;
+        x = temp;
+    }
+    return x;
+};
+
+const reduceResolutionToSimpleRatio = (width: number, height: number) => {
+    const roundedWidth = Math.round(width);
+    const roundedHeight = Math.round(height);
+    const divisor = gcd(roundedWidth, roundedHeight);
+    if (divisor <= 0) {
+        return { width: roundedWidth, height: roundedHeight };
+    }
+    return {
+        width: roundedWidth / divisor,
+        height: roundedHeight / divisor,
+    };
+};
+
+const formatAspectRatioLabel = (
+    aspect: number | null,
+    resolution: CalibrationCameraResolution | null,
+): string => {
+    if (resolution && resolution.width > 0 && resolution.height > 0) {
+        const simplified = reduceResolutionToSimpleRatio(resolution.width, resolution.height);
+        return `${simplified.width}:${simplified.height}`;
+    }
+    if (aspect && Number.isFinite(aspect) && aspect > 0) {
+        return `${aspect.toFixed(2)}:1`;
+    }
+    return 'unknown ratio';
+};
+
+const formatResolutionLabel = (resolution: CalibrationCameraResolution | null): string | null => {
+    if (resolution && resolution.width > 0 && resolution.height > 0) {
+        return `${Math.round(resolution.width)}x${Math.round(resolution.height)}`;
+    }
+    return null;
+};
+
+const describeCameraAspect = (
+    aspect: number | null,
+    resolution: CalibrationCameraResolution | null,
+): string => {
+    const label = formatAspectRatioLabel(aspect, resolution);
+    const resolutionLabel = formatResolutionLabel(resolution);
+    return resolutionLabel ? `${resolutionLabel} (${label})` : label;
+};
 
 const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfig }) => {
     const { drivers } = useStatusStore();
@@ -163,6 +225,47 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const activeCameraOriginOffset = activeProfile?.gridBlueprint?.cameraOriginOffset ?? null;
 
+    const currentCameraResolution: CalibrationCameraResolution | null = useMemo(() => {
+        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
+            return {
+                width: videoDimensions.width,
+                height: videoDimensions.height,
+            };
+        }
+        if (resolvedResolution.width && resolvedResolution.height) {
+            return {
+                width: resolvedResolution.width,
+                height: resolvedResolution.height,
+            };
+        }
+        return null;
+    }, [
+        resolvedResolution.height,
+        resolvedResolution.width,
+        videoDimensions.height,
+        videoDimensions.width,
+    ]);
+
+    const cameraAspectRatio =
+        currentCameraResolution && currentCameraResolution.height > 0
+            ? currentCameraResolution.width / currentCameraResolution.height
+            : null;
+
+    const profileCameraAspect = activeProfile?.calibrationCameraAspect ?? null;
+    const profileCameraResolution = activeProfile?.calibrationCameraResolution ?? null;
+
+    const showCameraAspectWarning =
+        profileCameraAspect !== null &&
+        cameraAspectRatio !== null &&
+        currentCameraResolution !== null &&
+        Math.abs(profileCameraAspect - cameraAspectRatio) > CAMERA_ASPECT_RATIO_EPSILON;
+
+    const profileAspectDescriptor = describeCameraAspect(
+        profileCameraAspect,
+        profileCameraResolution,
+    );
+    const currentAspectDescriptor = describeCameraAspect(cameraAspectRatio, currentCameraResolution);
+
     useEffect(() => {
         setAlignmentOverlaySummary(alignmentSourceSummary ?? null);
     }, [alignmentSourceSummary, setAlignmentOverlaySummary]);
@@ -238,6 +341,17 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 lastRunSummary={runSummary}
                 currentGridFingerprint={calibrationProfilesController.currentGridFingerprint}
             />
+            {showCameraAspectWarning && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 shadow-lg">
+                    <p className="font-semibold text-amber-100">
+                        Aspect mismatch detected
+                    </p>
+                    <p>
+                        This calibration was captured at {profileAspectDescriptor}; current camera
+                        is {currentAspectDescriptor}. Re-run calibration or switch resolution.
+                    </p>
+                </div>
+            )}
             <CalibrationRunnerPanel
                 runnerState={runnerState}
                 runnerSettings={runnerSettings}

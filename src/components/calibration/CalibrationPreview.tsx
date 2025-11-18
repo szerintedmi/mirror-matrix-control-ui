@@ -8,6 +8,11 @@ import type {
 } from '@/hooks/useCameraPipeline';
 import type { OpenCvWorkerStatus } from '@/services/opencvWorkerClient';
 import type { NormalizedRoi } from '@/types';
+import {
+    buildLetterboxTransform,
+    cameraDeltaToViewport,
+    cameraToViewport,
+} from '@/utils/letterbox';
 
 interface CalibrationPreviewProps {
     previewMode: PreviewMode;
@@ -58,6 +63,13 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     tileBoundsOverlayAvailable,
     onToggleTileBoundsOverlay,
 }) => {
+    const videoAspectRatio = useMemo(() => {
+        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
+            return videoDimensions.width / videoDimensions.height;
+        }
+        return 1;
+    }, [videoDimensions.height, videoDimensions.width]);
+
     const roiAspectRatio = useMemo(() => {
         if (!roiViewEnabled || !roi.enabled) {
             return null;
@@ -82,17 +94,22 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
 
     const overlayButtonActive = alignmentOverlayEnabled;
 
-    const previewAspectRatio = useMemo(() => {
-        if (roiAspectRatio) {
-            return roiAspectRatio;
-        }
-        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
-            return videoDimensions.width / videoDimensions.height;
-        }
-        return 16 / 9;
-    }, [roiAspectRatio, videoDimensions.height, videoDimensions.width]);
-
     const showFullFrame = !roiViewEnabled || !roi.enabled;
+
+    const previewAspectRatio = useMemo(() => {
+        if (showFullFrame) {
+            if (videoAspectRatio > 0) {
+                return videoAspectRatio;
+            }
+            return 16 / 9;
+        }
+        return roiAspectRatio ?? videoAspectRatio ?? 16 / 9;
+    }, [roiAspectRatio, showFullFrame, videoAspectRatio]);
+
+    const letterboxTransform = useMemo(
+        () => buildLetterboxTransform(videoAspectRatio || 1, previewAspectRatio || 1),
+        [previewAspectRatio, videoAspectRatio],
+    );
     const processedVisible =
         showFullFrame && previewMode === 'processed' && opencvStatus === 'ready';
     const rawVisible =
@@ -288,46 +305,60 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                             showFullFrame ? 'opacity-0' : 'opacity-100'
                         }`}
                     />
-                    {showFullFrame && roi.enabled && (
-                        <div
-                            className={`absolute border-2 border-emerald-400 bg-emerald-500/5 transition ${
-                                roiEditingMode !== 'idle' ? 'animate-pulse' : ''
-                            }`}
-                            style={{
-                                left: `${roi.x * 100}%`,
-                                top: `${roi.y * 100}%`,
-                                width: `${roi.width * 100}%`,
-                                height: `${roi.height * 100}%`,
-                            }}
-                            data-roi-handle="move"
-                        >
-                            {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => (
-                                <span
-                                    key={handle}
-                                    data-roi-handle={handle}
-                                    className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-400 bg-gray-900"
+                    {showFullFrame &&
+                        roi.enabled &&
+                        (() => {
+                            const roiViewport = {
+                                x: cameraToViewport(roi.x, 'x', letterboxTransform),
+                                y: cameraToViewport(roi.y, 'y', letterboxTransform),
+                                width: cameraDeltaToViewport(roi.width, 'x', letterboxTransform),
+                                height: cameraDeltaToViewport(roi.height, 'y', letterboxTransform),
+                            };
+                            return (
+                                <div
+                                    className={`absolute border-2 border-emerald-400 bg-emerald-500/5 transition ${
+                                        roiEditingMode !== 'idle' ? 'animate-pulse' : ''
+                                    }`}
                                     style={{
-                                        left:
-                                            handle === 'nw' || handle === 'w' || handle === 'sw'
-                                                ? '0%'
-                                                : handle === 'ne' ||
-                                                    handle === 'e' ||
-                                                    handle === 'se'
-                                                  ? '100%'
-                                                  : '50%',
-                                        top:
-                                            handle === 'nw' || handle === 'n' || handle === 'ne'
-                                                ? '0%'
-                                                : handle === 'sw' ||
-                                                    handle === 's' ||
-                                                    handle === 'se'
-                                                  ? '100%'
-                                                  : '50%',
+                                        left: `${roiViewport.x * 100}%`,
+                                        top: `${roiViewport.y * 100}%`,
+                                        width: `${roiViewport.width * 100}%`,
+                                        height: `${roiViewport.height * 100}%`,
                                     }}
-                                />
-                            ))}
-                        </div>
-                    )}
+                                    data-roi-handle="move"
+                                >
+                                    {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => (
+                                        <span
+                                            key={handle}
+                                            data-roi-handle={handle}
+                                            className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-400 bg-gray-900"
+                                            style={{
+                                                left:
+                                                    handle === 'nw' ||
+                                                    handle === 'w' ||
+                                                    handle === 'sw'
+                                                        ? '0%'
+                                                        : handle === 'ne' ||
+                                                            handle === 'e' ||
+                                                            handle === 'se'
+                                                          ? '100%'
+                                                          : '50%',
+                                                top:
+                                                    handle === 'nw' ||
+                                                    handle === 'n' ||
+                                                    handle === 'ne'
+                                                        ? '0%'
+                                                        : handle === 'sw' ||
+                                                            handle === 's' ||
+                                                            handle === 'se'
+                                                          ? '100%'
+                                                          : '50%',
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            );
+                        })()}
                     {rotationOverlayVisible && (
                         <div
                             data-testid="rotation-grid-overlay"
