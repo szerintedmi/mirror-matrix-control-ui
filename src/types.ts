@@ -83,6 +83,14 @@ export interface Pattern {
     points: PatternPoint[];
 }
 
+export interface PlaybackSequence {
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+    patternIds: string[];
+}
+
 export type DriverPresenceSummary = 'ready' | 'stale' | 'offline';
 
 export interface DriverStatusSnapshot {
