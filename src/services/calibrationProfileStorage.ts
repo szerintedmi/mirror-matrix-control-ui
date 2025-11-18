@@ -12,6 +12,7 @@ import type {
     CalibrationProfileBlobStats,
     CalibrationProfileBounds,
     CalibrationProfileCalibrationSpace,
+    CalibrationProfileFingerprint,
     CalibrationProfileMetrics,
     CalibrationTileOffset,
     CalibrationTilePosition,
@@ -24,6 +25,8 @@ const STORAGE_KEY = 'mirror:calibration:profiles';
 const LAST_SELECTED_PROFILE_KEY = 'mirror:calibration:last-profile-id';
 const STORAGE_VERSION = 2;
 const PROFILE_SCHEMA_VERSION = 2;
+const PROFILE_EXPORT_VERSION = 1;
+const PROFILE_EXPORT_TYPE = 'mirror.calibration.profile';
 
 interface StoredPayload {
     version: number;
@@ -43,6 +46,12 @@ type PositionInput = {
 };
 
 const NORMALIZED_MAD_FACTOR = 1.4826;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+const isFiniteNumber = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value);
 
 const computeMedian = (values: number[]): number => {
     if (values.length === 0) {
@@ -357,6 +366,12 @@ const generateProfileId = (): string => {
 export const loadCalibrationProfiles = (storage?: Storage): CalibrationProfile[] =>
     readProfilesFromStorage(storage);
 
+export interface CalibrationProfileExportPayload {
+    type: typeof PROFILE_EXPORT_TYPE;
+    version: number;
+    profile: CalibrationProfile;
+}
+
 export interface SaveCalibrationProfileOptions {
     id?: string;
     name: string;
@@ -455,6 +470,195 @@ export const persistLastCalibrationProfileId = (
     } catch (error) {
         console.warn('Failed to persist last calibration profile id', error);
     }
+};
+
+export const buildCalibrationProfileExportPayload = (
+    profile: CalibrationProfile,
+): CalibrationProfileExportPayload => ({
+    type: PROFILE_EXPORT_TYPE,
+    version: PROFILE_EXPORT_VERSION,
+    profile,
+});
+
+const isCalibrationMetricsRecord = (value: unknown): value is CalibrationProfileMetrics => {
+    if (!isRecord(value)) {
+        return false;
+    }
+    return (
+        isFiniteNumber(value.totalTiles) &&
+        isFiniteNumber(value.completedTiles) &&
+        isFiniteNumber(value.failedTiles) &&
+        isFiniteNumber(value.skippedTiles)
+    );
+};
+
+const isTileResultsRecord = (value: unknown): value is Record<string, TileCalibrationResults> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+    return Object.values(value).every((entry) => {
+        if (!isRecord(entry)) {
+            return false;
+        }
+        return (
+            typeof entry.key === 'string' &&
+            isFiniteNumber(entry.row) &&
+            isFiniteNumber(entry.col) &&
+            typeof entry.status === 'string'
+        );
+    });
+};
+
+const isCalibrationFingerprint = (value: unknown): value is CalibrationProfileFingerprint => {
+    if (!isRecord(value) || typeof value.hash !== 'string') {
+        return false;
+    }
+    if (!isRecord(value.snapshot) || !isFiniteNumber(value.snapshot.version)) {
+        return false;
+    }
+    if (!isRecord(value.snapshot.gridSize)) {
+        return false;
+    }
+    if (
+        !isFiniteNumber(value.snapshot.gridSize.rows) ||
+        !isFiniteNumber(value.snapshot.gridSize.cols)
+    ) {
+        return false;
+    }
+    return isRecord(value.snapshot.assignments ?? {});
+};
+
+const validateCalibrationProfileCandidate = (
+    input: unknown,
+): { profile: CalibrationProfile | null; error?: string } => {
+    if (!isRecord(input)) {
+        return { profile: null, error: 'File is not a calibration profile.' };
+    }
+    if (typeof input.schemaVersion !== 'number') {
+        return { profile: null, error: 'Profile is missing schema version info.' };
+    }
+    if (input.schemaVersion !== PROFILE_SCHEMA_VERSION) {
+        return {
+            profile: null,
+            error: `Unsupported profile schema version ${input.schemaVersion}.`,
+        };
+    }
+    if (typeof input.id !== 'string' || input.id.trim().length === 0) {
+        return { profile: null, error: 'Profile id is invalid.' };
+    }
+    if (typeof input.name !== 'string' || input.name.trim().length === 0) {
+        return { profile: null, error: 'Profile name is invalid.' };
+    }
+    if (typeof input.createdAt !== 'string' || typeof input.updatedAt !== 'string') {
+        return { profile: null, error: 'Profile timestamps are missing.' };
+    }
+    if (!isRecord(input.gridSize)) {
+        return { profile: null, error: 'Profile grid size is invalid.' };
+    }
+    if (!isFiniteNumber(input.gridSize.rows) || !isFiniteNumber(input.gridSize.cols)) {
+        return { profile: null, error: 'Profile grid size is invalid.' };
+    }
+    if (!isRecord(input.stepTestSettings) || !isFiniteNumber(input.stepTestSettings.deltaSteps)) {
+        return { profile: null, error: 'Profile step settings are invalid.' };
+    }
+    if (!isCalibrationFingerprint(input.gridStateFingerprint)) {
+        return { profile: null, error: 'Profile fingerprint is invalid.' };
+    }
+    if (!isRecord(input.calibrationSpace)) {
+        return { profile: null, error: 'Calibration space is invalid.' };
+    }
+    if (!isTileResultsRecord(input.tiles)) {
+        return { profile: null, error: 'Tile calibration data is invalid.' };
+    }
+    if (!isCalibrationMetricsRecord(input.metrics)) {
+        return { profile: null, error: 'Calibration metrics are invalid.' };
+    }
+    return { profile: input as unknown as CalibrationProfile };
+};
+
+const unwrapExportPayload = (
+    payload: unknown,
+): { profile: CalibrationProfile | null; error?: string } => {
+    if (isRecord(payload) && payload.type === PROFILE_EXPORT_TYPE) {
+        if (payload.version !== PROFILE_EXPORT_VERSION) {
+            return {
+                profile: null,
+                error: `Unsupported export version ${String(payload.version)}.`,
+            };
+        }
+        if (!('profile' in payload)) {
+            return { profile: null, error: 'Export is missing profile data.' };
+        }
+        return validateCalibrationProfileCandidate(payload.profile);
+    }
+    return validateCalibrationProfileCandidate(payload);
+};
+
+const sanitizeImportedProfile = (
+    candidate: CalibrationProfile,
+    existing: CalibrationProfile[],
+): { profile: CalibrationProfile; replacedProfileId?: string } => {
+    const now = new Date().toISOString();
+    const name = candidate.name.trim() || 'Imported calibration';
+    const hasConflict = existing.some((entry) => entry.id === candidate.id);
+    const sanitized: CalibrationProfile = {
+        ...candidate,
+        id: hasConflict ? generateProfileId() : candidate.id,
+        schemaVersion: PROFILE_SCHEMA_VERSION,
+        name,
+        createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : now,
+        updatedAt: now,
+        gridSize: {
+            rows: candidate.gridSize.rows,
+            cols: candidate.gridSize.cols,
+        },
+        stepTestSettings: {
+            deltaSteps: candidate.stepTestSettings.deltaSteps,
+        },
+    };
+    return {
+        profile: sanitized,
+        replacedProfileId: hasConflict ? candidate.id : undefined,
+    };
+};
+
+export interface ImportCalibrationProfileResult {
+    profile: CalibrationProfile | null;
+    replacedProfileId?: string;
+    error?: string;
+}
+
+export const importCalibrationProfileFromJson = (
+    storage: Storage | undefined,
+    json: string,
+): ImportCalibrationProfileResult => {
+    if (!storage) {
+        return {
+            profile: null,
+            error: 'Local storage is unavailable; cannot import calibration profile.',
+        };
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(json);
+    } catch {
+        return {
+            profile: null,
+            error: 'Unable to parse the selected file as JSON.',
+        };
+    }
+    const { profile: candidate, error } = unwrapExportPayload(parsed);
+    if (!candidate) {
+        return {
+            profile: null,
+            error: error ?? 'File does not contain a calibration profile.',
+        };
+    }
+    const existing = readProfilesFromStorage(storage);
+    const { profile, replacedProfileId } = sanitizeImportedProfile(candidate, existing);
+    existing.push(profile);
+    persistProfiles(storage, existing);
+    return { profile, replacedProfileId };
 };
 
 export const profileToRunSummary = (profile: CalibrationProfile): CalibrationRunSummary => {

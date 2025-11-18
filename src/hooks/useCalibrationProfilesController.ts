@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import {
     deleteCalibrationProfile,
+    importCalibrationProfileFromJson,
     loadCalibrationProfiles,
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
@@ -48,9 +49,11 @@ export interface CalibrationProfilesController {
     saveProfile: () => CalibrationProfile | null;
     deleteProfile: (profileId: string) => void;
     loadProfile: (profileId: string) => CalibrationProfile | null;
+    importProfileFromJson: (payload: string) => CalibrationProfile | null;
     canSaveProfile: boolean;
     saveFeedback: { type: 'success' | 'error'; message: string } | null;
     dismissFeedback: () => void;
+    reportFeedback: (type: 'success' | 'error', message: string) => void;
     currentGridFingerprint: string;
 }
 
@@ -225,6 +228,43 @@ export const useCalibrationProfilesController = ({
         setSaveFeedback(null);
     }, []);
 
+    const reportFeedback = useCallback((type: 'success' | 'error', message: string) => {
+        setSaveFeedback({ type, message });
+    }, []);
+
+    const importProfileFromJson = useCallback(
+        (payload: string): CalibrationProfile | null => {
+            const storage = getLocalStorage();
+            if (!storage) {
+                setSaveFeedback({
+                    type: 'error',
+                    message: 'Local storage is unavailable; cannot import profile.',
+                });
+                return null;
+            }
+            const result = importCalibrationProfileFromJson(storage, payload);
+            if (!result.profile) {
+                setSaveFeedback({
+                    type: 'error',
+                    message: result.error ?? 'Unable to import calibration profile.',
+                });
+                return null;
+            }
+            refreshProfiles();
+            setSelectedProfileId(result.profile.id);
+            setProfileNameInput(result.profile.name);
+            setActiveProfileId(result.profile.id);
+            persistLastSelection(result.profile.id);
+            const duplicateSuffix = result.replacedProfileId ? ' (duplicate id replaced)' : '';
+            setSaveFeedback({
+                type: 'success',
+                message: `Imported profile "${result.profile.name}"${duplicateSuffix}.`,
+            });
+            return result.profile;
+        },
+        [persistLastSelection, refreshProfiles],
+    );
+
     return {
         profiles,
         selectedProfileId,
@@ -239,9 +279,11 @@ export const useCalibrationProfilesController = ({
         saveProfile,
         deleteProfile,
         loadProfile,
+        importProfileFromJson,
         canSaveProfile,
         saveFeedback,
         dismissFeedback,
+        reportFeedback,
         currentGridFingerprint,
     };
 };

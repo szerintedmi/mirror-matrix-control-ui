@@ -204,9 +204,11 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 onProfileNameChange={calibrationProfilesController.setProfileNameInput}
                 onSaveProfile={calibrationProfilesController.saveProfile}
                 onNewProfile={calibrationProfilesController.resetProfileSelection}
+                onImportProfile={calibrationProfilesController.importProfileFromJson}
                 canSave={calibrationProfilesController.canSaveProfile}
                 saveFeedback={calibrationProfilesController.saveFeedback}
                 onDismissFeedback={calibrationProfilesController.dismissFeedback}
+                onReportFeedback={calibrationProfilesController.reportFeedback}
                 lastRunSummary={runSummary}
                 currentGridFingerprint={calibrationProfilesController.currentGridFingerprint}
             />

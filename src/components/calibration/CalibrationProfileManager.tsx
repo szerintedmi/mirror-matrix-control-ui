@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
+import { buildCalibrationProfileExportPayload } from '@/services/calibrationProfileStorage';
 import type { CalibrationProfile } from '@/types';
 
 import { formatPercent } from './calibrationMetricsFormatters';
@@ -15,9 +16,11 @@ interface CalibrationProfileManagerProps {
     onProfileNameChange: (value: string) => void;
     onSaveProfile: () => void;
     onNewProfile: () => void;
+    onImportProfile: (payload: string) => void;
     canSave: boolean;
     saveFeedback: { type: 'success' | 'error'; message: string } | null;
     onDismissFeedback: () => void;
+    onReportFeedback: (type: 'success' | 'error', message: string) => void;
     lastRunSummary: {
         total: number;
         completed: number;
@@ -35,6 +38,20 @@ const formatTimestamp = (value: string): string => {
     return date.toLocaleString();
 };
 
+const buildExportFileName = (profile: CalibrationProfile): string => {
+    const slug = profile.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    const fallback = slug || 'calibration-profile';
+    const date = new Date(profile.updatedAt);
+    const timestamp = Number.isNaN(date.getTime())
+        ? 'export'
+        : date.toISOString().replace(/[:]/g, '').replace('T', '-').split('.')[0];
+    return `${fallback}-${timestamp}.json`;
+};
+
 const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
     profiles,
     selectedProfileId,
@@ -46,9 +63,11 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
     onProfileNameChange,
     onSaveProfile,
     onNewProfile,
+    onImportProfile,
     canSave,
     saveFeedback,
     onDismissFeedback,
+    onReportFeedback,
     lastRunSummary,
     currentGridFingerprint,
 }) => {
@@ -57,6 +76,7 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
         [profiles],
     );
     const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const handleToggleDetails = (profileId: string) => {
         setExpandedProfileId((prev) => (prev === profileId ? null : profileId));
@@ -65,6 +85,50 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
     const handleLoadSelected = () => {
         if (selectedProfileId) {
             onLoadProfile(selectedProfileId);
+        }
+    };
+
+    const handleExportProfile = (profile: CalibrationProfile) => {
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            onReportFeedback('error', 'Export is unavailable in this environment.');
+            return;
+        }
+        try {
+            const payload = buildCalibrationProfileExportPayload(profile);
+            const json = JSON.stringify(payload, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = buildExportFileName(profile);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to export calibration profile', error);
+            onReportFeedback('error', 'Unable to export calibration profile.');
+        }
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleImportFileChange = async (
+        event: React.ChangeEvent<HTMLInputElement>,
+    ): Promise<void> => {
+        const file = event.target.files?.[0] ?? null;
+        event.target.value = '';
+        if (!file) {
+            return;
+        }
+        try {
+            const contents = await file.text();
+            onImportProfile(contents);
+        } catch (error) {
+            console.error('Failed to read calibration import file', error);
+            onReportFeedback('error', 'Unable to read the selected file.');
         }
     };
 
@@ -145,6 +209,20 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                     >
                         New entry
                     </button>
+                    <button
+                        type="button"
+                        onClick={handleImportClick}
+                        className="rounded-md border border-sky-500/60 bg-sky-500/10 px-3 py-1 text-sm text-sky-100 hover:border-sky-400"
+                    >
+                        Import
+                    </button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/json"
+                        className="hidden"
+                        onChange={handleImportFileChange}
+                    />
                     {!canSave && (
                         <p className="text-xs text-amber-300">Run calibration to enable saving.</p>
                     )}
@@ -186,6 +264,7 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                                 onToggle={() => handleToggleDetails(profile.id)}
                                 onDelete={onDeleteProfile}
                                 onLoad={onLoadProfile}
+                                onExport={handleExportProfile}
                                 gridMatch={
                                     profile.gridStateFingerprint.hash === currentGridFingerprint
                                 }
@@ -206,6 +285,7 @@ interface ProfileCardProps {
     onToggle: () => void;
     onDelete: (profileId: string) => void;
     onLoad: (profileId: string) => void;
+    onExport: (profile: CalibrationProfile) => void;
     gridMatch: boolean;
 }
 
@@ -217,6 +297,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     onToggle,
     onDelete,
     onLoad,
+    onExport,
     gridMatch,
 }) => {
     const calibratable = profile.metrics.totalTiles - profile.metrics.skippedTiles;
@@ -238,6 +319,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     };
 
     const handleLoad = () => onLoad(profile.id);
+    const handleExport = () => onExport(profile);
 
     const quickTags = [
         active ? { tone: 'success' as const, label: 'Active' } : null,
@@ -281,6 +363,13 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                         className="rounded-md border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-200"
                     >
                         Load
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExport}
+                        className="rounded-md border border-sky-500/60 bg-sky-500/10 px-2 py-1 font-semibold text-sky-100"
+                    >
+                        Export
                     </button>
                     <button
                         type="button"

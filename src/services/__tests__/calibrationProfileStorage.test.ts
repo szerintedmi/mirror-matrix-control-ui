@@ -5,7 +5,9 @@ import type { MirrorConfig } from '@/types';
 import { clampNormalized } from '@/utils/calibrationMath';
 
 import {
+    buildCalibrationProfileExportPayload,
     deleteCalibrationProfile,
+    importCalibrationProfileFromJson,
     loadCalibrationProfiles,
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
@@ -365,6 +367,77 @@ describe('calibrationProfileStorage', () => {
             expect(loadLastCalibrationProfileId(storage)).toBe('abc');
             persistLastCalibrationProfileId(storage, null);
             expect(loadLastCalibrationProfileId(storage)).toBeNull();
+        });
+    });
+
+    describe('import/export calibration profiles', () => {
+        let storage: MemoryStorage;
+        let runnerState: CalibrationRunnerState;
+        let snapshot: GridStateSnapshot;
+
+        beforeEach(() => {
+            storage = new MemoryStorage();
+            runnerState = createRunnerState();
+            snapshot = createGridSnapshot();
+        });
+
+        it('wraps exported payloads with metadata marker', () => {
+            const saved = saveCalibrationProfile(storage, {
+                name: 'Demo Run',
+                runnerState,
+                gridSnapshot: snapshot,
+            });
+            expect(saved).not.toBeNull();
+            const payload = buildCalibrationProfileExportPayload(saved!);
+            expect(payload.type).toBe('mirror.calibration.profile');
+            expect(payload.version).toBe(1);
+            expect(payload.profile.id).toBe(saved!.id);
+        });
+
+        it('imports exported payloads and resolves id conflicts', () => {
+            const saved = saveCalibrationProfile(storage, {
+                name: 'Demo Run',
+                runnerState,
+                gridSnapshot: snapshot,
+            });
+            expect(saved).not.toBeNull();
+            const payloadJson = JSON.stringify(buildCalibrationProfileExportPayload(saved!));
+
+            const targetStorage = new MemoryStorage();
+            const firstImport = importCalibrationProfileFromJson(targetStorage, payloadJson);
+            expect(firstImport.error).toBeUndefined();
+            expect(firstImport.profile).not.toBeNull();
+            expect(loadCalibrationProfiles(targetStorage)).toHaveLength(1);
+
+            const secondImport = importCalibrationProfileFromJson(targetStorage, payloadJson);
+            expect(secondImport.profile).not.toBeNull();
+            expect(secondImport.replacedProfileId).toBe(saved!.id);
+            expect(secondImport.profile!.id).not.toBe(saved!.id);
+            expect(loadCalibrationProfiles(targetStorage)).toHaveLength(2);
+        });
+
+        it('rejects invalid payloads early', () => {
+            const malformedResult = importCalibrationProfileFromJson(storage, '{not json');
+            expect(malformedResult.profile).toBeNull();
+            expect(malformedResult.error).toContain('JSON');
+
+            const saved = saveCalibrationProfile(storage, {
+                name: 'Demo Run',
+                runnerState,
+                gridSnapshot: snapshot,
+            });
+            expect(saved).not.toBeNull();
+            const payload = buildCalibrationProfileExportPayload(saved!);
+            const invalidPayload = {
+                ...payload,
+                profile: { ...payload.profile, schemaVersion: 999 },
+            };
+            const invalidResult = importCalibrationProfileFromJson(
+                storage,
+                JSON.stringify(invalidPayload),
+            );
+            expect(invalidResult.profile).toBeNull();
+            expect(invalidResult.error).toContain('schema version');
         });
     });
 });
