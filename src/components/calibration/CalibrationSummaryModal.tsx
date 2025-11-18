@@ -82,9 +82,14 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
                             formula={spacingYFormula}
                         />
                         <SummaryStat
-                            label="Grid origin"
+                            label="Grid origin (centered)"
                             value={`(${formatPercent(blueprint.gridOrigin.x)}, ${formatPercent(blueprint.gridOrigin.y)})`}
-                            formula="gridOrigin is copied directly from the summary blueprint (normalized coordinates)."
+                            formula="gridOrigin marks the top-left corner of the re-centered grid layout (normalized coordinates)."
+                        />
+                        <SummaryStat
+                            label="Camera origin offset"
+                            value={`(${formatPercent(blueprint.cameraOriginOffset.x)}, ${formatPercent(blueprint.cameraOriginOffset.y)})`}
+                            formula="Add this offset to any grid-centered coordinate to map it back into camera space."
                         />
                     </div>
                 </section>

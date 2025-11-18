@@ -248,6 +248,7 @@ export interface CalibrationGridBlueprint {
     adjustedTileFootprint: { width: number; height: number };
     tileGap: { x: number; y: number };
     gridOrigin: { x: number; y: number };
+    cameraOriginOffset: { x: number; y: number };
 }
 
 export interface BlobMeasurementStats {

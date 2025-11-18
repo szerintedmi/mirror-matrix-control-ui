@@ -839,8 +839,8 @@ export class CalibrationRunner {
             let gapY = normalizedGap * normalizeY;
             let spacingX = tileWidth + gapX;
             let spacingY = tileHeight + gapY;
-            const totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * gapX;
-            const totalHeight = this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * gapY;
+            let totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * gapX;
+            let totalHeight = this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * gapY;
             if (totalWidth > 2 || totalHeight > 2) {
                 const scale = 2 / Math.max(totalWidth, totalHeight);
                 tileWidth *= scale;
@@ -849,6 +849,8 @@ export class CalibrationRunner {
                 gapY *= scale;
                 spacingX = tileWidth + gapX;
                 spacingY = tileHeight + gapY;
+                totalWidth *= scale;
+                totalHeight *= scale;
             }
             let originX = 0;
             let originY = 0;
@@ -874,6 +876,12 @@ export class CalibrationRunner {
             if (Number.isFinite(minOriginY)) {
                 originY = minOriginY;
             }
+            const cameraOriginOffset = {
+                x: originX + totalWidth / 2,
+                y: originY + totalHeight / 2,
+            };
+            originX -= cameraOriginOffset.x;
+            originY -= cameraOriginOffset.y;
             gridBlueprint = {
                 adjustedTileFootprint: {
                     width: tileWidth,
@@ -881,6 +889,7 @@ export class CalibrationRunner {
                 },
                 tileGap: { x: gapX, y: gapY },
                 gridOrigin: { x: originX, y: originY },
+                cameraOriginOffset,
             };
         }
 
@@ -891,10 +900,38 @@ export class CalibrationRunner {
             ? gridBlueprint.adjustedTileFootprint.height + gridBlueprint.tileGap.y
             : 0;
 
+        const recenterMeasurement = gridBlueprint
+            ? (measurement: BlobMeasurement): BlobMeasurement => {
+                  const recenteredStats = measurement.stats
+                      ? {
+                            ...measurement.stats,
+                            median: {
+                                ...measurement.stats.median,
+                                x: measurement.stats.median.x - gridBlueprint.cameraOriginOffset.x,
+                                y: measurement.stats.median.y - gridBlueprint.cameraOriginOffset.y,
+                            },
+                        }
+                      : undefined;
+                  return {
+                      ...measurement,
+                      x: measurement.x - gridBlueprint.cameraOriginOffset.x,
+                      y: measurement.y - gridBlueprint.cameraOriginOffset.y,
+                      stats: recenteredStats,
+                  };
+              }
+            : null;
+
         const summaryTiles: Record<string, TileCalibrationResult> = {};
         for (const [key, result] of this.tileResults.entries()) {
-            if (result.status !== 'completed' || !result.homeMeasurement || !gridBlueprint) {
-                summaryTiles[key] = result;
+            const normalizedMeasurement =
+                recenterMeasurement && result.homeMeasurement
+                    ? recenterMeasurement(result.homeMeasurement)
+                    : (result.homeMeasurement ?? null);
+            let tileSummary: TileCalibrationResult = normalizedMeasurement
+                ? { ...result, homeMeasurement: normalizedMeasurement }
+                : result;
+            if (result.status !== 'completed' || !normalizedMeasurement || !gridBlueprint) {
+                summaryTiles[key] = tileSummary;
                 continue;
             }
             const tile = result.tile;
@@ -906,13 +943,14 @@ export class CalibrationRunner {
                 gridBlueprint.gridOrigin.y +
                 tile.row * spacingY +
                 gridBlueprint.adjustedTileFootprint.height / 2;
-            const dx = result.homeMeasurement.x - adjustedCenterX;
-            const dy = result.homeMeasurement.y - adjustedCenterY;
-            summaryTiles[key] = {
-                ...result,
+            const dx = normalizedMeasurement.x - adjustedCenterX;
+            const dy = normalizedMeasurement.y - adjustedCenterY;
+            tileSummary = {
+                ...tileSummary,
                 homeOffset: { dx, dy },
                 adjustedHome: { x: adjustedCenterX, y: adjustedCenterY },
             };
+            summaryTiles[key] = tileSummary;
         }
         return {
             gridBlueprint,

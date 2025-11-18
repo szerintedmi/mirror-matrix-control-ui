@@ -94,6 +94,21 @@ export interface TileBoundsOverlayEntry {
     bounds: CalibrationProfileBounds;
 }
 
+export interface OverlayCameraOriginOffset {
+    x: number;
+    y: number;
+}
+
+export interface GlobalBoundsOverlayPayload {
+    bounds: CalibrationProfileBounds;
+    cameraOriginOffset: OverlayCameraOriginOffset;
+}
+
+export interface TileBoundsOverlayPayload {
+    entries: TileBoundsOverlayEntry[];
+    cameraOriginOffset: OverlayCameraOriginOffset;
+}
+
 export type {
     CameraPipelineOverlayHandlers,
     RoiEditingMode,
@@ -153,8 +168,8 @@ export interface CameraPipelineController {
     resetRoi: () => void;
     nativeBlobDetectorAvailable: boolean;
     setAlignmentOverlaySummary: (summary: CalibrationRunSummary | null) => void;
-    setGlobalBoundsOverlayBounds: (bounds: CalibrationProfileBounds | null) => void;
-    setTileBoundsOverlayEntries: (entries: TileBoundsOverlayEntry[] | null) => void;
+    setGlobalBoundsOverlayBounds: (payload: GlobalBoundsOverlayPayload | null) => void;
+    setTileBoundsOverlayEntries: (payload: TileBoundsOverlayPayload | null) => void;
     blobsOverlayEnabled: boolean;
     setBlobsOverlayEnabled: (enabled: boolean) => void;
 }
@@ -214,8 +229,8 @@ export const useCameraPipeline = ({
     const alignmentOverlayVisibleRef = useRef<boolean>(Boolean(alignmentOverlayVisible));
     const blobsOverlayVisibleRef = useRef<boolean>(true);
     const overlayCvRef = useRef<CvRuntime | null>(null);
-    const globalBoundsRef = useRef<CalibrationProfileBounds | null>(null);
-    const tileBoundsOverlayRef = useRef<TileBoundsOverlayEntry[]>([]);
+    const globalBoundsRef = useRef<GlobalBoundsOverlayPayload | null>(null);
+    const tileBoundsOverlayRef = useRef<TileBoundsOverlayPayload | null>(null);
 
     const reportVideoDimensions = useCallback(
         (width: number, height: number) => {
@@ -253,20 +268,25 @@ export const useCameraPipeline = ({
         alignmentOverlaySummaryRef.current = summary;
     }, []);
 
-    const setGlobalBoundsOverlayBounds = useCallback((bounds: CalibrationProfileBounds | null) => {
-        globalBoundsRef.current = bounds;
-        if (import.meta.env?.DEV && bounds) {
-            const midX = (bounds.x.min + bounds.x.max) / 2;
-            const midY = (bounds.y.min + bounds.y.max) / 2;
-            console.debug('[Calibration] global bounds updated', {
-                bounds,
-                center: { x: midX, y: midY },
-            });
-        }
-    }, []);
+    const setGlobalBoundsOverlayBounds = useCallback(
+        (payload: GlobalBoundsOverlayPayload | null) => {
+            globalBoundsRef.current = payload;
+            if (import.meta.env?.DEV && payload) {
+                const { bounds, cameraOriginOffset } = payload;
+                const midX = (bounds.x.min + bounds.x.max) / 2;
+                const midY = (bounds.y.min + bounds.y.max) / 2;
+                console.debug('[Calibration] global bounds updated', {
+                    bounds,
+                    center: { x: midX, y: midY },
+                    cameraOriginOffset,
+                });
+            }
+        },
+        [],
+    );
 
-    const setTileBoundsOverlayEntries = useCallback((entries: TileBoundsOverlayEntry[] | null) => {
-        tileBoundsOverlayRef.current = entries ?? [];
+    const setTileBoundsOverlayEntries = useCallback((payload: TileBoundsOverlayPayload | null) => {
+        tileBoundsOverlayRef.current = payload;
     }, []);
 
     useEffect(() => {
@@ -627,10 +647,11 @@ export const useCameraPipeline = ({
             };
 
             const drawGlobalBoundsCanvas = () => {
-                const bounds = globalBoundsRef.current;
-                if (!bounds) {
+                const payload = globalBoundsRef.current;
+                if (!payload) {
                     return;
                 }
+                const { bounds, cameraOriginOffset } = payload;
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 const normalizedWidth = bounds.x.max - bounds.x.min;
@@ -638,8 +659,14 @@ export const useCameraPipeline = ({
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                     return;
                 }
-                const pxLeft = convertCoordToPixels(bounds.x.min, sourceWidth);
-                const pxTop = convertCoordToPixels(bounds.y.min, sourceHeight);
+                const pxLeft = convertCoordToPixels(
+                    bounds.x.min + cameraOriginOffset.x,
+                    sourceWidth,
+                );
+                const pxTop = convertCoordToPixels(
+                    bounds.y.min + cameraOriginOffset.y,
+                    sourceHeight,
+                );
                 const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                 const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
                 const localLeft = (pxLeft - baseRect.x) * scaleX;
@@ -663,10 +690,11 @@ export const useCameraPipeline = ({
                 centeredDeltaToView(delta) * dimension;
 
             const drawTileBoundsCanvas = () => {
-                const entries = tileBoundsOverlayRef.current;
-                if (!entries.length) {
+                const payload = tileBoundsOverlayRef.current;
+                if (!payload || !payload.entries.length) {
                     return;
                 }
+                const { entries, cameraOriginOffset } = payload;
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 ctx.save();
@@ -677,8 +705,14 @@ export const useCameraPipeline = ({
                     if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                         return;
                     }
-                    const pxLeft = convertCoordToPixels(entry.bounds.x.min, sourceWidth);
-                    const pxTop = convertCoordToPixels(entry.bounds.y.min, sourceHeight);
+                    const pxLeft = convertCoordToPixels(
+                        entry.bounds.x.min + cameraOriginOffset.x,
+                        sourceWidth,
+                    );
+                    const pxTop = convertCoordToPixels(
+                        entry.bounds.y.min + cameraOriginOffset.y,
+                        sourceHeight,
+                    );
                     const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                     const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
                     const localLeft = (pxLeft - baseRect.x) * scaleX;
@@ -721,6 +755,8 @@ export const useCameraPipeline = ({
                     blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
                 const spacingY =
                     blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+                const offsetX = blueprint.cameraOriginOffset.x;
+                const offsetY = blueprint.cameraOriginOffset.y;
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 ctx.save();
@@ -741,8 +777,8 @@ export const useCameraPipeline = ({
                         adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
                     const normalizedTop =
                         adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = convertCoordToPixels(normalizedLeft, sourceWidth);
-                    const pxTop = convertCoordToPixels(normalizedTop, sourceHeight);
+                    const pxLeft = convertCoordToPixels(normalizedLeft + offsetX, sourceWidth);
+                    const pxTop = convertCoordToPixels(normalizedTop + offsetY, sourceHeight);
                     const pxWidth = convertDeltaToPixels(
                         blueprint.adjustedTileFootprint.width,
                         sourceWidth,
@@ -780,7 +816,10 @@ export const useCameraPipeline = ({
                     );
                     ctx.restore();
                     const measurement = entry.homeMeasurement
-                        ? rotatePoint(entry.homeMeasurement)
+                        ? rotatePoint({
+                              x: entry.homeMeasurement.x + offsetX,
+                              y: entry.homeMeasurement.y + offsetY,
+                          })
                         : undefined;
                     if (measurement) {
                         const measurementX =
@@ -808,7 +847,7 @@ export const useCameraPipeline = ({
             };
 
             const hasGlobalBoundsOverlay = Boolean(globalBoundsRef.current);
-            const hasTileBoundsOverlay = tileBoundsOverlayRef.current.length > 0;
+            const hasTileBoundsOverlay = Boolean(tileBoundsOverlayRef.current?.entries.length);
             if (
                 !blobsOverlayVisibleRef.current &&
                 !alignmentOverlayVisibleRef.current &&
@@ -887,6 +926,8 @@ export const useCameraPipeline = ({
                     blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
                 const spacingY =
                     blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+                const offsetX = blueprint.cameraOriginOffset.x;
+                const offsetY = blueprint.cameraOriginOffset.y;
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 const squareColor = new runtime.Scalar(
@@ -915,8 +956,8 @@ export const useCameraPipeline = ({
                         adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
                     const normalizedTop =
                         adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = convertCoordToPixels(normalizedLeft, sourceWidth);
-                    const pxTop = convertCoordToPixels(normalizedTop, sourceHeight);
+                    const pxLeft = convertCoordToPixels(normalizedLeft + offsetX, sourceWidth);
+                    const pxTop = convertCoordToPixels(normalizedTop + offsetY, sourceHeight);
                     const pxWidth = convertDeltaToPixels(
                         blueprint.adjustedTileFootprint.width,
                         sourceWidth,
@@ -966,7 +1007,10 @@ export const useCameraPipeline = ({
                         runtime.LINE_AA,
                     );
                     const measurement = entry.homeMeasurement
-                        ? rotatePoint(entry.homeMeasurement)
+                        ? rotatePoint({
+                              x: entry.homeMeasurement.x + offsetX,
+                              y: entry.homeMeasurement.y + offsetY,
+                          })
                         : undefined;
                     if (measurement) {
                         const measurementX =
@@ -1002,10 +1046,11 @@ export const useCameraPipeline = ({
             };
 
             const drawGlobalBoundsCv = () => {
-                const bounds = globalBoundsRef.current;
-                if (!bounds) {
+                const payload = globalBoundsRef.current;
+                if (!payload) {
                     return;
                 }
+                const { bounds, cameraOriginOffset } = payload;
                 const normalizedWidth = bounds.x.max - bounds.x.min;
                 const normalizedHeight = bounds.y.max - bounds.y.min;
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
@@ -1013,8 +1058,14 @@ export const useCameraPipeline = ({
                 }
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
-                const pxLeft = convertCoordToPixels(bounds.x.min, sourceWidth);
-                const pxTop = convertCoordToPixels(bounds.y.min, sourceHeight);
+                const pxLeft = convertCoordToPixels(
+                    bounds.x.min + cameraOriginOffset.x,
+                    sourceWidth,
+                );
+                const pxTop = convertCoordToPixels(
+                    bounds.y.min + cameraOriginOffset.y,
+                    sourceHeight,
+                );
                 const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                 const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
                 const localLeft = (pxLeft - baseRect.x) * scaleX;
@@ -1034,10 +1085,11 @@ export const useCameraPipeline = ({
             };
 
             const drawTileBoundsCv = () => {
-                const entries = tileBoundsOverlayRef.current;
-                if (!entries.length) {
+                const payload = tileBoundsOverlayRef.current;
+                if (!payload || !payload.entries.length) {
                     return;
                 }
+                const { entries, cameraOriginOffset } = payload;
                 const sourceWidth = meta.sourceWidth || width;
                 const sourceHeight = meta.sourceHeight || height;
                 entries.forEach((entry, index) => {
@@ -1046,8 +1098,14 @@ export const useCameraPipeline = ({
                     if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                         return;
                     }
-                    const pxLeft = convertCoordToPixels(entry.bounds.x.min, sourceWidth);
-                    const pxTop = convertCoordToPixels(entry.bounds.y.min, sourceHeight);
+                    const pxLeft = convertCoordToPixels(
+                        entry.bounds.x.min + cameraOriginOffset.x,
+                        sourceWidth,
+                    );
+                    const pxTop = convertCoordToPixels(
+                        entry.bounds.y.min + cameraOriginOffset.y,
+                        sourceHeight,
+                    );
                     const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
                     const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
                     const localLeft = (pxLeft - baseRect.x) * scaleX;

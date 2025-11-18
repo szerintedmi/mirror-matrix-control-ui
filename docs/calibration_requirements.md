@@ -43,6 +43,13 @@ If you need to extend the UI, prefer adding props/hooks instead of re-expanding 
   - Calibration runs by sending commands to home and move individual tiles.
   - **Future option:** Some or all calibration data could be pushed into firmware (per-tile corrections), turning the app into a calibration+config tool.
 
+### 2.2 Coordinate System Principles
+
+- The entire calibration + playback stack shares a **single normalized coordinate system**: both axes span `[-1, 1]` with `(0, 0)` fixed at the geometric center of the synthesized mirror grid.
+- During each calibration run the blueprint builder computes a **grid-centered layout** (tile footprint + gap) and derives a `cameraOriginOffset` – the translation that maps the captured camera-space midpoint to the aligned grid center. Every stored measurement (`homeMeasurement`, `adjustedHome`, `homeOffset`, inferred bounds, per-step vectors) is first **recentred by subtracting that offset** so only grid-centered numbers persist.
+- Calibration profiles therefore never contain camera- or ROI-relative coordinates; detection/camera settings stay isolated in their own storage. Consumers such as pattern designer, playback planner, or solver can assume every coordinate is grid-centered.
+- Visualization layers (calibration preview, ROI overlay, debug canvases) recover camera alignment by **adding `gridBlueprint.cameraOriginOffset` back** before converting to pixels. This keeps overlays accurate even if the operator changes ROI, resolution, or rotates the feed while honoring the invariant that persisted data is camera-independent.
+
 ## 3. Functional Requirements
 
 Throughout this section:
@@ -50,6 +57,7 @@ Throughout this section:
 - **Home measurement** refers to the normalized blob reading captured at a tile's mechanical home position (center, size, capture timestamp, stability stats).
 - **Adjusted home** is the normalized coordinate where that tile should land once aligned to the synthesized grid derived from the largest captured footprint plus configured gaps; stored per tile as `adjustedHome`.
 - **Home offset** (`homeOffset = homeMeasurement - adjustedHome`) is the signed delta we remove when aligning the array and later use for drift checks.
+- The calibration runner recenters every measurement by subtracting the blueprint's `cameraOriginOffset` before persisting, so these values always live in the shared grid-centered coordinate system regardless of the camera/ROI used during capture.
 - UI and profile schemas treat raw captures (home.\*, blob stats, `deltaSteps`, `Δnorm` inputs) as measurements and place derived values (homeOffset, `adjustedHome`, per-step factors, alignment steps) in separate groups so operators know the provenance of each number.
 
 ### 3.1 Calibration Page – Camera & Preview
@@ -171,6 +179,7 @@ In **processed view**:
 - The overlay must reflect:
   - Current preprocessing parameters.
   - Current blob detector parameters.
+- Overlay and alignment visuals always render from the **grid-centered data** stored in calibration. When drawing onto the camera feed, add the active profile's `gridBlueprint.cameraOriginOffset` before converting normalized coordinates to pixels so the grid stays aligned even if ROI/resolution/rotation change.
 - Show optional textual info on hover/tooltip (e.g. size, confidence).
 
 The **initial homed state** may have overlapping blobs and ambiguous assignments. This is OK; show them anyway for visual feedback but do **not** rely on this state for calibration mapping.
@@ -563,7 +572,8 @@ type CalibrationProfile = {
   gridBlueprint: {
     adjustedTileFootprint: { width: number; height: number }; // normalized dims derived from largest tile (adjusted home footprint)
     tileGap: { x: number; y: number }; // normalized spacing between footprints per axis
-    gridOrigin: { x: number; y: number }; // normalized offset applied after calibration (usually 0,0)
+    gridOrigin: { x: number; y: number }; // normalized offset applied after calibration (centered grid)
+    cameraOriginOffset: { x: number; y: number }; // translation back to camera/view space for overlays
   };
   stepTestSettings: {
     deltaSteps: number; // absolute steps used during measurement (default 400)

@@ -161,6 +161,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             }));
     }, [activeProfile]);
 
+    const activeCameraOriginOffset = activeProfile?.gridBlueprint?.cameraOriginOffset ?? null;
+
     useEffect(() => {
         setAlignmentOverlaySummary(alignmentSourceSummary ?? null);
     }, [alignmentSourceSummary, setAlignmentOverlaySummary]);
@@ -172,22 +174,46 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     useEffect(() => {
         const shouldShowBounds =
-            displayedAlignmentOverlayEnabled && !isCalibrationActive && Boolean(activeGlobalBounds);
-        setGlobalBoundsOverlayBounds(shouldShowBounds ? activeGlobalBounds : null);
+            displayedAlignmentOverlayEnabled &&
+            !isCalibrationActive &&
+            Boolean(activeGlobalBounds) &&
+            Boolean(activeCameraOriginOffset);
+        setGlobalBoundsOverlayBounds(
+            shouldShowBounds && activeGlobalBounds && activeCameraOriginOffset
+                ? {
+                      bounds: activeGlobalBounds,
+                      cameraOriginOffset: activeCameraOriginOffset,
+                  }
+                : null,
+        );
     }, [
         activeGlobalBounds,
         displayedAlignmentOverlayEnabled,
         isCalibrationActive,
+        activeCameraOriginOffset,
         setGlobalBoundsOverlayBounds,
     ]);
 
-    const tileBoundsOverlayAvailable = !isCalibrationActive && activeTileBounds.length > 0;
+    const tileBoundsOverlayAvailable =
+        !isCalibrationActive && activeTileBounds.length > 0 && Boolean(activeCameraOriginOffset);
     const displayedTileBoundsOverlayEnabled =
         tileBoundsOverlayVisible && tileBoundsOverlayAvailable;
 
     useEffect(() => {
-        setTileBoundsOverlayEntries(displayedTileBoundsOverlayEnabled ? activeTileBounds : null);
-    }, [activeTileBounds, displayedTileBoundsOverlayEnabled, setTileBoundsOverlayEntries]);
+        setTileBoundsOverlayEntries(
+            displayedTileBoundsOverlayEnabled && activeCameraOriginOffset
+                ? {
+                      entries: activeTileBounds,
+                      cameraOriginOffset: activeCameraOriginOffset,
+                  }
+                : null,
+        );
+    }, [
+        activeCameraOriginOffset,
+        activeTileBounds,
+        displayedTileBoundsOverlayEnabled,
+        setTileBoundsOverlayEntries,
+    ]);
 
     const rotationOverlayVisible = isRotationAdjusting;
 

@@ -91,6 +91,7 @@ const createProfile = (
                       adjustedTileFootprint: { width: 0.2, height: 0.2 },
                       tileGap: { x: 0.05, y: 0.05 },
                       gridOrigin: { x: -0.5, y: -0.5 },
+                      cameraOriginOffset: { x: 0, y: 0 },
                   },
         stepTestSettings: { deltaSteps: 400 },
         gridStateFingerprint: {

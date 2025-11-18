@@ -77,6 +77,7 @@ const createRunnerState = (): CalibrationRunnerState => {
             adjustedTileFootprint: { width: 0.1307459831237793, height: 0.2324373033311632 },
             tileGap: { x: 0, y: 0 },
             gridOrigin: { x: 0.1262927532196046, y: -0.16657087537977439 },
+            cameraOriginOffset: { x: 0, y: 0 },
         },
         stepTestSettings: {
             deltaSteps: 1200,

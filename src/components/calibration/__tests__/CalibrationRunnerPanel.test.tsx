@@ -88,6 +88,7 @@ const summary: CalibrationRunSummary = {
         adjustedTileFootprint: { width: 0.24, height: 0.24 },
         tileGap: { x: 0.04, y: 0.04 },
         gridOrigin: { x: -0.8, y: -0.8 },
+        cameraOriginOffset: { x: 0, y: 0 },
     },
     stepTestSettings: {
         deltaSteps: DEFAULT_CALIBRATION_RUNNER_SETTINGS.deltaSteps,
