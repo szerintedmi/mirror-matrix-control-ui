@@ -2,14 +2,14 @@ import { convertAngleToSteps } from '../utils/motorSteps';
 
 import type {
     Axis,
+    LegacyPlaybackAxisPlan,
+    LegacyPlaybackAxisTarget,
+    LegacyPlaybackPlanResult,
     MirrorAssignment,
-    PlaybackAxisPlan,
-    PlaybackAxisTarget,
-    PlaybackPlanResult,
 } from '../types';
 
-interface BuildAxisTargetsParams {
-    plan: PlaybackPlanResult;
+interface BuildLegacyPlaybackAxisTargetsParams {
+    plan: LegacyPlaybackPlanResult;
     stepsPerDegree?: number;
 }
 
@@ -43,7 +43,7 @@ const createAxisTarget = ({
     angleDeg: number;
     motor: NonNullable<ReturnType<typeof cloneMotor>>;
     stepsPerDegree?: number;
-}): PlaybackAxisTarget => {
+}): LegacyPlaybackAxisTarget => {
     const conversion = convertAngleToSteps(resolveAxisAngleForSteps(axis, angleDeg), {
         stepsPerDegree,
     });
@@ -62,12 +62,12 @@ const createAxisTarget = ({
     };
 };
 
-export const buildAxisTargets = ({
+export const buildLegacyPlaybackAxisTargets = ({
     plan,
     stepsPerDegree,
-}: BuildAxisTargetsParams): PlaybackAxisPlan => {
-    const axes: PlaybackAxisTarget[] = [];
-    const skipped: PlaybackAxisPlan['skipped'] = [];
+}: BuildLegacyPlaybackAxisTargetsParams): LegacyPlaybackAxisPlan => {
+    const axes: LegacyPlaybackAxisTarget[] = [];
+    const skipped: LegacyPlaybackAxisPlan['skipped'] = [];
 
     for (const mirror of plan.mirrors) {
         if (!mirror.patternId) {

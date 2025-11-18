@@ -9,7 +9,7 @@ import {
     CalibrationIcon,
     ConnectionIcon,
     PatternsIcon,
-    PlaybackIcon,
+    LegacyPlaybackIcon,
     SimulationIcon,
 } from './components/NavIcons';
 import NavigationRail from './components/NavigationRail';
@@ -20,10 +20,10 @@ import { MqttProvider } from './context/MqttContext';
 import { StatusProvider } from './context/StatusContext';
 import CalibrationPage from './pages/CalibrationPage';
 import ConfiguratorPage from './pages/ConfiguratorPage';
+import LegacyPlaybackPage from './pages/LegacyPlaybackPage';
 import PatternDesignerPage from './pages/PatternDesignerPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
-import PlaybackPage from './pages/PlaybackPage';
 import SimulationPage from './pages/SimulationPage';
 import {
     bootstrapGridSnapshots,
@@ -47,7 +47,7 @@ export type Page =
     | 'legacy-patterns'
     | 'legacy-patterns-editor'
     | 'patterns'
-    | 'playback'
+    | 'legacy-playback'
     | 'calibration'
     | 'configurator'
     | 'simulation'
@@ -63,7 +63,7 @@ type PersistenceStatus =
     | (SnapshotPersistenceStatus & { kind: 'success' | 'error' });
 
 const App: React.FC = () => {
-    const [page, setPage] = useState<Page>('playback');
+    const [page, setPage] = useState<Page>('legacy-playback');
     const [editingPatternId, setEditingPatternId] = useState<string | null>(null);
     const [isRailCollapsed, setIsRailCollapsed] = useState(false);
     const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -273,9 +273,9 @@ const App: React.FC = () => {
 
     const navigationItems = [
         {
-            page: 'playback' as const,
-            label: 'Playback',
-            icon: <PlaybackIcon />,
+            page: 'legacy-playback' as const,
+            label: 'Playback (legacy)',
+            icon: <LegacyPlaybackIcon />,
         },
         {
             page: 'calibration' as const,
@@ -340,9 +340,9 @@ const App: React.FC = () => {
         switch (page) {
             case 'connection':
                 return <ConnectionSettingsContent />;
-            case 'playback':
+            case 'legacy-playback':
                 return (
-                    <PlaybackPage
+                    <LegacyPlaybackPage
                         patterns={patterns}
                         gridSize={gridSize}
                         mirrorConfig={mirrorConfig}
@@ -433,8 +433,8 @@ const App: React.FC = () => {
                 return 'Patterns (legacy)';
             case 'patterns':
                 return 'Patterns';
-            case 'playback':
-                return 'Playback';
+            case 'legacy-playback':
+                return 'Playback (legacy)';
             case 'calibration':
                 return 'Calibration';
             case 'configurator':

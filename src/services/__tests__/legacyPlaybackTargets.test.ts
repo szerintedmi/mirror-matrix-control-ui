@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildAxisTargets } from '../playbackTargets';
+import { buildLegacyPlaybackAxisTargets } from '../legacyPlaybackTargets';
 
-import type { PlaybackPlanResult } from '../../types';
+import type { LegacyPlaybackPlanResult } from '../../types';
 
-const createPlan = (): PlaybackPlanResult => ({
+const createPlan = (): LegacyPlaybackPlanResult => ({
     patternId: 'pattern-1',
     assignments: [],
     errors: [],
@@ -38,9 +38,9 @@ const createPlan = (): PlaybackPlanResult => ({
     ],
 });
 
-describe('buildAxisTargets', () => {
+describe('buildLegacyPlaybackAxisTargets', () => {
     it('creates axis targets for mirrors with assignments', () => {
-        const result = buildAxisTargets({ plan: createPlan() });
+        const result = buildLegacyPlaybackAxisTargets({ plan: createPlan() });
         expect(result.axes).toHaveLength(3);
         const first = result.axes[0];
         expect(first.axis).toBe('x');
@@ -51,7 +51,7 @@ describe('buildAxisTargets', () => {
     });
 
     it('reports skipped axes and clamp diagnostics', () => {
-        const result = buildAxisTargets({ plan: createPlan() });
+        const result = buildLegacyPlaybackAxisTargets({ plan: createPlan() });
         expect(result.skipped).toHaveLength(1);
         expect(result.skipped[0]).toMatchObject({ reason: 'missing-motor', axis: 'y' });
 

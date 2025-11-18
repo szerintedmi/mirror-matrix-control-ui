@@ -13,21 +13,21 @@ import {
 import { useLogStore } from '../context/LogContext';
 import { useStatusStore } from '../context/StatusContext';
 import { useMotorCommands } from '../hooks/useMotorCommands';
-import { planPlayback } from '../services/playbackPlanner';
-import { buildAxisTargets } from '../services/playbackTargets';
+import { planLegacyPlayback } from '../services/legacyPlaybackPlanner';
+import { buildLegacyPlaybackAxisTargets } from '../services/legacyPlaybackTargets';
 import { normalizeCommandError } from '../utils/commandErrors';
 import { withOrientationAngles } from '../utils/orientation';
 import { computeDirectOverlaps } from '../utils/tileOverlap';
 
 import type {
     LegacyPattern,
+    LegacyPlaybackPlanResult,
     MirrorAssignment,
     MirrorConfig,
-    PlaybackPlanResult,
     ProjectionSettings,
 } from '../types';
 
-interface PlaybackPageProps {
+interface LegacyPlaybackPageProps {
     patterns: LegacyPattern[];
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
@@ -141,7 +141,7 @@ const PatternThumbnail: React.FC<{
 
 interface PlannerState {
     status: 'idle' | 'planning' | 'ready' | 'error';
-    plan: PlaybackPlanResult | null;
+    plan: LegacyPlaybackPlanResult | null;
     message: string | null;
     signature: string | null;
 }
@@ -153,7 +153,7 @@ const createInitialPlannerState = (): PlannerState => ({
     signature: null,
 });
 
-interface PlaybackRunState {
+interface LegacyPlaybackRunState {
     status: 'idle' | 'running' | 'success' | 'error' | 'cancelled';
     progress: number;
     error?: string;
@@ -205,7 +205,7 @@ const createPlannerInputSignature = ({
     ].join('::');
 };
 
-const PlaybackPage: React.FC<PlaybackPageProps> = ({
+const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
     patterns,
     gridSize,
     mirrorConfig,
@@ -219,7 +219,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     const { moveMotor } = useMotorCommands();
     const { logInfo, logWarning, logError } = useLogStore();
     const [plannerState, setPlannerState] = React.useState<PlannerState>(createInitialPlannerState);
-    const [runState, setRunState] = React.useState<PlaybackRunState>({
+    const [runState, setRunState] = React.useState<LegacyPlaybackRunState>({
         status: 'idle',
         progress: 0,
     });
@@ -283,10 +283,10 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         if (!currentPlan) {
             return null;
         }
-        return buildAxisTargets({ plan: currentPlan });
+        return buildLegacyPlaybackAxisTargets({ plan: currentPlan });
     }, [currentPlan]);
 
-    const [displayPlan, setDisplayPlan] = React.useState<PlaybackPlanResult | null>(null);
+    const [displayPlan, setDisplayPlan] = React.useState<LegacyPlaybackPlanResult | null>(null);
     React.useEffect(() => {
         if (currentPlan) {
             setDisplayPlan(currentPlan);
@@ -299,7 +299,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         if (displayPlan === currentPlan && liveAxisPlan) {
             return liveAxisPlan;
         }
-        return buildAxisTargets({ plan: displayPlan });
+        return buildLegacyPlaybackAxisTargets({ plan: displayPlan });
     }, [currentPlan, displayPlan, liveAxisPlan]);
 
     React.useEffect(() => {
@@ -402,7 +402,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     const blockingIssues = React.useMemo(() => {
         const issues: string[] = [];
         if (!activePattern) {
-            issues.push('Select a pattern in the library to configure playback.');
+            issues.push('Select a pattern in the library to configure legacy playback.');
         }
         if (
             plannerState.status === 'error' &&
@@ -421,12 +421,12 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     ]);
 
     const computePlan = React.useCallback(
-        (options?: { silentSuccess?: boolean }): PlaybackPlanResult | null => {
+        (options?: { silentSuccess?: boolean }): LegacyPlaybackPlanResult | null => {
             if (!activePattern) {
                 setPlannerState({
                     status: 'error',
                     plan: null,
-                    message: 'Select a pattern before running playback.',
+                    message: 'Select a pattern before running legacy playback.',
                     signature: null,
                 });
                 return null;
@@ -438,7 +438,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 signature: prev.signature === plannerInputsSignature ? prev.signature : null,
             }));
             try {
-                const plan = planPlayback({
+                const plan = planLegacyPlayback({
                     gridSize,
                     mirrorConfig,
                     projectionSettings,
@@ -461,7 +461,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 const message =
                     error instanceof Error
                         ? error.message
-                        : 'An unexpected error occurred while planning playback.';
+                        : 'An unexpected error occurred while planning legacy playback.';
                 setPlannerState({
                     status: 'error',
                     plan: null,
@@ -479,7 +479,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             setPlannerState({
                 status: 'error',
                 plan: null,
-                message: 'Select a pattern before running playback.',
+                message: 'Select a pattern before running legacy playback.',
                 signature: null,
             });
             return;
@@ -532,7 +532,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         }
         if (plan.errors.length > 0) {
             logWarning(
-                'playback',
+                'legacy-playback',
                 `Cannot preview commands until ${plan.errors.length} solver error${plan.errors.length === 1 ? '' : 's'} are resolved.`,
                 { errorCount: plan.errors.length },
             );
@@ -547,7 +547,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         }
         cancelRequestedRef.current = true;
         setCancelRequested(true);
-        logWarning('playback', 'Playback cancellation requested by operator.');
+        logWarning('legacy-playback', 'Legacy playback cancellation requested by operator.');
     };
 
     const handlePlaybackStart = React.useCallback(async () => {
@@ -560,20 +560,20 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         }
         if (plan.errors.length > 0) {
             logWarning(
-                'playback',
-                `Playback blocked due to ${plan.errors.length} solver error${plan.errors.length === 1 ? '' : 's'}.`,
+                'legacy-playback',
+                `Legacy playback blocked due to ${plan.errors.length} solver error${plan.errors.length === 1 ? '' : 's'}.`,
                 { errorCount: plan.errors.length },
             );
             return;
         }
         cancelRequestedRef.current = false;
         setCancelRequested(false);
-        const localAxisPlan = buildAxisTargets({ plan });
+        const localAxisPlan = buildLegacyPlaybackAxisTargets({ plan });
         localAxisPlan.axes
             .filter((axis) => axis.clamped)
             .forEach((axis) => {
                 logWarning(
-                    'playback',
+                    'legacy-playback',
                     `${formatTileLabel(axis.row, axis.col)} axis ${axis.axis.toUpperCase()} clamped to ${axis.targetSteps.toFixed(0)} steps.`,
                     {
                         axis,
@@ -582,7 +582,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             });
         localAxisPlan.skipped.forEach((skip) => {
             logWarning(
-                'playback',
+                'legacy-playback',
                 `${formatTileLabel(skip.row, skip.col)} axis ${skip.axis.toUpperCase()} skipped (${skip.reason.replace('-', ' ')}).`,
                 { skip },
             );
@@ -592,7 +592,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             const driver = driverPresenceMap.get(normalizeMac(axis.motor.nodeMac));
             if (!driver || driver.presence === 'offline') {
                 logWarning(
-                    'playback',
+                    'legacy-playback',
                     `${formatTileLabel(axis.row, axis.col)} axis ${axis.axis.toUpperCase()} skipped (driver offline).`,
                     { axis },
                 );
@@ -600,7 +600,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             }
             if (driver.presence === 'stale') {
                 logWarning(
-                    'playback',
+                    'legacy-playback',
                     `${formatTileLabel(axis.row, axis.col)} axis ${axis.axis.toUpperCase()} driver telemetry is stale; moving anyway.`,
                     { axis },
                 );
@@ -610,7 +610,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
 
         if (runnableAxes.length === 0) {
             setRunState({ status: 'error', progress: 0, error: 'No eligible axes to command.' });
-            logWarning('playback', 'Playback aborted: no eligible axes to command.', {
+            logWarning('legacy-playback', 'Legacy playback aborted: no eligible axes to command.', {
                 skippedCount: localAxisPlan.skipped.length,
             });
             cancelRequestedRef.current = false;
@@ -620,8 +620,8 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
 
         setRunState({ status: 'running', progress: 0 });
         logInfo(
-            'playback',
-            `Dispatching ${runnableAxes.length} MOVE command${runnableAxes.length === 1 ? '' : 's'}.`,
+            'legacy-playback',
+            `Dispatching ${runnableAxes.length} MOVE command${runnableAxes.length === 1 ? '' : 's'} for legacy playback.`,
         );
         let completedCount = 0;
         const totalCommands = runnableAxes.length;
@@ -663,10 +663,14 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             });
             cancelRequestedRef.current = false;
             setCancelRequested(false);
-            logInfo('playback', 'Playback run cancelled (commands already dispatched).', {
-                completed: completedCount,
-                total: totalCommands,
-            });
+            logInfo(
+                'legacy-playback',
+                'Legacy playback run cancelled (commands already dispatched).',
+                {
+                    completed: completedCount,
+                    total: totalCommands,
+                },
+            );
             return;
         }
 
@@ -689,7 +693,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             cancelRequestedRef.current = false;
             setCancelRequested(false);
             logError(
-                'playback',
+                'legacy-playback',
                 axis
                     ? `MOVE failed on ${formatTileLabel(axis.row, axis.col)} axis ${axis.axis.toUpperCase()}: ${normalized.message}`
                     : `MOVE failed: ${normalized.message}`,
@@ -706,7 +710,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
         setRunState({ status: 'success', progress: 1 });
         cancelRequestedRef.current = false;
         setCancelRequested(false);
-        logInfo('playback', 'Playback commands completed successfully.', {
+        logInfo('legacy-playback', 'Legacy playback commands completed successfully.', {
             axisCount: runnableAxes.length,
         });
     }, [
@@ -835,10 +839,10 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                                                 ? 'Canceling…'
                                                 : `Dispatching commands (${Math.round(runState.progress * 100)}%)…`
                                             : runState.status === 'success'
-                                              ? 'Playback commands completed.'
+                                              ? 'Legacy playback commands completed.'
                                               : runState.status === 'cancelled'
-                                                ? 'Playback run cancelled.'
-                                                : (runState.error ?? 'Playback failed.')}
+                                                ? 'Legacy playback run cancelled.'
+                                                : (runState.error ?? 'Legacy playback failed.')}
                                     </p>
                                 )}
                             </div>
@@ -1084,7 +1088,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 />
             </section>
 
-            <LogConsole scope="playback" title="Playback Log" />
+            <LogConsole scope="legacy-playback" title="Playback (legacy) Log" />
 
             <Modal
                 open={isPatternPickerOpen}
@@ -1093,7 +1097,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
             >
                 {patterns.length === 0 ? (
                     <p className="text-sm text-gray-300">
-                        Create a pattern in the library to enable playback.
+                        Create a pattern in the library to enable legacy playback.
                     </p>
                 ) : (
                     <>
@@ -1157,7 +1161,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
                 title="Command Preview"
             >
                 {plannerState.status === 'planning' ? (
-                    <p className="text-sm text-gray-300">Generating playback plan…</p>
+                    <p className="text-sm text-gray-300">Generating legacy playback plan…</p>
                 ) : !displayAxisPlan || sortedAxisEntries.length === 0 ? (
                     <p className="text-sm text-gray-300">
                         Command preview is unavailable until the current validation issues are
@@ -1238,4 +1242,4 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({
     );
 };
 
-export default PlaybackPage;
+export default LegacyPlaybackPage;

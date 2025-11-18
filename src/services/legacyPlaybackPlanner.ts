@@ -3,13 +3,13 @@ import { solveReflection } from '../utils/reflectionSolver';
 
 import type {
     LegacyPattern,
+    LegacyPlaybackMirrorPlan,
+    LegacyPlaybackPlanResult,
     MirrorConfig,
-    PlaybackPlanResult,
-    PlaybackMirrorPlan,
     ProjectionSettings,
 } from '../types';
 
-export interface PlaybackPlanningParams {
+export interface LegacyPlaybackPlanningParams {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
     projectionSettings: ProjectionSettings;
@@ -17,25 +17,25 @@ export interface PlaybackPlanningParams {
 }
 
 const cloneAssignment = (
-    plan: PlaybackMirrorPlan['assignment'],
-): PlaybackMirrorPlan['assignment'] => ({
+    plan: LegacyPlaybackMirrorPlan['assignment'],
+): LegacyPlaybackMirrorPlan['assignment'] => ({
     x: plan.x ? { ...plan.x } : null,
     y: plan.y ? { ...plan.y } : null,
 });
 
-export const planPlayback = ({
+export const planLegacyPlayback = ({
     gridSize,
     mirrorConfig,
     projectionSettings,
     pattern,
-}: PlaybackPlanningParams): PlaybackPlanResult => {
+}: LegacyPlaybackPlanningParams): LegacyPlaybackPlanResult => {
     const solverResult = solveReflection({
         gridSize,
         projection: projectionSettings,
         pattern,
     });
 
-    const mirrors: PlaybackMirrorPlan[] = solverResult.mirrors.map((mirror) => {
+    const mirrors: LegacyPlaybackMirrorPlan[] = solverResult.mirrors.map((mirror) => {
         const assignment = getMirrorAssignment(mirrorConfig, mirror.row, mirror.col);
         return {
             mirrorId: mirror.mirrorId,

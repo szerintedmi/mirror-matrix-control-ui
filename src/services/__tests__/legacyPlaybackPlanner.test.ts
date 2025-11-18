@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TILE_PLACEMENT_UNIT } from '../../constants/pattern';
 import { DEFAULT_PROJECTION_SETTINGS } from '../../constants/projection';
-import { planPlayback } from '../playbackPlanner';
+import { planLegacyPlayback } from '../legacyPlaybackPlanner';
 
 import type { LegacyPattern, MirrorConfig } from '../../types';
 
@@ -58,7 +58,7 @@ const createPattern = (tileCount: number): LegacyPattern => ({
 describe('legacyPlaybackPlanner', () => {
     it('maps mirror assignments and solver outputs into the playback plan', () => {
         const mirrorConfig = createMirrorConfig();
-        const plan = planPlayback({
+        const plan = planLegacyPlayback({
             gridSize: { rows: 1, cols: 2 },
             mirrorConfig,
             projectionSettings: cloneProjectionSettings(),
@@ -74,7 +74,7 @@ describe('legacyPlaybackPlanner', () => {
     });
 
     it('propagates solver errors when the pattern exceeds available mirrors', () => {
-        const plan = planPlayback({
+        const plan = planLegacyPlayback({
             gridSize: { rows: 1, cols: 2 },
             mirrorConfig: createMirrorConfig(),
             projectionSettings: cloneProjectionSettings(),

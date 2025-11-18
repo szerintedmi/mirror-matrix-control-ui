@@ -77,8 +77,8 @@ const setupLocalState = async (page: Page) => {
     );
 };
 
-test.describe.skip('Playback conversion & commands', () => {
-    test('plans and runs playback via mock broker', async ({ page }) => {
+test.describe.skip('Legacy playback conversion & commands', () => {
+    test('plans and runs legacy playback via mock broker', async ({ page }) => {
         await page.goto('/');
         await page.evaluate(() => localStorage.clear());
         await setupLocalState(page);
@@ -102,9 +102,11 @@ test.describe.skip('Playback conversion & commands', () => {
         await expect(playButton).toBeEnabled();
         await playButton.click();
 
-        await expect(page.getByText('Playback commands completed.', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText('Legacy playback commands completed.', { exact: true }),
+        ).toBeVisible();
 
-        const logSection = page.getByRole('heading', { name: 'Playback Log' });
+        const logSection = page.getByRole('heading', { name: 'Playback (legacy) Log' });
         await expect(logSection).toBeVisible();
     });
 });

@@ -4,9 +4,9 @@ import type {
     Pattern,
     CalibrationProfile,
     TileCalibrationResults,
+    LegacyPlaybackMirrorPlan,
+    LegacyPlaybackPlanResult,
     MirrorConfig,
-    PlaybackMirrorPlan,
-    PlaybackPlanResult,
 } from '../types';
 
 export interface ProfilePlaybackParams {
@@ -17,8 +17,8 @@ export interface ProfilePlaybackParams {
 }
 
 const cloneAssignment = (
-    plan: PlaybackMirrorPlan['assignment'],
-): PlaybackMirrorPlan['assignment'] => ({
+    plan: LegacyPlaybackMirrorPlan['assignment'],
+): LegacyPlaybackMirrorPlan['assignment'] => ({
     x: plan.x ? { ...plan.x } : null,
     y: plan.y ? { ...plan.y } : null,
 });
@@ -41,7 +41,7 @@ export const planProfilePlayback = ({
     mirrorConfig,
     profile,
     pattern,
-}: ProfilePlaybackParams): PlaybackPlanResult => {
+}: ProfilePlaybackParams): LegacyPlaybackPlanResult => {
     if (!profile || !pattern) {
         return {
             patternId: pattern?.id ?? null,
@@ -66,7 +66,7 @@ export const planProfilePlayback = ({
         };
     }
 
-    const mirrors: PlaybackMirrorPlan[] = [];
+    const mirrors: LegacyPlaybackMirrorPlan[] = [];
     const assignments: { mirrorId: string; patternId: string }[] = [];
 
     let patternIndex = 0;
@@ -92,7 +92,7 @@ export const planProfilePlayback = ({
                 continue;
             }
 
-            const errors: PlaybackMirrorPlan['errors'] = [];
+            const errors: LegacyPlaybackMirrorPlan['errors'] = [];
             if (!isTileCalibrated(tile)) {
                 errors.push({
                     code: 'invalid_target',

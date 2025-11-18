@@ -367,7 +367,7 @@ For each profile:
 
 #### 3.9.1 Legacy Playback (existing page)
 
-- Remains angle-based and continues to use `reflectionSolver` → `planPlayback` → `buildAxisTargets`.
+- Remains angle-based and continues to use `reflectionSolver` → `planLegacyPlayback` → `buildLegacyPlaybackAxisTargets`.
 - Surfaced in the UI as **Playback (legacy)** together with the existing pattern tooling shown as **Patterns (legacy)**; this path remains available for backward compatibility and testing while the calibration-native pipeline matures.
 - Legacy pattern and projection storage (localStorage keys, etc.) does **not** need to be preserved for the calibration-native flow; it may be cleared or migrated independently as long as angle-based playback continues to function.
 

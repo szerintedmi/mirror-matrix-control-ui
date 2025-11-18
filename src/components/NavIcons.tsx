@@ -71,7 +71,7 @@ export const ConnectionIcon: React.FC = () => (
     </svg>
 );
 
-export const PlaybackIcon: React.FC = () => (
+export const LegacyPlaybackIcon: React.FC = () => (
     <svg
         aria-hidden="true"
         xmlns="http://www.w3.org/2000/svg"

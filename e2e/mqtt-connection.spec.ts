@@ -67,7 +67,7 @@ test.describe('MQTT connection panel', () => {
 
         await connectMockTransport(page);
 
-        await page.getByRole('button', { name: /^Playback$/i }).click();
+        await page.getByRole('button', { name: /Playback \(legacy\)/i }).click();
         await expect(page.getByTestId('motor-overview')).toBeVisible();
         await expect(page.getByTestId('motor-overview-dot').first()).toBeVisible();
 

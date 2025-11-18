@@ -189,7 +189,7 @@ export interface ReflectionSolverResult {
     errors: ReflectionSolverError[];
 }
 
-export interface PlaybackMirrorPlan {
+export interface LegacyPlaybackMirrorPlan {
     mirrorId: string;
     row: number;
     col: number;
@@ -200,14 +200,14 @@ export interface PlaybackMirrorPlan {
     errors: ReflectionSolverError[];
 }
 
-export interface PlaybackPlanResult {
+export interface LegacyPlaybackPlanResult {
     patternId: string | null;
-    mirrors: PlaybackMirrorPlan[];
+    mirrors: LegacyPlaybackMirrorPlan[];
     assignments: ReflectionAssignment[];
     errors: ReflectionSolverError[];
 }
 
-export interface PlaybackAxisTarget {
+export interface LegacyPlaybackAxisTarget {
     key: string;
     mirrorId: string;
     axis: Axis;
@@ -221,19 +221,19 @@ export interface PlaybackAxisTarget {
     clamped: boolean;
 }
 
-export type PlaybackAxisSkipReason = 'missing-motor' | 'missing-angle';
+export type LegacyPlaybackAxisSkipReason = 'missing-motor' | 'missing-angle';
 
-export interface PlaybackAxisSkip {
+export interface LegacyPlaybackAxisSkip {
     mirrorId: string;
     row: number;
     col: number;
     axis: Axis;
-    reason: PlaybackAxisSkipReason;
+    reason: LegacyPlaybackAxisSkipReason;
 }
 
-export interface PlaybackAxisPlan {
-    axes: PlaybackAxisTarget[];
-    skipped: PlaybackAxisSkip[];
+export interface LegacyPlaybackAxisPlan {
+    axes: LegacyPlaybackAxisTarget[];
+    skipped: LegacyPlaybackAxisSkip[];
 }
 
 export interface NormalizedRoi {
