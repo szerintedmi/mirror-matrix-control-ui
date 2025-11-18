@@ -59,9 +59,10 @@ You proceed to next step without user input unless you miss information to proce
 #### 4. Implement and validate
 
 - Do not install new dependencies without explicit prior approval
-- Before you report you are ready always run build , format, lint, test , test:e2e commands (in this order)
+- Before you report you are ready always run `yarn build` first. Then `yarn format:fix`, `yarn lint:fix`, `yarn:test`. Always request elevated permissions for `yarn test:e2e`
+- E2e tests are slow - aim to run at the end of your work and after all other checks has passed.
 - Always request elevated privileges if a command execution fails.
-- Think of overall struvture and complexity when you are implementing. If a component grew thousands of lines then maybe it's time to split it. Even when it's not big if there is a clear separation of concern for a new function/component then consider splitting it to keep clear separation of concerns among components.
+- Think of overall structure and complexity when you are adding code. If a component grew thousands of lines then it's time to split it. Even if not too many lines of code split it to a separete file if there is a clear separation of concern.
 - Never mark a task as complete until you have successull build, format, lint, test, test:e2e runs.
 
 #### 5. Presenting your work and final message
@@ -76,7 +77,7 @@ You proceed to next step without user input unless you miss information to proce
 - Linter and Prettier configuration is source of truth. Follow the surrounding code stlye but check `eslint.config.js` and `prettier.config.cjs` for new files or when you are unsure.
   - Code: spaces, four-space indentation (Prettier `tabWidth: 4`, `useTabs: false`).
   - Markdown: lists use 2-space indentation (Prettier override for `*.md`/`*.mdx`, aligns with markdownlint MD007).
-  - Run `yarn lint` and `yarn format` to check. Feel free to use `yarn lint:fix` and `yarn format:fix` as first attempt to fix errors/warnings then re-run the checks.
+  - Run `yarn lint:fix` and `yarn format:fix`. If there is anything which is not auto fixable fix it.
 - Imports: external → absolute (`@/*`) → relative; enforced via `import/order`.
 - State: keep page-level state in `App.tsx` until a shared store exists.
 - Props: prefer descriptive names over abbreviations.
