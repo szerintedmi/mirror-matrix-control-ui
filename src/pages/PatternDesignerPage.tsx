@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
 import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDesigner/types';
 import { loadPatterns, persistPatterns } from '@/services/patternStorage';
@@ -13,6 +14,11 @@ interface PatternDesignerCanvasProps {
     onChange: (nextPattern: Pattern) => void;
     onHoverChange?: (point: DesignerCoordinate | null) => void;
     onHoverPointChange?: (pointId: string | null) => void;
+}
+
+interface RenameDialogState {
+    patternId: string;
+    value: string;
 }
 
 const PATTERN_BLOB_RADIUS = 0.04;
@@ -294,6 +300,9 @@ const PatternDesignerPage: React.FC = () => {
     const [hoverPoint, setHoverPoint] = useState<DesignerCoordinate | null>(null);
     const [editMode, setEditMode] = useState<PatternEditMode>('placement');
     const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
+    const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
+    const renameInputId = 'pattern-rename-input';
+    const isRenameDisabled = !renameState || renameState.value.trim().length === 0;
 
     const updateEditMode = useCallback((mode: PatternEditMode) => {
         setEditMode(mode);
@@ -336,10 +345,13 @@ const PatternDesignerPage: React.FC = () => {
         [setHoverPoint, setHoveredPatternPointId, setSelectedPatternId],
     );
 
-    const handlePersist = (nextPatterns: Pattern[]) => {
-        setPatterns(nextPatterns);
-        persistPatterns(resolvedStorage, nextPatterns);
-    };
+    const handlePersist = useCallback(
+        (nextPatterns: Pattern[]) => {
+            setPatterns(nextPatterns);
+            persistPatterns(resolvedStorage, nextPatterns);
+        },
+        [resolvedStorage],
+    );
 
     const handlePatternChange = (updated: Pattern) => {
         handlePersist(patterns.map((pattern) => (pattern.id === updated.id ? updated : pattern)));
@@ -368,12 +380,54 @@ const PatternDesignerPage: React.FC = () => {
     };
 
     const handleDeletePattern = (patternId: string) => {
+        if (renameState?.patternId === patternId) {
+            setRenameState(null);
+        }
         const next = patterns.filter((pattern) => pattern.id !== patternId);
         handlePersist(next);
         if (selectedPatternId === patternId) {
             handleSelectPattern(next[0]?.id ?? null);
         }
     };
+
+    const handleOpenRenameModal = useCallback((pattern: Pattern) => {
+        setRenameState({ patternId: pattern.id, value: pattern.name });
+    }, []);
+
+    const handleRenameInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const { value } = event.target;
+        setRenameState((previous) => (previous ? { ...previous, value } : previous));
+    }, []);
+
+    const handleCloseRenameModal = useCallback(() => {
+        setRenameState(null);
+    }, []);
+
+    const handleRenameSubmit = useCallback(
+        (event?: React.FormEvent<HTMLFormElement>) => {
+            event?.preventDefault();
+            if (!renameState) {
+                return;
+            }
+            const nextName = renameState.value.trim();
+            if (!nextName) {
+                return;
+            }
+            const now = new Date().toISOString();
+            const nextPatterns = patterns.map((pattern) =>
+                pattern.id === renameState.patternId
+                    ? {
+                          ...pattern,
+                          name: nextName,
+                          updatedAt: now,
+                      }
+                    : pattern,
+            );
+            handlePersist(nextPatterns);
+            setRenameState(null);
+        },
+        [handlePersist, patterns, renameState],
+    );
 
     return (
         <div className="flex flex-col gap-6">
@@ -399,33 +453,82 @@ const PatternDesignerPage: React.FC = () => {
                                 const isSelected = pattern.id === selectedPatternId;
                                 return (
                                     <li key={pattern.id}>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectPattern(pattern.id)}
-                                            className={`flex w-full items-center justify-between rounded-md px-2 py-1 text-left ${
+                                        <div
+                                            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors ${
                                                 isSelected
                                                     ? 'bg-cyan-900/60 text-cyan-100'
                                                     : 'bg-gray-900/40 text-gray-200 hover:bg-gray-800'
                                             }`}
                                         >
-                                            <span className="truncate">{pattern.name}</span>
                                             <button
                                                 type="button"
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    if (
-                                                        window.confirm(
-                                                            `Delete pattern "${pattern.name}"?`,
-                                                        )
-                                                    ) {
-                                                        handleDeletePattern(pattern.id);
-                                                    }
-                                                }}
-                                                className="ml-2 rounded bg-red-900/70 px-1.5 py-0.5 text-xs text-red-100 hover:bg-red-800"
+                                                onClick={() => handleSelectPattern(pattern.id)}
+                                                className="flex-1 truncate text-left text-sm font-medium text-inherit focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
                                             >
-                                                Delete
+                                                {pattern.name}
                                             </button>
-                                        </button>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        handleOpenRenameModal(pattern);
+                                                    }}
+                                                    className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
+                                                    aria-label={`Rename pattern ${pattern.name}`}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth={1.5}
+                                                        className="h-4 w-4"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            d="M16.862 4.487l2.651 2.651a1.5 1.5 0 010 2.122l-8.19 8.19a2.25 2.25 0 01-.948.57l-3.356 1.007 1.007-3.356a2.25 2.25 0 01.57-.948l8.19-8.19a1.5 1.5 0 012.121 0z"
+                                                        />
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            d="M19.5 13.5V19.5A1.5 1.5 0 0118 21H5.25A1.5 1.5 0 013.75 19.5V6A1.5 1.5 0 015.25 4.5H11.25"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        if (
+                                                            window.confirm(
+                                                                `Delete pattern "${pattern.name}"?`,
+                                                            )
+                                                        ) {
+                                                            handleDeletePattern(pattern.id);
+                                                        }
+                                                    }}
+                                                    className="rounded p-1 text-gray-400 hover:bg-red-900/40 hover:text-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+                                                    aria-label={`Delete pattern ${pattern.name}`}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth={1.5}
+                                                        className="h-4 w-4"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            d="M9.75 4.5l-.447 1.341a1.5 1.5 0 01-1.422 1.034H5.25m0 0h13.5m-13.5 0v12A1.5 1.5 0 006.75 20.25h10.5a1.5 1.5 0 001.5-1.5v-12m-9 3.75v6m4.5-6v6M9.75 4.5h4.5a1.5 1.5 0 011.422 1.034L16.5 6.875"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </li>
                                 );
                             })}
@@ -488,6 +591,55 @@ const PatternDesignerPage: React.FC = () => {
                 blobRadius={PATTERN_BLOB_RADIUS}
                 editMode={editMode}
             />
+
+            <Modal
+                open={Boolean(renameState)}
+                onClose={handleCloseRenameModal}
+                title="Rename Pattern"
+                hideCloseButton
+                disableOverlayClose
+            >
+                {renameState ? (
+                    <form className="space-y-5" onSubmit={handleRenameSubmit}>
+                        <div className="space-y-2">
+                            <label
+                                htmlFor={renameInputId}
+                                className="text-sm font-medium text-gray-200"
+                            >
+                                Pattern Name
+                            </label>
+                            <input
+                                id={renameInputId}
+                                name="patternName"
+                                type="text"
+                                value={renameState.value}
+                                onChange={handleRenameInputChange}
+                                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={handleCloseRenameModal}
+                                className="rounded-md border border-gray-600 px-4 py-2 text-sm font-medium text-gray-300 hover:border-gray-500 hover:text-white"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isRenameDisabled}
+                                className={`rounded-md px-4 py-2 text-sm font-semibold ${
+                                    isRenameDisabled
+                                        ? 'cursor-not-allowed bg-gray-700 text-gray-400'
+                                        : 'bg-cyan-600 text-white hover:bg-cyan-500'
+                                }`}
+                            >
+                                Rename
+                            </button>
+                        </div>
+                    </form>
+                ) : null}
+            </Modal>
         </div>
     );
 };
