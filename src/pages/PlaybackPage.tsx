@@ -49,6 +49,10 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
     const [selectedProfileId, setSelectedProfileId] = useState(initialProfilesState.selected);
     const [patterns, setPatterns] = useState<Pattern[]>(initialPatterns);
     const [selectedPatternId, setSelectedPatternId] = useState(initialPatterns[0]?.id ?? '');
+    const [patternQueue, setPatternQueue] = useState<string[]>(
+        initialPatterns[0]?.id ? [initialPatterns[0].id] : [],
+    );
+    const [previewPatternId, setPreviewPatternId] = useState<string>(initialPatterns[0]?.id ?? '');
     const [runStatus, setRunStatus] = useState<RunStatus>('idle');
     const [runMessage, setRunMessage] = useState<string | null>(null);
 
@@ -56,9 +60,12 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
         () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
         [profiles, selectedProfileId],
     );
-    const selectedPattern = useMemo(
-        () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
-        [patterns, selectedPatternId],
+    const queuedPatterns = useMemo(
+        () =>
+            patternQueue
+                .map((id) => patterns.find((pattern) => pattern.id === id) ?? null)
+                .filter(Boolean) as Pattern[],
+        [patternQueue, patterns],
     );
 
     const refreshPatterns = useCallback(() => {
@@ -66,11 +73,18 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
         setPatterns(nextEntries);
         if (nextEntries.length === 0) {
             setSelectedPatternId('');
+            setPatternQueue([]);
+            setPreviewPatternId('');
             return;
         }
         if (!nextEntries.some((entry) => entry.id === selectedPatternId)) {
             setSelectedPatternId(nextEntries[0].id);
         }
+        setPatternQueue((previousQueue) =>
+            previousQueue.filter((patternId) =>
+                nextEntries.some((entry) => entry.id === patternId),
+            ),
+        );
     }, [resolvedStorage, selectedPatternId]);
 
     const refreshProfiles = useCallback(() => {
@@ -93,32 +107,68 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
         persistLastCalibrationProfileId(resolvedStorage, profileId || null);
     };
 
-    const plan: ProfilePlaybackPlanResult = useMemo(
+    const playbackPlans: ProfilePlaybackPlanResult[] = useMemo(
         () =>
-            planProfilePlayback({
-                gridSize,
-                mirrorConfig,
-                profile: selectedProfile,
-                pattern: selectedPattern,
-            }),
-        [gridSize, mirrorConfig, selectedPattern, selectedProfile],
+            queuedPatterns.map((pattern) =>
+                planProfilePlayback({
+                    gridSize,
+                    mirrorConfig,
+                    profile: selectedProfile,
+                    pattern,
+                }),
+            ),
+        [gridSize, mirrorConfig, queuedPatterns, selectedProfile],
     );
 
+    const totalAxisTargets = useMemo(
+        () => playbackPlans.reduce((count, plan) => count + plan.playableAxisTargets.length, 0),
+        [playbackPlans],
+    );
+
+    const allErrors = useMemo(() => playbackPlans.flatMap((plan) => plan.errors), [playbackPlans]);
+
+    const resolvedPreviewPatternId = useMemo(() => {
+        if (playbackPlans.some((plan) => plan.patternId === previewPatternId)) {
+            return previewPatternId;
+        }
+        return playbackPlans[0]?.patternId ?? '';
+    }, [playbackPlans, previewPatternId]);
+
+    const previewPlan = useMemo(() => {
+        if (playbackPlans.length === 0) {
+            return null;
+        }
+        const matched = playbackPlans.find((plan) => plan.patternId === resolvedPreviewPatternId);
+        if (matched) {
+            return matched;
+        }
+        return playbackPlans[0];
+    }, [playbackPlans, resolvedPreviewPatternId]);
+
     const assignedTiles = useMemo(
-        () => plan.tiles.filter((tile) => tile.patternPointId),
-        [plan.tiles],
+        () => (previewPlan ? previewPlan.tiles.filter((tile) => tile.patternPointId) : []),
+        [previewPlan],
     );
 
     const canSendPlayback =
-        plan.playableAxisTargets.length > 0 && plan.errors.length === 0 && runStatus !== 'running';
+        playbackPlans.length > 0 &&
+        totalAxisTargets > 0 &&
+        allErrors.length === 0 &&
+        runStatus !== 'running';
 
-    const sendPlayback = useCallback(
-        async (targets: ProfilePlaybackAxisTarget[]) => {
+    const dispatchPlayback = useCallback(
+        async (
+            targets: ProfilePlaybackAxisTarget[],
+            patternName: string,
+        ): Promise<{
+            ok: boolean;
+            message: string;
+        }> => {
             if (targets.length === 0) {
-                return;
+                const message = `No axis moves computed for "${patternName}".`;
+                logError('Playback', message);
+                return { ok: false, message };
             }
-            setRunStatus('running');
-            setRunMessage(null);
             try {
                 const settled = await Promise.allSettled(
                     targets.map((target) =>
@@ -133,26 +183,105 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                     (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
                 );
                 if (failures.length > 0) {
-                    const message = `${failures.length}/${targets.length} motor commands failed.`;
+                    const message = `${failures.length}/${targets.length} motor commands failed for "${patternName}".`;
                     logError('Playback', message);
-                    setRunStatus('error');
-                    setRunMessage(message);
-                    return;
+                    return { ok: false, message };
                 }
-                const successMessage = `Sent ${targets.length} axis moves for "${selectedPattern?.name ?? 'pattern'}".`;
+                const successMessage = `Sent ${targets.length} axis moves for "${patternName}".`;
                 logInfo('Playback', successMessage);
-                setRunStatus('success');
-                setRunMessage(successMessage);
+                return { ok: true, message: successMessage };
             } catch (error) {
                 const message =
-                    error instanceof Error ? error.message : 'Unexpected playback error.';
+                    error instanceof Error
+                        ? error.message
+                        : `Unexpected playback error while running "${patternName}".`;
                 logError('Playback', message);
-                setRunStatus('error');
-                setRunMessage(message);
+                return { ok: false, message };
             }
         },
-        [logError, logInfo, moveMotor, selectedPattern],
+        [logError, logInfo, moveMotor],
     );
+
+    const sendPlaybackQueue = useCallback(async () => {
+        if (!canSendPlayback) {
+            return;
+        }
+        setRunStatus('running');
+        setRunMessage('Starting playback queue…');
+
+        for (let index = 0; index < playbackPlans.length; index += 1) {
+            const plan = playbackPlans[index];
+            const patternName =
+                queuedPatterns.find((pattern) => pattern.id === plan.patternId)?.name ?? 'pattern';
+            setRunMessage(`Sending "${patternName}" (${index + 1} of ${playbackPlans.length})…`);
+            const result = await dispatchPlayback(plan.playableAxisTargets, patternName);
+            if (!result.ok) {
+                setRunStatus('error');
+                setRunMessage(result.message);
+                return;
+            }
+        }
+
+        setRunStatus('success');
+        setRunMessage(
+            `Completed playback for ${playbackPlans.length} pattern${
+                playbackPlans.length === 1 ? '' : 's'
+            }.`,
+        );
+    }, [canSendPlayback, dispatchPlayback, playbackPlans, queuedPatterns]);
+
+    const moveQueuedPattern = (index: number, direction: 'up' | 'down') => {
+        setPatternQueue((current) => {
+            if (index < 0 || index >= current.length) {
+                return current;
+            }
+            const swapWith = direction === 'up' ? index - 1 : index + 1;
+            if (swapWith < 0 || swapWith >= current.length) {
+                return current;
+            }
+            const next = [...current];
+            const temp = next[index];
+            next[index] = next[swapWith];
+            next[swapWith] = temp;
+            return next;
+        });
+    };
+
+    const removeFromQueue = (index: number) => {
+        setPatternQueue((current) => current.filter((_, currentIndex) => currentIndex !== index));
+    };
+
+    const addToQueue = () => {
+        if (!selectedPatternId) {
+            return;
+        }
+        setPatternQueue((current) => [...current, selectedPatternId]);
+        if (!previewPatternId) {
+            setPreviewPatternId(selectedPatternId);
+        }
+    };
+
+    const queueStatusLabel = useMemo(() => {
+        if (playbackPlans.length === 0) {
+            return 'Queue a pattern to preview the plan.';
+        }
+        if (allErrors.length > 0) {
+            return `${allErrors.length} validation issue${allErrors.length === 1 ? '' : 's'} to resolve.`;
+        }
+        return `Ready to move ${totalAxisTargets} axis${totalAxisTargets === 1 ? '' : 'es'} across ${
+            playbackPlans.length
+        } pattern${playbackPlans.length === 1 ? '' : 's'}.`;
+    }, [allErrors.length, playbackPlans.length, totalAxisTargets]);
+
+    const sendButtonLabel = useMemo(() => {
+        if (runStatus === 'running') {
+            return 'Sending queue…';
+        }
+        if (playbackPlans.length > 0) {
+            return `Send ${playbackPlans.length} pattern${playbackPlans.length === 1 ? '' : 's'}`;
+        }
+        return 'Send queue';
+    }, [playbackPlans.length, runStatus]);
 
     return (
         <div className="flex flex-col gap-6">
@@ -163,7 +292,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                             className="text-sm font-semibold text-gray-200"
                             htmlFor="pattern-select"
                         >
-                            Pattern
+                            Add pattern to queue
                         </label>
                         <div className="flex gap-2">
                             <select
@@ -184,6 +313,14 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                             </select>
                             <button
                                 type="button"
+                                onClick={addToQueue}
+                                className="rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600"
+                                disabled={!selectedPatternId}
+                            >
+                                Add
+                            </button>
+                            <button
+                                type="button"
                                 onClick={refreshPatterns}
                                 className="rounded-md border border-gray-600 px-3 py-2 text-sm text-gray-100 hover:border-cyan-400 hover:text-cyan-200"
                             >
@@ -198,61 +335,185 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                         onRefresh={refreshProfiles}
                     />
                 </div>
-                <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div className="text-sm text-gray-400">
-                        {plan.playableAxisTargets.length > 0
-                            ? `Ready to move ${plan.playableAxisTargets.length} axes.`
-                            : 'Select a pattern and calibration profile to compute a plan.'}
+                <div className="mt-4 rounded-md border border-gray-800/80 bg-gray-950/40 p-3">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-semibold text-gray-200">
+                                    Playback queue
+                                </h4>
+                                <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-300">
+                                    {patternQueue.length} item{patternQueue.length === 1 ? '' : 's'}
+                                </span>
+                            </div>
+                            {queuedPatterns.length === 0 ? (
+                                <p className="mt-2 text-sm text-gray-400">
+                                    Queue patterns in the order you want them to run.
+                                </p>
+                            ) : (
+                                <ul className="mt-2 space-y-2">
+                                    {queuedPatterns.map((pattern, index) => (
+                                        <li
+                                            key={`${pattern.id}-${index}`}
+                                            className="flex items-center justify-between gap-3 rounded-md border border-gray-800/80 bg-gray-900/60 px-3 py-2"
+                                        >
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-100">
+                                                    {pattern.name}
+                                                </p>
+                                                <p className="text-xs text-gray-400">
+                                                    {pattern.points.length} point
+                                                    {pattern.points.length === 1 ? '' : 's'} •
+                                                    Position {index + 1}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:border-cyan-400 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    onClick={() => moveQueuedPattern(index, 'up')}
+                                                    disabled={index === 0}
+                                                >
+                                                    Move up
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:border-cyan-400 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    onClick={() => moveQueuedPattern(index, 'down')}
+                                                    disabled={index === queuedPatterns.length - 1}
+                                                >
+                                                    Move down
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md border border-red-700/70 px-2 py-1 text-xs text-red-200 hover:border-red-500 hover:text-red-100"
+                                                    onClick={() => removeFromQueue(index)}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                            <div className="text-sm text-gray-300">{queueStatusLabel}</div>
+                            <button
+                                type="button"
+                                disabled={!canSendPlayback}
+                                onClick={sendPlaybackQueue}
+                                className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                                    canSendPlayback
+                                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                                        : 'cursor-not-allowed bg-gray-700 text-gray-400'
+                                }`}
+                            >
+                                {sendButtonLabel}
+                            </button>
+                            {runMessage && (
+                                <p
+                                    className={`text-right text-sm ${
+                                        runStatus === 'error' ? 'text-red-300' : 'text-emerald-300'
+                                    }`}
+                                >
+                                    {runMessage}
+                                </p>
+                            )}
+                        </div>
                     </div>
-                    <button
-                        type="button"
-                        disabled={!canSendPlayback}
-                        onClick={() => sendPlayback(plan.playableAxisTargets)}
-                        className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                            canSendPlayback
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                                : 'cursor-not-allowed bg-gray-700 text-gray-400'
-                        }`}
-                    >
-                        {runStatus === 'running' ? 'Sending…' : 'Send Playback'}
-                    </button>
                 </div>
-                {runMessage && (
-                    <p
-                        className={`mt-2 text-sm ${
-                            runStatus === 'error' ? 'text-red-300' : 'text-emerald-300'
-                        }`}
-                    >
-                        {runMessage}
-                    </p>
-                )}
             </section>
 
             <section className="rounded-lg border border-gray-800/70 bg-gray-900/40 p-4 shadow">
                 <h3 className="text-sm font-semibold text-gray-200">Validation</h3>
-                {plan.errors.length > 0 ? (
-                    <ul className="mt-2 space-y-2 text-sm text-amber-200">
-                        {plan.errors.map((error, index) => (
-                            <li
-                                key={`${error.code}-${error.mirrorId ?? 'global'}-${error.patternPointId ?? 'any'}-${index}`}
-                                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
-                            >
-                                {error.message}
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="mt-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                        All checks passed. Motors are ready for playback.
+                {playbackPlans.length === 0 ? (
+                    <p className="mt-2 text-sm text-gray-400">
+                        Queue at least one pattern to see validation results.
                     </p>
+                ) : (
+                    <div className="mt-2 space-y-3">
+                        {playbackPlans.map((plan, index) => {
+                            const patternName =
+                                queuedPatterns.find((pattern) => pattern.id === plan.patternId)
+                                    ?.name ?? `Pattern ${index + 1}`;
+                            const hasErrors = plan.errors.length > 0;
+                            return (
+                                <div
+                                    key={`${plan.patternId ?? 'missing'}-${index}`}
+                                    className="rounded-md border border-gray-800/80 bg-gray-950/40 p-3"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-200">
+                                                {patternName}
+                                            </p>
+                                            <p className="text-xs text-gray-400">
+                                                {plan.playableAxisTargets.length} axis move
+                                                {plan.playableAxisTargets.length === 1
+                                                    ? ''
+                                                    : 's'}{' '}
+                                                planned
+                                            </p>
+                                        </div>
+                                        <span
+                                            className={`rounded-full px-2 py-0.5 text-xs ${
+                                                hasErrors
+                                                    ? 'bg-amber-600/30 text-amber-100'
+                                                    : 'bg-emerald-600/30 text-emerald-100'
+                                            }`}
+                                        >
+                                            {hasErrors ? `${plan.errors.length} issues` : 'Ready'}
+                                        </span>
+                                    </div>
+                                    {hasErrors ? (
+                                        <ul className="mt-2 space-y-1 text-sm text-amber-100">
+                                            {plan.errors.map((error, errorIndex) => (
+                                                <li
+                                                    key={`${error.code}-${error.mirrorId ?? 'global'}-${
+                                                        error.patternPointId ?? 'any'
+                                                    }-${errorIndex}`}
+                                                    className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+                                                >
+                                                    {error.message}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="mt-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+                                            All checks passed. Motors are ready for playback.
+                                        </p>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
                 )}
             </section>
 
             <section className="rounded-lg border border-gray-800/70 bg-gray-900/50 p-4 shadow">
-                <h3 className="text-sm font-semibold text-gray-200">Planned Targets</h3>
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-gray-200">Planned Targets</h3>
+                    {queuedPatterns.length > 1 && (
+                        <label className="flex items-center gap-2 text-xs text-gray-300">
+                            Preview pattern:
+                            <select
+                                className="rounded-md border border-gray-700 bg-gray-950/60 px-2 py-1 text-xs text-gray-100"
+                                value={resolvedPreviewPatternId}
+                                onChange={(event) => setPreviewPatternId(event.target.value)}
+                            >
+                                {queuedPatterns.map((pattern, index) => (
+                                    <option key={`${pattern.id}-${index}`} value={pattern.id}>
+                                        {pattern.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
+                </div>
                 {assignedTiles.length === 0 ? (
                     <p className="mt-2 text-sm text-gray-400">
-                        No pattern points assigned yet. Choose a pattern to preview the plan.
+                        No pattern points assigned yet. Queue a pattern to preview the plan.
                     </p>
                 ) : (
                     <div className="mt-3 overflow-x-auto">
