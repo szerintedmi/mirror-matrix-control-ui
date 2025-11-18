@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import CalibrationProfileSelector, {
     sortCalibrationProfiles,
 } from '@/components/calibration/CalibrationProfileSelector';
+import PlaybackSequenceManager from '@/components/playback/PlaybackSequenceManager';
 import { useLogStore } from '@/context/LogContext';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import {
@@ -22,8 +23,6 @@ interface PlaybackPageProps {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
 }
-
-type RunStatus = 'idle' | 'running' | 'success' | 'error';
 
 const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) => {
     const resolvedStorage = useMemo(
@@ -49,8 +48,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
     const [selectedProfileId, setSelectedProfileId] = useState(initialProfilesState.selected);
     const [patterns, setPatterns] = useState<Pattern[]>(initialPatterns);
     const [selectedPatternId, setSelectedPatternId] = useState(initialPatterns[0]?.id ?? '');
-    const [runStatus, setRunStatus] = useState<RunStatus>('idle');
-    const [runMessage, setRunMessage] = useState<string | null>(null);
 
     const selectedProfile = useMemo(
         () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
@@ -93,7 +90,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
         persistLastCalibrationProfileId(resolvedStorage, profileId || null);
     };
 
-    const plan: ProfilePlaybackPlanResult = useMemo(
+    const previewPlan: ProfilePlaybackPlanResult = useMemo(
         () =>
             planProfilePlayback({
                 gridSize,
@@ -105,53 +102,36 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
     );
 
     const assignedTiles = useMemo(
-        () => plan.tiles.filter((tile) => tile.patternPointId),
-        [plan.tiles],
+        () => previewPlan.tiles.filter((tile) => tile.patternPointId),
+        [previewPlan.tiles],
     );
 
-    const canSendPlayback =
-        plan.playableAxisTargets.length > 0 && plan.errors.length === 0 && runStatus !== 'running';
-
-    const sendPlayback = useCallback(
-        async (targets: ProfilePlaybackAxisTarget[]) => {
+    const dispatchPlayback = useCallback(
+        async (targets: ProfilePlaybackAxisTarget[], patternName: string) => {
             if (targets.length === 0) {
-                return;
+                throw new Error('No playable motors found for this pattern.');
             }
-            setRunStatus('running');
-            setRunMessage(null);
-            try {
-                const settled = await Promise.allSettled(
-                    targets.map((target) =>
-                        moveMotor({
-                            mac: target.motor.nodeMac,
-                            motorId: target.motor.motorIndex,
-                            positionSteps: target.targetSteps,
-                        }),
-                    ),
-                );
-                const failures = settled.filter(
-                    (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
-                );
-                if (failures.length > 0) {
-                    const message = `${failures.length}/${targets.length} motor commands failed.`;
-                    logError('Playback', message);
-                    setRunStatus('error');
-                    setRunMessage(message);
-                    return;
-                }
-                const successMessage = `Sent ${targets.length} axis moves for "${selectedPattern?.name ?? 'pattern'}".`;
-                logInfo('Playback', successMessage);
-                setRunStatus('success');
-                setRunMessage(successMessage);
-            } catch (error) {
-                const message =
-                    error instanceof Error ? error.message : 'Unexpected playback error.';
+            const settled = await Promise.allSettled(
+                targets.map((target) =>
+                    moveMotor({
+                        mac: target.motor.nodeMac,
+                        motorId: target.motor.motorIndex,
+                        positionSteps: target.targetSteps,
+                    }),
+                ),
+            );
+            const failures = settled.filter(
+                (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
+            );
+            if (failures.length > 0) {
+                const message = `${failures.length}/${targets.length} motor commands failed for "${patternName}".`;
                 logError('Playback', message);
-                setRunStatus('error');
-                setRunMessage(message);
+                throw new Error(message);
             }
+            const successMessage = `Sent ${targets.length} axis moves for "${patternName}".`;
+            logInfo('Playback', successMessage);
         },
-        [logError, logInfo, moveMotor, selectedPattern],
+        [logError, logInfo, moveMotor],
     );
 
     return (
@@ -198,55 +178,23 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                         onRefresh={refreshProfiles}
                     />
                 </div>
-                <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div className="text-sm text-gray-400">
-                        {plan.playableAxisTargets.length > 0
-                            ? `Ready to move ${plan.playableAxisTargets.length} axes.`
-                            : 'Select a pattern and calibration profile to compute a plan.'}
-                    </div>
-                    <button
-                        type="button"
-                        disabled={!canSendPlayback}
-                        onClick={() => sendPlayback(plan.playableAxisTargets)}
-                        className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                            canSendPlayback
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                                : 'cursor-not-allowed bg-gray-700 text-gray-400'
-                        }`}
-                    >
-                        {runStatus === 'running' ? 'Sending…' : 'Send Playback'}
-                    </button>
-                </div>
-                {runMessage && (
-                    <p
-                        className={`mt-2 text-sm ${
-                            runStatus === 'error' ? 'text-red-300' : 'text-emerald-300'
-                        }`}
-                    >
-                        {runMessage}
-                    </p>
-                )}
+                <p className="mt-4 text-sm text-gray-400">
+                    {previewPlan.playableAxisTargets.length > 0
+                        ? `Ready to move ${previewPlan.playableAxisTargets.length} axes for "${selectedPattern?.name ?? 'pattern'}".`
+                        : 'Select a pattern and calibration profile to preview motor targets.'}
+                </p>
             </section>
 
-            <section className="rounded-lg border border-gray-800/70 bg-gray-900/40 p-4 shadow">
-                <h3 className="text-sm font-semibold text-gray-200">Validation</h3>
-                {plan.errors.length > 0 ? (
-                    <ul className="mt-2 space-y-2 text-sm text-amber-200">
-                        {plan.errors.map((error, index) => (
-                            <li
-                                key={`${error.code}-${error.mirrorId ?? 'global'}-${error.patternPointId ?? 'any'}-${index}`}
-                                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
-                            >
-                                {error.message}
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="mt-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                        All checks passed. Motors are ready for playback.
-                    </p>
-                )}
-            </section>
+            <PlaybackSequenceManager
+                patterns={patterns}
+                selectedPattern={selectedPattern}
+                selectedProfile={selectedProfile}
+                gridSize={gridSize}
+                mirrorConfig={mirrorConfig}
+                storage={resolvedStorage}
+                onSelectPatternId={setSelectedPatternId}
+                dispatchPlayback={dispatchPlayback}
+            />
 
             <section className="rounded-lg border border-gray-800/70 bg-gray-900/50 p-4 shadow">
                 <h3 className="text-sm font-semibold text-gray-200">Planned Targets</h3>
