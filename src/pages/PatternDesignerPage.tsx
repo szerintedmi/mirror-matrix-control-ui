@@ -1,10 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import CalibrationProfileSelector, {
+    sortCalibrationProfiles,
+} from '@/components/calibration/CalibrationProfileSelector';
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
 import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDesigner/types';
+import {
+    loadCalibrationProfiles,
+    loadLastCalibrationProfileId,
+    persistLastCalibrationProfileId,
+} from '@/services/calibrationProfileStorage';
 import { loadPatterns, persistPatterns } from '@/services/patternStorage';
-import type { Pattern, PatternPoint } from '@/types';
+import type { CalibrationProfile, Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
 
 interface PatternDesignerCanvasProps {
@@ -14,6 +22,7 @@ interface PatternDesignerCanvasProps {
     onChange: (nextPattern: Pattern) => void;
     onHoverChange?: (point: DesignerCoordinate | null) => void;
     onHoverPointChange?: (pointId: string | null) => void;
+    blobRadius: number;
 }
 
 interface RenameDialogState {
@@ -21,7 +30,7 @@ interface RenameDialogState {
     value: string;
 }
 
-const PATTERN_BLOB_RADIUS = 0.04;
+const DEFAULT_BLOB_RADIUS = 0.04;
 const EDIT_MODE_LABEL: Record<PatternEditMode, string> = {
     placement: 'Placement',
     erase: 'Erase',
@@ -50,6 +59,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     onChange,
     onHoverChange,
     onHoverPointChange,
+    blobRadius,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const dragStateRef = useRef<{
@@ -267,7 +277,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                 data-point-id={point.id}
                                 cx={centeredToView(point.x)}
                                 cy={centeredToView(point.y)}
-                                r={centeredDeltaToView(PATTERN_BLOB_RADIUS)}
+                                r={centeredDeltaToView(blobRadius)}
                                 fill={isEraseHover ? '#f87171' : '#22d3ee'}
                                 fillOpacity={editMode === 'erase' && !isEraseHover ? 0.45 : 1}
                                 stroke={isEraseHover ? '#fecaca' : '#0f172a'}
@@ -303,6 +313,21 @@ const PatternDesignerPage: React.FC = () => {
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
     const renameInputId = 'pattern-rename-input';
     const isRenameDisabled = !renameState || renameState.value.trim().length === 0;
+    const initialCalibrationState = useMemo(() => {
+        const entries = sortCalibrationProfiles(loadCalibrationProfiles(resolvedStorage));
+        const lastSelected = loadLastCalibrationProfileId(resolvedStorage);
+        const selected =
+            lastSelected && entries.some((entry) => entry.id === lastSelected)
+                ? lastSelected
+                : (entries[0]?.id ?? '');
+        return { entries, selected };
+    }, [resolvedStorage]);
+    const [calibrationProfiles, setCalibrationProfiles] = useState<CalibrationProfile[]>(
+        initialCalibrationState.entries,
+    );
+    const [selectedCalibrationProfileId, setSelectedCalibrationProfileId] = useState(
+        initialCalibrationState.selected,
+    );
 
     const updateEditMode = useCallback((mode: PatternEditMode) => {
         setEditMode(mode);
@@ -335,6 +360,40 @@ const PatternDesignerPage: React.FC = () => {
         () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
         [patterns, selectedPatternId],
     );
+    const refreshCalibrationProfiles = useCallback(() => {
+        const nextEntries = sortCalibrationProfiles(loadCalibrationProfiles(resolvedStorage));
+        setCalibrationProfiles(nextEntries);
+        if (nextEntries.length === 0) {
+            setSelectedCalibrationProfileId('');
+            persistLastCalibrationProfileId(resolvedStorage, null);
+            return;
+        }
+        if (!nextEntries.some((entry) => entry.id === selectedCalibrationProfileId)) {
+            const fallback = nextEntries[0].id;
+            setSelectedCalibrationProfileId(fallback);
+            persistLastCalibrationProfileId(resolvedStorage, fallback);
+        }
+    }, [resolvedStorage, selectedCalibrationProfileId]);
+    const handleSelectCalibrationProfile = useCallback(
+        (profileId: string) => {
+            setSelectedCalibrationProfileId(profileId);
+            persistLastCalibrationProfileId(resolvedStorage, profileId || null);
+        },
+        [resolvedStorage],
+    );
+    const selectedCalibrationProfile = useMemo(
+        () =>
+            calibrationProfiles.find((profile) => profile.id === selectedCalibrationProfileId) ??
+            null,
+        [calibrationProfiles, selectedCalibrationProfileId],
+    );
+    const calibratedBlobRadius = useMemo(() => {
+        const radius = selectedCalibrationProfile?.calibrationSpace.blobStats?.maxDiameter;
+        if (typeof radius === 'number' && Number.isFinite(radius) && radius > 0) {
+            return radius;
+        }
+        return DEFAULT_BLOB_RADIUS;
+    }, [selectedCalibrationProfile]);
 
     const handleSelectPattern = useCallback(
         (patternId: string | null) => {
@@ -537,6 +596,16 @@ const PatternDesignerPage: React.FC = () => {
                 </div>
 
                 <div className="flex min-h-[320px] flex-1 flex-col gap-4 rounded-md bg-gray-900/60 p-4">
+                    <div className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
+                        <CalibrationProfileSelector
+                            profiles={calibrationProfiles}
+                            selectedProfileId={selectedCalibrationProfileId}
+                            onSelect={handleSelectCalibrationProfile}
+                            onRefresh={refreshCalibrationProfiles}
+                            label="Calibration Profile (optional)"
+                            placeholder="No calibration profiles"
+                        />
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
                             <span className="uppercase tracking-wide text-gray-400">Mode</span>
@@ -575,6 +644,7 @@ const PatternDesignerPage: React.FC = () => {
                                 onChange={handlePatternChange}
                                 onHoverChange={setHoverPoint}
                                 onHoverPointChange={setHoveredPatternPointId}
+                                blobRadius={calibratedBlobRadius}
                             />
                         ) : (
                             <p className="text-sm text-gray-500">
@@ -588,7 +658,7 @@ const PatternDesignerPage: React.FC = () => {
             <PatternDesignerDebugPanel
                 pattern={selectedPattern}
                 hoverPoint={hoverPoint}
-                blobRadius={PATTERN_BLOB_RADIUS}
+                blobRadius={calibratedBlobRadius}
                 editMode={editMode}
             />
 

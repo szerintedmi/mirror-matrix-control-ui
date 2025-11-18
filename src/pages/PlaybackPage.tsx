@@ -1,5 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
+import CalibrationProfileSelector, {
+    sortCalibrationProfiles,
+} from '@/components/calibration/CalibrationProfileSelector';
 import { useLogStore } from '@/context/LogContext';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import {
@@ -22,9 +25,6 @@ interface PlaybackPageProps {
 
 type RunStatus = 'idle' | 'running' | 'success' | 'error';
 
-const sortProfiles = (entries: CalibrationProfile[]): CalibrationProfile[] =>
-    [...entries].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-
 const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) => {
     const resolvedStorage = useMemo(
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
@@ -34,7 +34,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
     const { logInfo, logError } = useLogStore();
 
     const initialProfilesState = useMemo(() => {
-        const entries = sortProfiles(loadCalibrationProfiles(resolvedStorage));
+        const entries = sortCalibrationProfiles(loadCalibrationProfiles(resolvedStorage));
         const lastSelected = loadLastCalibrationProfileId(resolvedStorage);
         const selected =
             lastSelected && entries.some((entry) => entry.id === lastSelected)
@@ -74,7 +74,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
     }, [resolvedStorage, selectedPatternId]);
 
     const refreshProfiles = useCallback(() => {
-        const nextEntries = sortProfiles(loadCalibrationProfiles(resolvedStorage));
+        const nextEntries = sortCalibrationProfiles(loadCalibrationProfiles(resolvedStorage));
         setProfiles(nextEntries);
         if (nextEntries.length === 0) {
             setSelectedProfileId('');
@@ -191,39 +191,12 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                             </button>
                         </div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                        <label
-                            className="text-sm font-semibold text-gray-200"
-                            htmlFor="profile-select"
-                        >
-                            Calibration Profile
-                        </label>
-                        <div className="flex gap-2">
-                            <select
-                                id="profile-select"
-                                className="flex-1 rounded-md border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm text-gray-100"
-                                value={selectedProfileId}
-                                onChange={(event) => handleSelectProfile(event.target.value)}
-                            >
-                                {profiles.length === 0 ? (
-                                    <option value="">No profiles available</option>
-                                ) : (
-                                    profiles.map((profile) => (
-                                        <option key={profile.id} value={profile.id}>
-                                            {profile.name}
-                                        </option>
-                                    ))
-                                )}
-                            </select>
-                            <button
-                                type="button"
-                                onClick={refreshProfiles}
-                                className="rounded-md border border-gray-600 px-3 py-2 text-sm text-gray-100 hover:border-cyan-400 hover:text-cyan-200"
-                            >
-                                Refresh
-                            </button>
-                        </div>
-                    </div>
+                    <CalibrationProfileSelector
+                        profiles={profiles}
+                        selectedProfileId={selectedProfileId}
+                        onSelect={handleSelectProfile}
+                        onRefresh={refreshProfiles}
+                    />
                 </div>
                 <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="text-sm text-gray-400">
