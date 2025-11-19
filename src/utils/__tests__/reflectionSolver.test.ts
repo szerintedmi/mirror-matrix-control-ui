@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
 import { TILE_PLACEMENT_UNIT } from '../../constants/pattern';

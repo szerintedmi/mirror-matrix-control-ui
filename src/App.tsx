@@ -26,7 +26,8 @@ import PatternDesignerPage from './pages/PatternDesignerPage';
 import PatternEditorPage from './pages/PatternEditorPage';
 import PatternLibraryPage from './pages/PatternLibraryPage';
 import PlaybackPage from './pages/PlaybackPage';
-import SimulationPage from './pages/SimulationPage';
+// Lazy load SimulationPage to avoid loading BabylonJS during tests
+const SimulationPage = React.lazy(() => import('./pages/SimulationPage'));
 import {
     bootstrapGridSnapshots,
     getGridStateFingerprint,
@@ -404,17 +405,21 @@ const App: React.FC = () => {
                 );
             case 'simulation':
                 return (
-                    <SimulationPage
-                        gridSize={gridSize}
-                        projectionSettings={projectionSettings}
-                        onUpdateProjection={handleProjectionChange}
-                        projectionError={projectionError}
-                        onClearProjectionError={clearProjectionError}
-                        patterns={simulationPatterns}
-                        hasUserPatterns={patterns.length > 0}
-                        activePatternId={activePatternId}
-                        onSelectPattern={handleSelectPattern}
-                    />
+                    <React.Suspense
+                        fallback={<div className="p-8 text-gray-400">Loading simulation...</div>}
+                    >
+                        <SimulationPage
+                            gridSize={gridSize}
+                            projectionSettings={projectionSettings}
+                            onUpdateProjection={handleProjectionChange}
+                            projectionError={projectionError}
+                            onClearProjectionError={clearProjectionError}
+                            patterns={simulationPatterns}
+                            hasUserPatterns={patterns.length > 0}
+                            activePatternId={activePatternId}
+                            onSelectPattern={handleSelectPattern}
+                        />
+                    </React.Suspense>
                 );
             case 'patterns':
                 return <PatternDesignerPage />;

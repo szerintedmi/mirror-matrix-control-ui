@@ -9,7 +9,10 @@ export default defineConfig(async ({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const isTest = mode === 'test' || Boolean(process.env.VITEST);
     const plugins: PluginOption[] = [];
-    plugins.push(...(react() as PluginOption[]), tailwindcss());
+    plugins.push(...(react() as PluginOption[]));
+    if (!isTest) {
+        plugins.push(tailwindcss());
+    }
     if (!isTest) {
         try {
             const { default: checker } = await import('vite-plugin-checker');
@@ -40,6 +43,11 @@ export default defineConfig(async ({ mode }) => {
             environment: 'jsdom',
             setupFiles: ['vitest.setup.ts'],
             exclude: [...configDefaults.exclude, 'e2e/**'],
+            pool: 'threads',
+            threads: {
+                singleThread: true,
+                isolate: false,
+            },
         },
     };
 });
