@@ -307,40 +307,140 @@ export const planProfilePlayback = ({
         );
     }
 
-    let playableCapacity = 0;
+    // 1. Identify all available (calibrated) tiles
+    const availableTiles: {
+        key: string;
+        row: number;
+        col: number;
+        tile: TileCalibrationResults;
+        assignment: MirrorAssignment;
+        idealX: number;
+        idealY: number;
+    }[] = [];
+
     for (let row = 0; row < gridSize.rows; row += 1) {
         for (let col = 0; col < gridSize.cols; col += 1) {
             const key = getTileKey(row, col);
             const tile = profile.tiles[key];
             const assignment = getMirrorAssignment(mirrorConfig, row, col);
             if (isTileCalibrated(tile) && assignment.x && assignment.y) {
-                playableCapacity += 1;
+                // Calculate ideal normalized position [-1, 1]
+                // If cols=1, x=0. Else map 0..cols-1 to -1..1
+                const idealX = gridSize.cols > 1 ? (col / (gridSize.cols - 1)) * 2 - 1 : 0;
+                const idealY = gridSize.rows > 1 ? (row / (gridSize.rows - 1)) * 2 - 1 : 0;
+
+                availableTiles.push({
+                    key,
+                    row,
+                    col,
+                    tile,
+                    assignment,
+                    idealX,
+                    idealY,
+                });
             }
         }
     }
-    if (pattern.points.length > playableCapacity) {
+
+    if (pattern.points.length > availableTiles.length) {
         globalErrors.push(
             createError(
                 'insufficient_calibrated_tiles',
-                `Pattern needs ${pattern.points.length} calibrated mirrors, but only ${playableCapacity} are available.`,
+                `Pattern needs ${pattern.points.length} calibrated mirrors, but only ${availableTiles.length} are available.`,
             ),
         );
     }
 
-    const tiles: ProfilePlaybackTilePlan[] = [];
-    let patternIndex = 0;
+    // 2. Pre-calculate valid tiles for each point
+    // We want to assign points that have FEWER options first.
+    const pointOptions = pattern.points.map((point) => {
+        const validTiles = availableTiles.filter((t) => {
+            const bounds = t.tile.inferredBounds;
+            if (!bounds) return true; // No bounds = assume valid
+            // Check X
+            if (point.x < bounds.x.min || point.x > bounds.x.max) return false;
+            // Check Y
+            if (point.y < bounds.y.min || point.y > bounds.y.max) return false;
+            return true;
+        });
+        return {
+            point,
+            validTiles,
+        };
+    });
 
+    // 3. Sort points by flexibility (ascending number of valid tiles)
+    // This ensures we handle constrained points first.
+    pointOptions.sort((a, b) => a.validTiles.length - b.validTiles.length);
+
+    // 4. Assign tiles
+    const assignedTileKeys = new Set<string>();
+    const pointAssignments = new Map<string, string>(); // pointId -> tileKey
+
+    for (const { point, validTiles } of pointOptions) {
+        // Filter out already assigned tiles
+        const candidates = validTiles.filter((t) => !assignedTileKeys.has(t.key));
+
+        if (candidates.length === 0) {
+            // Cannot assign this point
+            // We will handle the error generation when constructing the final plan
+            continue;
+        }
+
+        // Find the "closest" candidate
+        let bestCandidate = candidates[0];
+        let minDistanceSq = Number.POSITIVE_INFINITY;
+
+        for (const candidate of candidates) {
+            const dx = point.x - candidate.idealX;
+            const dy = point.y - candidate.idealY;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minDistanceSq) {
+                minDistanceSq = distSq;
+                bestCandidate = candidate;
+            }
+        }
+
+        assignedTileKeys.add(bestCandidate.key);
+        pointAssignments.set(point.id, bestCandidate.key);
+    }
+
+    // 5. Construct the result
+    const tiles: ProfilePlaybackTilePlan[] = [];
+
+    // We need to iterate over ALL grid positions to produce the full plan
     for (let row = 0; row < gridSize.rows; row += 1) {
         for (let col = 0; col < gridSize.cols; col += 1) {
             const key = getTileKey(row, col);
             const assignment = getMirrorAssignment(mirrorConfig, row, col);
             const tileCalibration = profile.tiles[key];
-            const patternPoint = pattern.points[patternIndex] ?? null;
+
+            // Find if this tile was assigned to a point
+            // We need to reverse lookup from pointAssignments, or just find which point maps to this key
+            // Since pointAssignments is pointId -> tileKey, we can search it.
+            // Optimization: build a reverse map? Or just iterate. N is small.
+            let assignedPointId: string | null = null;
+            for (const [pid, tKey] of pointAssignments.entries()) {
+                if (tKey === key) {
+                    assignedPointId = pid;
+                    break;
+                }
+            }
+
+            const patternPoint = assignedPointId
+                ? (pattern.points.find((p) => p.id === assignedPointId) ?? null)
+                : null;
+
             const tileErrors: ProfilePlaybackValidationError[] = [];
             const axisTargets: ProfilePlaybackTilePlan['axisTargets'] = {};
 
             if (patternPoint) {
+                // This block is similar to previous logic, but now we know the assignment is valid-ish
+                // We still run the detailed checks (bounds, calibration existence) to generate specific errors if needed
+                // although our pre-filter should have caught bounds issues.
+
                 if (!isTileCalibrated(tileCalibration)) {
+                    // Should not happen if our availableTiles logic is correct, but good for safety
                     tileErrors.push(
                         createError(
                             'tile_not_calibrated',
@@ -366,7 +466,6 @@ export const planProfilePlayback = ({
                         }
                     });
                 }
-                patternIndex += 1;
             }
 
             tiles.push({
@@ -379,6 +478,22 @@ export const planProfilePlayback = ({
                 errors: tileErrors,
             });
         }
+    }
+
+    // Check for unassigned points to report errors
+    // If a point was not assigned, it means we ran out of valid tiles or it was impossible
+    const unassignedPoints = pattern.points.filter((p) => !pointAssignments.has(p.id));
+    for (const p of unassignedPoints) {
+        // We need to attach this error somewhere.
+        // The interface puts errors on tiles or global.
+        // Since it's not assigned to a tile, it's a global error or we just report it.
+        globalErrors.push(
+            createError(
+                'insufficient_calibrated_tiles', // Or a new error code 'point_unassignable'
+                `Unable to assign pattern point ${p.id} to any valid tile (constraints or capacity).`,
+                { patternPointId: p.id },
+            ),
+        );
     }
 
     const playableAxisTargets = tiles
