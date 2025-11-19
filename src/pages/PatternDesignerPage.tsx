@@ -432,9 +432,9 @@ const PatternDesignerPage: React.FC = () => {
         [calibrationProfiles, selectedCalibrationProfileId],
     );
     const calibratedBlobRadius = useMemo(() => {
-        const radius = selectedCalibrationProfile?.calibrationSpace.blobStats?.maxDiameter;
-        if (typeof radius === 'number' && Number.isFinite(radius) && radius > 0) {
-            return radius;
+        const diameter = selectedCalibrationProfile?.calibrationSpace.blobStats?.maxDiameter;
+        if (typeof diameter === 'number' && Number.isFinite(diameter) && diameter > 0) {
+            return diameter / 2;
         }
         return DEFAULT_BLOB_RADIUS;
     }, [selectedCalibrationProfile]);
