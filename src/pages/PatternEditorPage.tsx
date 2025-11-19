@@ -204,7 +204,7 @@ const LegacyPatternEditorPage: React.FC<LegacyPatternEditorPageProps> = ({
         () => new Map(overlappingTiles.map((entry) => [entry.id, entry.count])),
         [overlappingTiles],
     );
-    const maxOverlapCount = useMemo(
+    const legacyMaxOverlapCount = useMemo(
         () => overlappingTiles.reduce((max, record) => Math.max(max, record.count), 1),
         [overlappingTiles],
     );
@@ -410,7 +410,7 @@ const LegacyPatternEditorPage: React.FC<LegacyPatternEditorPageProps> = ({
                                 canvasHeight={canvasHeight}
                                 tiles={tiles}
                                 overlapCounts={overlapCounts}
-                                maxOverlapCount={maxOverlapCount}
+                                maxOverlapCount={legacyMaxOverlapCount}
                                 hoverState={hoverState}
                                 removeHighlight={removeHighlight}
                                 activeTool={activeTool}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector, {
     sortCalibrationProfiles,
@@ -16,6 +16,8 @@ import { loadPatterns, persistPatterns } from '@/services/patternStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import type { CalibrationProfile, Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
+
+import { calculateMaxOverlapCount } from '../utils/patternOverlaps';
 
 interface PatternDesignerCanvasProps {
     pattern: Pattern;
@@ -35,6 +37,7 @@ interface PatternDesignerCanvasProps {
         yMax: number;
     }>;
     invalidPointIds: Set<string>;
+    maxOverlapCount: number;
 }
 
 interface RenameDialogState {
@@ -76,6 +79,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     showBounds,
     tileBounds,
     invalidPointIds,
+    maxOverlapCount,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const dragStateRef = useRef<{
@@ -84,6 +88,13 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
         suppressNextPointClick: boolean;
     }>({ activePointId: null, moved: false, suppressNextPointClick: false });
     const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
+
+    const overlapFilterId = useId();
+    const baseFillOpacity = maxOverlapCount > 0 ? 1 / maxOverlapCount : 1;
+    const maxCompositeAlpha =
+        maxOverlapCount > 0 ? 1 - Math.pow(1 - baseFillOpacity, maxOverlapCount) : 1;
+    const alphaSlope = maxCompositeAlpha > 0 ? 1 / maxCompositeAlpha : 1;
+    const normalizedAlphaSlope = Number.isFinite(alphaSlope) ? alphaSlope : 1;
 
     const handleAddPoint = useCallback(
         (event: React.MouseEvent<Element>) => {
@@ -268,6 +279,24 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                     preserveAspectRatio="xMidYMid meet"
                     className="h-full w-full"
                 >
+                    <defs>
+                        <filter
+                            id={overlapFilterId}
+                            x="0"
+                            y="0"
+                            width="100%"
+                            height="100%"
+                            filterUnits="objectBoundingBox"
+                            colorInterpolationFilters="sRGB"
+                        >
+                            <feComponentTransfer>
+                                <feFuncR type="identity" />
+                                <feFuncG type="identity" />
+                                <feFuncB type="identity" />
+                                <feFuncA type="linear" slope={normalizedAlphaSlope} intercept={0} />
+                            </feComponentTransfer>
+                        </filter>
+                    </defs>
                     <rect x={0} y={0} width={1} height={1} fill="rgb(15,23,42)" />
                     <line
                         x1={0}
@@ -285,6 +314,26 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                         stroke="rgba(148, 163, 184, 0.25)"
                         strokeWidth={0.0015}
                     />
+                    <g filter={`url(#${overlapFilterId})`}>
+                        {pattern.points.map((point) => {
+                            const viewX = centeredToView(point.x);
+                            const viewY = centeredToView(point.y);
+                            const halfSize = centeredDeltaToView(blobRadius);
+                            const size = halfSize * 2;
+                            return (
+                                <rect
+                                    key={`fill-${point.id}`}
+                                    x={viewX - halfSize}
+                                    y={viewY - halfSize}
+                                    width={size}
+                                    height={size}
+                                    fill="#f8fafc"
+                                    fillOpacity={baseFillOpacity}
+                                    pointerEvents="none"
+                                />
+                            );
+                        })}
+                    </g>
                     {pattern.points.map((point) => {
                         const isEraseHover = editMode === 'erase' && hoveredPointId === point.id;
                         const isInvalid = invalidPointIds.has(point.id);
@@ -300,10 +349,15 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                 y={viewY - halfSize}
                                 width={size}
                                 height={size}
-                                fill={isEraseHover ? '#f87171' : isInvalid ? '#ef4444' : '#22d3ee'}
-                                fillOpacity={editMode === 'erase' && !isEraseHover ? 0.45 : 1}
-                                stroke={isEraseHover ? '#fecaca' : '#0f172a'}
-                                strokeWidth={isEraseHover ? 0.006 : 0.004}
+                                fill="transparent"
+                                stroke={
+                                    isEraseHover
+                                        ? '#fecaca'
+                                        : isInvalid
+                                          ? '#ef4444'
+                                          : 'rgba(148, 163, 184, 0.35)'
+                                }
+                                strokeWidth={isEraseHover || isInvalid ? 0.006 : 0.004}
                                 onMouseEnter={() => handlePointMouseEnter(point.id)}
                                 onMouseLeave={handlePointMouseLeave}
                                 onMouseDown={(event) => {
@@ -499,6 +553,11 @@ const PatternDesignerPage: React.FC = () => {
         }
         return ids;
     }, [selectedPattern, selectedCalibrationProfile, gridSnapshot]);
+
+    const maxOverlapCount = useMemo(() => {
+        if (!selectedPattern) return 0;
+        return calculateMaxOverlapCount(selectedPattern.points, calibratedBlobRadius);
+    }, [selectedPattern, calibratedBlobRadius]);
 
     const handleSelectPattern = useCallback(
         (patternId: string | null) => {
@@ -781,6 +840,7 @@ const PatternDesignerPage: React.FC = () => {
                                 }
                                 tileBounds={calibrationTileBounds}
                                 invalidPointIds={invalidPointIds}
+                                maxOverlapCount={maxOverlapCount}
                             />
                         ) : (
                             <p className="text-sm text-gray-500">
