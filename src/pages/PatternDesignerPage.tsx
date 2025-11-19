@@ -21,6 +21,7 @@ interface PatternDesignerCanvasProps {
     pattern: Pattern;
     editMode: PatternEditMode;
     hoveredPointId: string | null;
+    hoverPoint: DesignerCoordinate | null;
     onChange: (nextPattern: Pattern) => void;
     onHoverChange?: (point: DesignerCoordinate | null) => void;
     onHoverPointChange?: (pointId: string | null) => void;
@@ -67,6 +68,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     pattern,
     editMode,
     hoveredPointId,
+    hoverPoint,
     onChange,
     onHoverChange,
     onHoverPointChange,
@@ -312,6 +314,20 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                             />
                         );
                     })}
+                    {editMode === 'placement' && hoverPoint && (
+                        <rect
+                            x={centeredToView(hoverPoint.x) - centeredDeltaToView(blobRadius)}
+                            y={centeredToView(hoverPoint.y) - centeredDeltaToView(blobRadius)}
+                            width={centeredDeltaToView(blobRadius) * 2}
+                            height={centeredDeltaToView(blobRadius) * 2}
+                            fill="#22d3ee"
+                            fillOpacity={0.3}
+                            stroke="#22d3ee"
+                            strokeWidth={0.002}
+                            strokeDasharray="0.01 0.01"
+                            pointerEvents="none"
+                        />
+                    )}
                     {showBounds &&
                         tileBounds.map((bound) => {
                             const xMin = centeredToView(bound.xMin);
@@ -753,6 +769,7 @@ const PatternDesignerPage: React.FC = () => {
                                 pattern={selectedPattern}
                                 editMode={editMode}
                                 hoveredPointId={hoveredPatternPointId}
+                                hoverPoint={hoverPoint}
                                 onChange={handlePatternChange}
                                 onHoverChange={setHoverPoint}
                                 onHoverPointChange={setHoveredPatternPointId}
