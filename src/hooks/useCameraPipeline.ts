@@ -1381,8 +1381,24 @@ export const useCameraPipeline = ({
                 return;
             }
 
+            const zoomCanvas = roiCanvasRef.current;
+            const currentRoi = roiRef.current;
+            const showFullFrame = !roiViewEnabled || !currentRoi.enabled;
+            const overlayCanvas = detectionOverlayCanvasRef.current;
+            const roiOverlayCanvas = roiOverlayCanvasRef.current;
+            const rotatedOverlayCanvas = rotatedOverlayCanvasRef.current;
+
             const calibrationOverlayCounterRotationRadians =
                 rotationDegrees === 0 ? 0 : (rotationDegrees * Math.PI) / 180;
+
+            // Optimization: If we are in ROI view (not showing full frame) and there is no rotation,
+            // we can render the detection overlay directly to the ROI canvas.
+            // This avoids rendering the full frame overlay (which is hidden) and then copying/cropping it.
+            const canOptimizeRoiRender =
+                !showFullFrame &&
+                rotationDegrees === 0 &&
+                previewMode === 'processed' &&
+                opencvStatus === 'ready';
 
             let rotatedCanvas = rotatedCanvasRef.current;
             if (!rotatedCanvas && typeof document !== 'undefined') {
@@ -1411,12 +1427,6 @@ export const useCameraPipeline = ({
                 }
             }
 
-            const zoomCanvas = roiCanvasRef.current;
-            const currentRoi = roiRef.current;
-            const showFullFrame = !roiViewEnabled || !currentRoi.enabled;
-            const overlayCanvas = detectionOverlayCanvasRef.current;
-            const roiOverlayCanvas = roiOverlayCanvasRef.current;
-            const rotatedOverlayCanvas = rotatedOverlayCanvasRef.current;
             let roiPixels: { width: number; height: number } | null = null;
             if (!showFullFrame && currentRoi.enabled) {
                 roiPixels = {
@@ -1424,9 +1434,19 @@ export const useCameraPipeline = ({
                     height: Math.max(1, Math.round(currentRoi.height * baseHeight)),
                 };
             }
+
             if (overlayCanvas) {
                 const overlayCtx = overlayCanvas.getContext('2d');
-                if (previewMode === 'processed' && opencvStatus === 'ready') {
+                // Only render full frame overlay if:
+                // 1. We are in processed mode AND ready
+                // 2. AND we are NOT in the optimized path (where we skip full frame render)
+                //    The optimized path implies !showFullFrame, so if showFullFrame is true, we render here.
+                //    If rotation is non-zero, we also render here (to support rotation copy).
+                if (
+                    previewMode === 'processed' &&
+                    opencvStatus === 'ready' &&
+                    !canOptimizeRoiRender
+                ) {
                     if (overlayCanvas.width !== baseWidth || overlayCanvas.height !== baseHeight) {
                         overlayCanvas.width = baseWidth;
                         overlayCanvas.height = baseHeight;
@@ -1438,6 +1458,7 @@ export const useCameraPipeline = ({
                     overlayCtx?.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
                 }
             }
+
             if (rotationDegrees !== 0) {
                 let rotatedOverlay = rotatedOverlayCanvas;
                 if (!rotatedOverlay && typeof document !== 'undefined') {
@@ -1472,6 +1493,7 @@ export const useCameraPipeline = ({
                     rotatedOverlayCanvasRef.current.height,
                 );
             }
+
             if (zoomCanvas && currentRoi.enabled) {
                 const roiSize = roiPixels ?? {
                     width: baseWidth,
@@ -1516,33 +1538,52 @@ export const useCameraPipeline = ({
 
             if (roiOverlayCanvas) {
                 const roiOverlayCtx = roiOverlayCanvas.getContext('2d');
-                const overlaySourceForRoi =
-                    rotationDegrees !== 0 && rotatedOverlayCanvasRef.current
-                        ? rotatedOverlayCanvasRef.current
-                        : overlayCanvas;
-                const shouldRenderOverlay =
-                    overlaySourceForRoi &&
-                    !showFullFrame &&
-                    currentRoi.enabled &&
-                    previewMode === 'processed' &&
-                    opencvStatus === 'ready' &&
-                    blobsOverlayEnabled;
-                if (shouldRenderOverlay && overlaySourceForRoi) {
-                    const roiSize = roiPixels ?? {
-                        width: baseWidth,
-                        height: baseHeight,
+                const roiSize = roiPixels ?? {
+                    width: baseWidth,
+                    height: baseHeight,
+                };
+                const targetWidth = roiSize.width;
+                const targetHeight = roiSize.height;
+
+                if (
+                    roiOverlayCanvas.width !== targetWidth ||
+                    roiOverlayCanvas.height !== targetHeight
+                ) {
+                    roiOverlayCanvas.width = targetWidth;
+                    roiOverlayCanvas.height = targetHeight;
+                }
+
+                if (roiOverlayCtx) {
+                    roiOverlayCtx.clearRect(0, 0, targetWidth, targetHeight);
+                }
+
+                if (canOptimizeRoiRender && blobsOverlayEnabled) {
+                    // Optimized path: Render directly to ROI canvas
+                    const displayRectOverride = {
+                        x: currentRoi.x * baseWidth,
+                        y: currentRoi.y * baseHeight,
+                        width: currentRoi.width * baseWidth,
+                        height: currentRoi.height * baseHeight,
                     };
-                    const targetWidth = roiSize.width;
-                    const targetHeight = roiSize.height;
-                    if (
-                        roiOverlayCanvas.width !== targetWidth ||
-                        roiOverlayCanvas.height !== targetHeight
-                    ) {
-                        roiOverlayCanvas.width = targetWidth;
-                        roiOverlayCanvas.height = targetHeight;
-                    }
-                    if (roiOverlayCtx) {
-                        roiOverlayCtx.clearRect(0, 0, targetWidth, targetHeight);
+                    renderDetectionOverlay(roiOverlayCanvas, targetWidth, targetHeight, {
+                        displayRectOverride,
+                        calibrationOverlayCounterRotationRadians: 0,
+                    });
+                } else {
+                    // Standard path: Copy from full frame (or rotated) overlay
+                    const overlaySourceForRoi =
+                        rotationDegrees !== 0 && rotatedOverlayCanvasRef.current
+                            ? rotatedOverlayCanvasRef.current
+                            : overlayCanvas;
+                    const shouldRenderOverlay =
+                        overlaySourceForRoi &&
+                        !showFullFrame &&
+                        currentRoi.enabled &&
+                        previewMode === 'processed' &&
+                        opencvStatus === 'ready' &&
+                        blobsOverlayEnabled;
+
+                    if (shouldRenderOverlay && overlaySourceForRoi && roiOverlayCtx) {
                         const sx = currentRoi.x * baseWidth;
                         const sy = currentRoi.y * baseHeight;
                         const sWidth = Math.max(1, currentRoi.width * baseWidth);
@@ -1559,8 +1600,6 @@ export const useCameraPipeline = ({
                             targetHeight,
                         );
                     }
-                } else if (roiOverlayCtx) {
-                    roiOverlayCtx.clearRect(0, 0, roiOverlayCanvas.width, roiOverlayCanvas.height);
                 }
             }
 

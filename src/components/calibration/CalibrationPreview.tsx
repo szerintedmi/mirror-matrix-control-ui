@@ -289,7 +289,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         <canvas
                             ref={bindDetectionOverlayRef}
                             className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                processedFeedReady ? 'opacity-100' : 'opacity-0'
+                                processedFeedReady && showFullFrame ? 'opacity-100' : 'opacity-0'
                             }`}
                         />
                     </div>
