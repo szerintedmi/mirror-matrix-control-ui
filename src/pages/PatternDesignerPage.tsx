@@ -11,7 +11,9 @@ import {
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
 } from '@/services/calibrationProfileStorage';
+import { loadGridState } from '@/services/gridStorage';
 import { loadPatterns, persistPatterns } from '@/services/patternStorage';
+import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import type { CalibrationProfile, Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
 
@@ -31,6 +33,7 @@ interface PatternDesignerCanvasProps {
         yMin: number;
         yMax: number;
     }>;
+    invalidPointIds: Set<string>;
 }
 
 interface RenameDialogState {
@@ -70,6 +73,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     blobRadius,
     showBounds,
     tileBounds,
+    invalidPointIds,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const dragStateRef = useRef<{
@@ -281,6 +285,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                     />
                     {pattern.points.map((point) => {
                         const isEraseHover = editMode === 'erase' && hoveredPointId === point.id;
+                        const isInvalid = invalidPointIds.has(point.id);
                         const viewX = centeredToView(point.x);
                         const viewY = centeredToView(point.y);
                         const halfSize = centeredDeltaToView(blobRadius);
@@ -293,7 +298,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                 y={viewY - halfSize}
                                 width={size}
                                 height={size}
-                                fill={isEraseHover ? '#f87171' : '#22d3ee'}
+                                fill={isEraseHover ? '#f87171' : isInvalid ? '#ef4444' : '#22d3ee'}
                                 fillOpacity={editMode === 'erase' && !isEraseHover ? 0.45 : 1}
                                 stroke={isEraseHover ? '#fecaca' : '#0f172a'}
                                 strokeWidth={isEraseHover ? 0.006 : 0.004}
@@ -340,6 +345,7 @@ const PatternDesignerPage: React.FC = () => {
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
         [],
     );
+    const [gridSnapshot] = useState(() => loadGridState(resolvedStorage));
     const [patterns, setPatterns] = useState<Pattern[]>(() => loadPatterns(resolvedStorage));
     const [selectedPatternId, setSelectedPatternId] = useState<string | null>(
         patterns[0]?.id ?? null,
@@ -458,6 +464,25 @@ const PatternDesignerPage: React.FC = () => {
             })
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
     }, [selectedCalibrationProfile]);
+
+    const invalidPointIds = useMemo(() => {
+        if (!selectedPattern || !selectedCalibrationProfile || !gridSnapshot) {
+            return new Set<string>();
+        }
+        const result = planProfilePlayback({
+            gridSize: gridSnapshot.gridSize,
+            mirrorConfig: gridSnapshot.mirrorConfig,
+            profile: selectedCalibrationProfile,
+            pattern: selectedPattern,
+        });
+        const ids = new Set<string>();
+        for (const error of result.errors) {
+            if (error.patternPointId) {
+                ids.add(error.patternPointId);
+            }
+        }
+        return ids;
+    }, [selectedPattern, selectedCalibrationProfile, gridSnapshot]);
 
     const handleSelectPattern = useCallback(
         (patternId: string | null) => {
@@ -738,6 +763,7 @@ const PatternDesignerPage: React.FC = () => {
                                     calibrationTileBounds.length > 0
                                 }
                                 tileBounds={calibrationTileBounds}
+                                invalidPointIds={invalidPointIds}
                             />
                         ) : (
                             <p className="text-sm text-gray-500">

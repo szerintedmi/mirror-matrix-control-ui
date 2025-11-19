@@ -1,10 +1,19 @@
 import React, { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+
+import { loadGridState } from '@/services/gridStorage';
+import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 
 import PatternDesignerPage from '../PatternDesignerPage';
 
-import type { Root } from 'react-dom/client';
+vi.mock('@/services/profilePlaybackPlanner', () => ({
+    planProfilePlayback: vi.fn(),
+}));
+
+vi.mock('@/services/gridStorage', () => ({
+    loadGridState: vi.fn(),
+}));
 
 const STORAGE_KEY = 'mirror:calibration-patterns';
 
@@ -118,5 +127,68 @@ describe('PatternDesignerPage rename modal', () => {
         });
 
         expect(document.getElementById('pattern-rename-input')).not.toBeNull();
+    });
+});
+
+describe('PatternDesignerPage validation feedback', () => {
+    it('renders invalid points in red', async () => {
+        // Mock grid storage to return a valid grid state
+        (loadGridState as Mock).mockReturnValue({
+            gridSize: { rows: 1, cols: 1 },
+            mirrorConfig: new Map([['0-0', { x: null, y: null }]]),
+        });
+
+        // Mock playback planner to return an error for a specific point
+        const invalidPointId = 'point-invalid';
+        (planProfilePlayback as Mock).mockReturnValue({
+            success: false,
+            plan: [],
+            errors: [{ patternPointId: invalidPointId, code: 'error' }],
+        });
+
+        // Setup storage with a pattern containing the invalid point
+        const pattern = createStoredPattern({
+            points: [{ id: invalidPointId, x: 0, y: 0 }],
+        });
+        setStoredPatterns([pattern]);
+
+        // We also need a calibration profile to trigger validation
+        // Mocking localStorage for calibration profiles
+        window.localStorage.setItem(
+            'mirror:calibration:profiles',
+            JSON.stringify({
+                version: 2,
+                entries: [
+                    {
+                        id: 'cal-1',
+                        schemaVersion: 2,
+                        name: 'Test Profile',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        gridSize: { rows: 1, cols: 1 },
+                        stepTestSettings: { deltaSteps: 100 },
+                        gridStateFingerprint: { hash: 'hash', snapshot: {} },
+                        calibrationSpace: { blobStats: null, globalBounds: null },
+                        tiles: {},
+                        metrics: {
+                            totalTiles: 1,
+                            completedTiles: 1,
+                            failedTiles: 0,
+                            skippedTiles: 0,
+                        },
+                    },
+                ],
+            }),
+        );
+        window.localStorage.setItem('mirror:calibration:last-profile-id', 'cal-1');
+
+        await renderPage();
+
+        // Find the point element
+        const pointElement = document.querySelector(`rect[data-point-id="${invalidPointId}"]`);
+        expect(pointElement).not.toBeNull();
+
+        // Check if it has the error color (#ef4444)
+        expect(pointElement?.getAttribute('fill')).toBe('#ef4444');
     });
 });
