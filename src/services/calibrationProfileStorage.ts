@@ -423,10 +423,8 @@ export const saveCalibrationProfile = (
     const metrics = computeMetrics(tiles);
     const fingerprint = getGridStateFingerprint(options.gridSnapshot);
     const now = new Date().toISOString();
-    const {
-        aspect: calibrationCameraAspect,
-        resolution: calibrationCameraResolution,
-    } = deriveCalibrationCameraMetadata(summary);
+    const { aspect: calibrationCameraAspect, resolution: calibrationCameraResolution } =
+        deriveCalibrationCameraMetadata(summary);
     const profile: CalibrationProfile = {
         id: options.id ?? generateProfileId(),
         schemaVersion: PROFILE_SCHEMA_VERSION,
@@ -567,9 +565,7 @@ const isCalibrationCameraResolution = (value: unknown): value is CalibrationCame
         return false;
     }
     const record = value as Record<string, unknown>;
-    return (
-        isPositiveFiniteNumber(record.width) && isPositiveFiniteNumber(record.height)
-    );
+    return isPositiveFiniteNumber(record.width) && isPositiveFiniteNumber(record.height);
 };
 
 const validateCalibrationProfileCandidate = (
@@ -678,7 +674,9 @@ const sanitizeImportedProfile = (
             Number.isFinite(candidate.calibrationCameraAspect)
                 ? candidate.calibrationCameraAspect
                 : null,
-        calibrationCameraResolution: isCalibrationCameraResolution(candidate.calibrationCameraResolution)
+        calibrationCameraResolution: isCalibrationCameraResolution(
+            candidate.calibrationCameraResolution,
+        )
             ? {
                   width: candidate.calibrationCameraResolution.width,
                   height: candidate.calibrationCameraResolution.height,

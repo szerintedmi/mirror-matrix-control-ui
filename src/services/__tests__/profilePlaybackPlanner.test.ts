@@ -197,7 +197,7 @@ describe('profilePlaybackPlanner', () => {
         };
 
         const pattern = createPattern([{ x: 0.9, y: 0.9 }]);
-        const result = planProfilePlayback({
+        planProfilePlayback({
             gridSize,
             mirrorConfig,
             profile,
@@ -235,7 +235,6 @@ describe('profilePlaybackPlanner', () => {
     });
 
     it('reports insufficient calibrated tiles when demand exceeds capacity', () => {
-        const mirrorConfig = buildMirrorConfig(gridSize.rows, gridSize.cols);
         const profile = createProfile(gridSize.rows, gridSize.cols, { calibrated: false });
         const pattern = createPattern([
             { x: 0, y: 0 },
@@ -245,7 +244,7 @@ describe('profilePlaybackPlanner', () => {
 
         const result = planProfilePlayback({
             gridSize,
-            mirrorConfig,
+            mirrorConfig: new Map(),
             profile,
             pattern,
         });
@@ -262,7 +261,6 @@ describe('profilePlaybackPlanner', () => {
         // Note: Tile B is physically at (1, -1) but its bounds say it can only project to (-1, -1).
         // This simulates a weird calibration or physical constraint.
 
-        const mirrorConfig = buildMirrorConfig(2, 1); // 2 rows, 1 col for simplicity? Or 1 row 2 cols.
         // Let's use 1 row, 2 cols.
         const oneRowGrid = { rows: 1, cols: 2 };
         const profile = createProfile(1, 2);

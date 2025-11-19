@@ -264,7 +264,10 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         profileCameraAspect,
         profileCameraResolution,
     );
-    const currentAspectDescriptor = describeCameraAspect(cameraAspectRatio, currentCameraResolution);
+    const currentAspectDescriptor = describeCameraAspect(
+        cameraAspectRatio,
+        currentCameraResolution,
+    );
 
     useEffect(() => {
         setAlignmentOverlaySummary(alignmentSourceSummary ?? null);
@@ -343,9 +346,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             />
             {showCameraAspectWarning && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 shadow-lg">
-                    <p className="font-semibold text-amber-100">
-                        Aspect mismatch detected
-                    </p>
+                    <p className="font-semibold text-amber-100">Aspect mismatch detected</p>
                     <p>
                         This calibration was captured at {profileAspectDescriptor}; current camera
                         is {currentAspectDescriptor}. Re-run calibration or switch resolution.

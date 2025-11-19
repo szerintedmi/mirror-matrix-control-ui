@@ -22,9 +22,10 @@ import type { CalibrationProfile, MirrorConfig, Pattern } from '@/types';
 interface PlaybackPageProps {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
+    onNavigate: (page: 'patterns') => void;
 }
 
-const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) => {
+const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onNavigate }) => {
     const resolvedStorage = useMemo(
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
         [],
@@ -168,6 +169,14 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig }) =
                                 className="rounded-md border border-gray-600 px-3 py-2 text-sm text-gray-100 hover:border-cyan-400 hover:text-cyan-200"
                             >
                                 Refresh
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onNavigate('patterns')}
+                                className="rounded-md border border-gray-600 px-3 py-2 text-sm text-gray-100 hover:border-cyan-400 hover:text-cyan-200"
+                                title="Edit selected pattern"
+                            >
+                                Edit
                             </button>
                         </div>
                     </div>

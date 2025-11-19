@@ -6,15 +6,22 @@ import CalibrationProfileSelector, {
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
 import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDesigner/types';
+import PatternPreview from '@/components/PatternPreview';
+import { useLogStore } from '@/context/LogContext';
+import { useMotorCommands } from '@/hooks/useMotorCommands';
 import {
     loadCalibrationProfiles,
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
 } from '@/services/calibrationProfileStorage';
 import { loadGridState } from '@/services/gridStorage';
-import { loadPatterns, persistPatterns } from '@/services/patternStorage';
+import {
+    loadLastSelectedPatternId,
+    loadPatterns,
+    persistPatterns,
+} from '@/services/patternStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
-import type { CalibrationProfile, Pattern, PatternPoint } from '@/types';
+import type { CalibrationProfile, MirrorConfig, Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
 
 import { calculateMaxOverlapCount } from '../utils/patternOverlaps';
@@ -410,16 +417,36 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     );
 };
 
-const PatternDesignerPage: React.FC = () => {
+interface PatternDesignerPageProps {
+    gridSize?: { rows: number; cols: number };
+    mirrorConfig?: MirrorConfig;
+}
+
+const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
+    gridSize: propsGridSize,
+    mirrorConfig: propsMirrorConfig,
+}) => {
     const resolvedStorage = useMemo(
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
         [],
     );
     const [gridSnapshot] = useState(() => loadGridState(resolvedStorage));
-    const [patterns, setPatterns] = useState<Pattern[]>(() => loadPatterns(resolvedStorage));
-    const [selectedPatternId, setSelectedPatternId] = useState<string | null>(
-        patterns[0]?.id ?? null,
+
+    const gridSize = useMemo(
+        () => propsGridSize ?? gridSnapshot?.gridSize ?? { rows: 8, cols: 8 },
+        [propsGridSize, gridSnapshot],
     );
+    const mirrorConfig = useMemo(
+        () => propsMirrorConfig ?? new Map(gridSnapshot?.mirrorConfig ?? []),
+        [propsMirrorConfig, gridSnapshot],
+    );
+
+    const [patterns, setPatterns] = useState<Pattern[]>(() => loadPatterns(resolvedStorage));
+    const [selectedPatternId, setSelectedPatternId] = useState<string | null>(() => {
+        const lastId = loadLastSelectedPatternId(resolvedStorage);
+        const all = loadPatterns(resolvedStorage);
+        return all.some((p) => p.id === lastId) ? (lastId as string) : null;
+    });
     const [hoverPoint, setHoverPoint] = useState<DesignerCoordinate | null>(null);
     const [editMode, setEditMode] = useState<PatternEditMode>('placement');
     const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
@@ -442,6 +469,12 @@ const PatternDesignerPage: React.FC = () => {
     const [selectedCalibrationProfileId, setSelectedCalibrationProfileId] = useState(
         initialCalibrationState.selected,
     );
+
+    useEffect(() => {
+        if (!selectedPatternId && patterns.length > 0) {
+            setSelectedPatternId(patterns[0].id);
+        }
+    }, [patterns, selectedPatternId]);
 
     const updateEditMode = useCallback((mode: PatternEditMode) => {
         setEditMode(mode);
@@ -536,12 +569,12 @@ const PatternDesignerPage: React.FC = () => {
     }, [selectedCalibrationProfile]);
 
     const invalidPointIds = useMemo(() => {
-        if (!selectedPattern || !selectedCalibrationProfile || !gridSnapshot) {
+        if (!selectedPattern || !selectedCalibrationProfile) {
             return new Set<string>();
         }
         const result = planProfilePlayback({
-            gridSize: gridSnapshot.gridSize,
-            mirrorConfig: gridSnapshot.mirrorConfig,
+            gridSize,
+            mirrorConfig,
             profile: selectedCalibrationProfile,
             pattern: selectedPattern,
         });
@@ -552,7 +585,7 @@ const PatternDesignerPage: React.FC = () => {
             }
         }
         return ids;
-    }, [selectedPattern, selectedCalibrationProfile, gridSnapshot]);
+    }, [selectedPattern, selectedCalibrationProfile, gridSize, mirrorConfig]);
 
     const maxOverlapCount = useMemo(() => {
         if (!selectedPattern) return 0;
@@ -574,6 +607,56 @@ const PatternDesignerPage: React.FC = () => {
             persistPatterns(resolvedStorage, nextPatterns);
         },
         [resolvedStorage],
+    );
+
+    const { moveMotor } = useMotorCommands();
+    const { logInfo, logError } = useLogStore();
+
+    const handlePlayPattern = useCallback(
+        async (pattern: Pattern) => {
+            if (!selectedCalibrationProfile) {
+                // Ideally show a toast or non-blocking notification
+                console.warn('Cannot play pattern: No calibration profile selected.');
+                return;
+            }
+
+            const plan = planProfilePlayback({
+                gridSize,
+                mirrorConfig,
+                profile: selectedCalibrationProfile,
+                pattern,
+            });
+
+            const targets = plan.playableAxisTargets;
+            if (targets.length === 0) {
+                console.warn('No playable motors found for this pattern.');
+                return;
+            }
+
+            const settled = await Promise.allSettled(
+                targets.map((target) =>
+                    moveMotor({
+                        mac: target.motor.nodeMac,
+                        motorId: target.motor.motorIndex,
+                        positionSteps: target.targetSteps,
+                    }),
+                ),
+            );
+
+            const failures = settled.filter(
+                (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
+            );
+
+            if (failures.length > 0) {
+                const message = `${failures.length}/${targets.length} motor commands failed for "${pattern.name}".`;
+                logError('Playback', message);
+                console.error(message);
+            } else {
+                const successMessage = `Sent ${targets.length} axis moves for "${pattern.name}".`;
+                logInfo('Playback', successMessage);
+            }
+        },
+        [selectedCalibrationProfile, gridSize, mirrorConfig, moveMotor, logInfo, logError],
     );
 
     const handlePatternChange = (updated: Pattern) => {
@@ -677,28 +760,58 @@ const PatternDesignerPage: React.FC = () => {
                                 return (
                                     <li key={pattern.id}>
                                         <div
-                                            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors ${
+                                            className={`flex items-center justify-between gap-2 rounded-md p-1 text-left transition-colors ${
                                                 isSelected
-                                                    ? 'bg-cyan-900/60 text-cyan-100'
+                                                    ? 'bg-cyan-900/60 text-cyan-100 ring-1 ring-cyan-500/30'
                                                     : 'bg-gray-900/40 text-gray-200 hover:bg-gray-800'
                                             }`}
                                         >
                                             <button
                                                 type="button"
                                                 onClick={() => handleSelectPattern(pattern.id)}
-                                                className="flex-1 truncate text-left text-sm font-medium text-inherit focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
+                                                className="flex flex-1 items-center gap-3 overflow-hidden text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
                                             >
-                                                {pattern.name}
+                                                <PatternPreview
+                                                    pattern={pattern}
+                                                    className="h-10 w-10 flex-none rounded border border-gray-700/50 bg-gray-950"
+                                                />
+                                                <span className="truncate text-sm font-medium text-inherit">
+                                                    {pattern.name}
+                                                </span>
                                             </button>
-                                            <div className="flex items-center gap-1">
+                                            <div className="flex items-center gap-1 pr-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        handlePlayPattern(pattern);
+                                                    }}
+                                                    className="rounded p-1.5 text-gray-400 hover:bg-emerald-900/30 hover:text-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
+                                                    aria-label={`Play pattern ${pattern.name}`}
+                                                    title="Play pattern"
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 24 24"
+                                                        fill="currentColor"
+                                                        className="h-4 w-4"
+                                                    >
+                                                        <path
+                                                            fillRule="evenodd"
+                                                            d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z"
+                                                            clipRule="evenodd"
+                                                        />
+                                                    </svg>
+                                                </button>
                                                 <button
                                                     type="button"
                                                     onClick={(event) => {
                                                         event.stopPropagation();
                                                         handleOpenRenameModal(pattern);
                                                     }}
-                                                    className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
+                                                    className="rounded p-1.5 text-gray-400 hover:bg-gray-700 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
                                                     aria-label={`Rename pattern ${pattern.name}`}
+                                                    title="Rename pattern"
                                                 >
                                                     <svg
                                                         xmlns="http://www.w3.org/2000/svg"
@@ -732,8 +845,9 @@ const PatternDesignerPage: React.FC = () => {
                                                             handleDeletePattern(pattern.id);
                                                         }
                                                     }}
-                                                    className="rounded p-1 text-gray-400 hover:bg-red-900/40 hover:text-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+                                                    className="rounded p-1.5 text-gray-400 hover:bg-red-900/40 hover:text-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
                                                     aria-label={`Delete pattern ${pattern.name}`}
+                                                    title="Delete pattern"
                                                 >
                                                     <svg
                                                         xmlns="http://www.w3.org/2000/svg"
@@ -746,7 +860,7 @@ const PatternDesignerPage: React.FC = () => {
                                                         <path
                                                             strokeLinecap="round"
                                                             strokeLinejoin="round"
-                                                            d="M9.75 4.5l-.447 1.341a1.5 1.5 0 01-1.422 1.034H5.25m0 0h13.5m-13.5 0v12A1.5 1.5 0 006.75 20.25h10.5a1.5 1.5 0 001.5-1.5v-12m-9 3.75v6m4.5-6v6M9.75 4.5h4.5a1.5 1.5 0 011.422 1.034L16.5 6.875"
+                                                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
                                                         />
                                                     </svg>
                                                 </button>

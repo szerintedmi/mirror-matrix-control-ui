@@ -422,9 +422,15 @@ const App: React.FC = () => {
                     </React.Suspense>
                 );
             case 'patterns':
-                return <PatternDesignerPage />;
+                return <PatternDesignerPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
             case 'playback':
-                return <PlaybackPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
+                return (
+                    <PlaybackPage
+                        gridSize={gridSize}
+                        mirrorConfig={mirrorConfig}
+                        onNavigate={navigateTo}
+                    />
+                );
             case 'legacy-patterns':
             default:
                 return (

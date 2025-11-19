@@ -1,6 +1,24 @@
+import {
+    DndContext,
+    type DragEndEvent,
+    KeyboardSensor,
+    PointerSensor,
+    closestCenter,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import Modal from '@/components/Modal';
+import SequencePreview from '@/components/SequencePreview';
 import { useLogStore } from '@/context/LogContext';
 import {
     loadPlaybackSequences,
@@ -46,6 +64,115 @@ interface PlaybackSequenceManagerProps {
     dispatchPlayback: (targets: ProfilePlaybackAxisTarget[], patternName: string) => Promise<void>;
 }
 
+interface SortableItemProps {
+    entry: QueuedPattern;
+    index: number;
+    sequenceLength: number;
+    pattern: Pattern | undefined;
+    validation: SequenceValidationResult | undefined;
+    onRemove: (id: string) => void;
+}
+
+const SortableItem: React.FC<SortableItemProps> = ({
+    entry,
+    index,
+    sequenceLength,
+    pattern,
+    validation,
+    onRemove,
+}) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: entry.id,
+    });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 'auto',
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    const validationTone =
+        validation?.status === 'ok'
+            ? 'text-emerald-300'
+            : validation?.status === 'blocked'
+              ? 'text-amber-200'
+              : 'text-red-200';
+
+    return (
+        <li
+            ref={setNodeRef}
+            style={style}
+            className="flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 p-3 md:flex-row md:items-center md:justify-between"
+        >
+            <div className="flex flex-1 items-center gap-3">
+                <button
+                    type="button"
+                    className="cursor-grab touch-none p-1 text-gray-500 hover:text-gray-300 active:cursor-grabbing"
+                    {...attributes}
+                    {...listeners}
+                    aria-label="Drag to reorder"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="h-5 w-5"
+                    >
+                        <path
+                            fillRule="evenodd"
+                            d="M10 3a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM10 8.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM11.5 15.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"
+                            clipRule="evenodd"
+                        />
+                    </svg>
+                </button>
+                <div className="flex flex-1 flex-col gap-1 text-sm text-gray-200">
+                    <span className="font-semibold text-gray-100">
+                        {pattern?.name ?? 'Pattern removed'}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                        Step {index + 1} of {sequenceLength}
+                    </span>
+                    {validation && (
+                        <div className={`flex items-start gap-2 text-xs ${validationTone}`}>
+                            <span aria-hidden>{validation.status === 'ok' ? '✓' : '⚠'}</span>
+                            {validation.status === 'ok' ? (
+                                <span className="sr-only">Validation passed</span>
+                            ) : (
+                                <span>{validation.message ?? 'Needs validation attention.'}</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => onRemove(entry.id)}
+                    className="rounded p-1.5 text-gray-400 hover:bg-red-900/40 hover:text-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+                    aria-label="Remove from sequence"
+                    title="Remove from sequence"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                        className="h-5 w-5"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6 18L18 6M6 6l12 12"
+                        />
+                    </svg>
+                </button>
+            </div>
+        </li>
+    );
+};
+
 const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
     patterns,
     selectedPattern,
@@ -67,6 +194,13 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
     const [saveState, setSaveState] = useState<SaveDialogState | null>(null);
     const sequenceIdRef = useRef(0);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        }),
+    );
 
     const canAddToSequence = Boolean(selectedPattern);
     const canPlaySequence =
@@ -191,23 +325,18 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         [resetActiveSavedSequence],
     );
 
-    const moveSequenceItem = useCallback(
-        (id: string, direction: -1 | 1) => {
-            setSequence((prev) => {
-                const index = prev.findIndex((entry) => entry.id === id);
-                if (index === -1) {
-                    return prev;
-                }
-                const nextIndex = index + direction;
-                if (nextIndex < 0 || nextIndex >= prev.length) {
-                    return prev;
-                }
-                const updated = [...prev];
-                const [entry] = updated.splice(index, 1);
-                updated.splice(nextIndex, 0, entry);
-                return updated;
-            });
-            resetActiveSavedSequence();
+    const handleDragEnd = useCallback(
+        (event: DragEndEvent) => {
+            const { active, over } = event;
+
+            if (over && active.id !== over.id) {
+                setSequence((items) => {
+                    const oldIndex = items.findIndex((item) => item.id === active.id);
+                    const newIndex = items.findIndex((item) => item.id === over.id);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+                resetActiveSavedSequence();
+            }
         },
         [resetActiveSavedSequence],
     );
@@ -283,6 +412,76 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         selectedProfile,
         sequence,
     ]);
+
+    const handlePlaySavedSequence = useCallback(
+        async (savedSequence: PlaybackSequence) => {
+            // Load the sequence first
+            const filtered = savedSequence.patternIds.filter((id) => patternLookup.has(id));
+            if (filtered.length === 0) {
+                setRunStatus('error');
+                setRunMessage(
+                    'This saved sequence no longer has any valid patterns. Add patterns and re-save.',
+                );
+                return;
+            }
+            const hydrated: QueuedPattern[] = filtered.map((patternId, index) => ({
+                id: `queued-${Date.now()}-${index}`,
+                patternId,
+            }));
+            setSequence(hydrated);
+            setActiveSavedSequenceId(savedSequence.id);
+
+            // Then play it (need to wait for state update or just run logic directly)
+            // Running logic directly to avoid state race conditions
+            if (!selectedProfile) {
+                setRunStatus('error');
+                setRunMessage('Select a calibration profile to run playback.');
+                return;
+            }
+            setRunStatus('running');
+            setRunMessage(
+                `Starting playback for ${hydrated.length} pattern${hydrated.length === 1 ? '' : 's'}.`,
+            );
+            for (let index = 0; index < hydrated.length; index += 1) {
+                const entry = hydrated[index];
+                const pattern = patternLookup.get(entry.patternId);
+                if (!pattern) continue; // Should be filtered already
+
+                const plan = planProfilePlayback({
+                    gridSize,
+                    mirrorConfig,
+                    profile: selectedProfile,
+                    pattern,
+                });
+                if (plan.errors.length > 0) {
+                    const message = `Cannot play "${pattern.name}": ${plan.errors[0].message}`;
+                    logError('Playback', message);
+                    setRunStatus('error');
+                    setRunMessage(message);
+                    return;
+                }
+                try {
+                    await dispatchPlayback(plan.playableAxisTargets, pattern.name);
+                    setRunMessage(
+                        `Completed "${pattern.name}" (${index + 1}/${hydrated.length}). Running next…`,
+                    );
+                } catch (error) {
+                    const message =
+                        error instanceof Error
+                            ? error.message
+                            : `Playback failed while running "${pattern.name}".`;
+                    setRunStatus('error');
+                    setRunMessage(message);
+                    return;
+                }
+            }
+            setRunStatus('success');
+            setRunMessage(
+                `Finished playback for ${hydrated.length} pattern${hydrated.length === 1 ? '' : 's'}.`,
+            );
+        },
+        [patternLookup, selectedProfile, gridSize, mirrorConfig, logError, dispatchPlayback],
+    );
 
     const deriveDefaultSequenceName = useCallback(() => {
         const base = 'Sequence';
@@ -548,85 +747,34 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                             Add patterns to start a playback sequence.
                         </p>
                     ) : (
-                        <ol className="space-y-2" aria-label="Playback sequence list">
-                            {sequence.map((entry, index) => {
-                                const pattern = patternLookup.get(entry.patternId);
-                                const validation = validationResults.byItemId.get(entry.id);
-                                const validationTone =
-                                    validation?.status === 'ok'
-                                        ? 'text-emerald-300'
-                                        : validation?.status === 'blocked'
-                                          ? 'text-amber-200'
-                                          : 'text-red-200';
-                                return (
-                                    <li
-                                        key={entry.id}
-                                        className="flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 p-3 md:flex-row md:items-center md:justify-between"
-                                    >
-                                        <div className="flex flex-1 flex-col gap-1 text-sm text-gray-200">
-                                            <span className="font-semibold text-gray-100">
-                                                {pattern?.name ?? 'Pattern removed'}
-                                            </span>
-                                            <span className="text-xs text-gray-400">
-                                                Step {index + 1} of {sequence.length}
-                                            </span>
-                                            {validation && (
-                                                <div
-                                                    className={`flex items-start gap-2 text-xs ${validationTone}`}
-                                                >
-                                                    <span aria-hidden>
-                                                        {validation.status === 'ok' ? '✓' : '⚠'}
-                                                    </span>
-                                                    {validation.status === 'ok' ? (
-                                                        <span className="sr-only">
-                                                            Validation passed
-                                                        </span>
-                                                    ) : (
-                                                        <span>
-                                                            {validation.message ??
-                                                                'Needs validation attention.'}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => moveSequenceItem(entry.id, -1)}
-                                                disabled={index === 0}
-                                                className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
-                                                    index === 0
-                                                        ? 'cursor-not-allowed border border-gray-800 text-gray-500'
-                                                        : 'border border-gray-700 text-gray-100 hover:border-cyan-400 hover:text-cyan-200'
-                                                }`}
-                                            >
-                                                Move Up
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => moveSequenceItem(entry.id, 1)}
-                                                disabled={index === sequence.length - 1}
-                                                className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
-                                                    index === sequence.length - 1
-                                                        ? 'cursor-not-allowed border border-gray-800 text-gray-500'
-                                                        : 'border border-gray-700 text-gray-100 hover:border-cyan-400 hover:text-cyan-200'
-                                                }`}
-                                            >
-                                                Move Down
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeFromSequence(entry.id)}
-                                                className="rounded-md border border-red-500/60 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100"
-                                            >
-                                                Remove
-                                            </button>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ol>
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <SortableContext
+                                items={sequence.map((s) => s.id)}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                <ol className="space-y-2" aria-label="Playback sequence list">
+                                    {sequence.map((entry, index) => {
+                                        const pattern = patternLookup.get(entry.patternId);
+                                        const validation = validationResults.byItemId.get(entry.id);
+                                        return (
+                                            <SortableItem
+                                                key={entry.id}
+                                                entry={entry}
+                                                index={index}
+                                                sequenceLength={sequence.length}
+                                                pattern={pattern}
+                                                validation={validation}
+                                                onRemove={removeFromSequence}
+                                            />
+                                        );
+                                    })}
+                                </ol>
+                            </SortableContext>
+                        </DndContext>
                     )}
                 </div>
 
@@ -653,22 +801,39 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                                                 : 'border-gray-800 bg-gray-900/50'
                                         }`}
                                     >
-                                        <div className="flex flex-col gap-1 text-sm text-gray-100">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold">{entry.name}</span>
-                                                {isActive && (
-                                                    <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs uppercase tracking-wide text-cyan-100">
-                                                        Loaded
+                                        <div className="flex flex-1 items-center gap-3 overflow-hidden">
+                                            <SequencePreview
+                                                patternIds={entry.patternIds}
+                                                patterns={patterns}
+                                                className="h-12 w-24 flex-none rounded border border-gray-700/50 bg-gray-950"
+                                            />
+                                            <div className="flex min-w-0 flex-col gap-1 text-sm text-gray-100">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="truncate font-semibold">
+                                                        {entry.name}
                                                     </span>
-                                                )}
+                                                    {isActive && (
+                                                        <span className="flex-none rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs uppercase tracking-wide text-cyan-100">
+                                                            Loaded
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="truncate text-xs text-gray-400">
+                                                    {patternCount} pattern
+                                                    {patternCount === 1 ? '' : 's'} · Updated{' '}
+                                                    {new Date(entry.updatedAt).toLocaleString()}
+                                                </span>
                                             </div>
-                                            <span className="text-xs text-gray-400">
-                                                {patternCount} pattern
-                                                {patternCount === 1 ? '' : 's'} · Updated{' '}
-                                                {new Date(entry.updatedAt).toLocaleString()}
-                                            </span>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePlaySavedSequence(entry)}
+                                                className="rounded-md border border-emerald-600/50 bg-emerald-900/20 px-3 py-2 text-emerald-100 transition hover:bg-emerald-900/40 hover:text-white"
+                                                title="Play sequence immediately"
+                                            >
+                                                Play
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleLoadSavedSequence(entry.id)}
@@ -680,16 +845,50 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                                                 type="button"
                                                 onClick={() => openRenameDialog(entry)}
                                                 aria-label={`Rename sequence ${entry.name}`}
-                                                className="rounded-md border border-gray-700 px-3 py-2 text-gray-100 transition hover:border-cyan-400 hover:text-cyan-200"
+                                                className="rounded p-2 text-gray-400 hover:bg-gray-800 hover:text-white"
+                                                title="Rename sequence"
                                             >
-                                                Rename
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth={1.5}
+                                                    className="h-4 w-4"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M16.862 4.487l2.651 2.651a1.5 1.5 0 010 2.122l-8.19 8.19a2.25 2.25 0 01-.948.57l-3.356 1.007 1.007-3.356a2.25 2.25 0 01.57-.948l8.19-8.19a1.5 1.5 0 012.121 0z"
+                                                    />
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M19.5 13.5V19.5A1.5 1.5 0 0118 21H5.25A1.5 1.5 0 013.75 19.5V6A1.5 1.5 0 015.25 4.5H11.25"
+                                                    />
+                                                </svg>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteSavedSequence(entry.id)}
-                                                className="rounded-md border border-red-500/60 px-3 py-2 text-red-200 transition hover:border-red-400 hover:text-red-100"
+                                                className="rounded p-2 text-gray-400 hover:bg-red-900/40 hover:text-red-200"
+                                                aria-label={`Delete sequence ${entry.name}`}
+                                                title="Delete sequence"
                                             >
-                                                Delete
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth={1.5}
+                                                    className="h-4 w-4"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                                                    />
+                                                </svg>
                                             </button>
                                         </div>
                                     </div>

@@ -15,6 +15,19 @@ vi.mock('@/services/gridStorage', () => ({
     loadGridState: vi.fn(),
 }));
 
+vi.mock('@/hooks/useMotorCommands', () => ({
+    useMotorCommands: () => ({
+        moveMotor: vi.fn(),
+    }),
+}));
+
+vi.mock('@/context/LogContext', () => ({
+    useLogStore: () => ({
+        logInfo: vi.fn(),
+        logError: vi.fn(),
+    }),
+}));
+
 const STORAGE_KEY = 'mirror:calibration-patterns';
 
 interface StoredPattern {
@@ -189,6 +202,6 @@ describe('PatternDesignerPage validation feedback', () => {
         expect(pointElement).not.toBeNull();
 
         // Check if it has the error color (#ef4444)
-        expect(pointElement?.getAttribute('fill')).toBe('#ef4444');
+        expect(pointElement?.getAttribute('stroke')).toBe('#ef4444');
     });
 });

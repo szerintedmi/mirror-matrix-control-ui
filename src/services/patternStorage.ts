@@ -149,3 +149,26 @@ export const removePattern = (storage: Storage | undefined, patternId: string): 
     const next = existing.filter((pattern) => pattern.id !== patternId);
     writePatterns(storage, next);
 };
+
+const SELECTED_PATTERN_KEY = 'mirror:selected-pattern-id';
+
+export const loadLastSelectedPatternId = (storage: Storage | undefined): string | null => {
+    if (!storage) {
+        return null;
+    }
+    return storage.getItem(SELECTED_PATTERN_KEY);
+};
+
+export const persistLastSelectedPatternId = (
+    storage: Storage | undefined,
+    patternId: string | null,
+): void => {
+    if (!storage) {
+        return;
+    }
+    if (patternId) {
+        storage.setItem(SELECTED_PATTERN_KEY, patternId);
+    } else {
+        storage.removeItem(SELECTED_PATTERN_KEY);
+    }
+};
