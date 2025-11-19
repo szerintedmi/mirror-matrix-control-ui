@@ -208,12 +208,7 @@ export const useCameraPipeline = ({
     const [cameraStatus, setCameraStatus] = useState<CameraStatus>('idle');
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
-    const cameraAspectRatio = useMemo(() => {
-        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
-            return videoDimensions.width / videoDimensions.height;
-        }
-        return 1;
-    }, [videoDimensions.height, videoDimensions.width]);
+
     const [detectedBlobCount, setDetectedBlobCount] = useState(0);
     const [opencvStatus, setOpenCvStatus] = useState<OpenCvWorkerStatus>('idle');
     const [opencvError, setOpenCvError] = useState<string | null>(null);
@@ -415,11 +410,10 @@ export const useCameraPipeline = ({
         roi,
         setRoi,
         roiViewEnabled,
-        setRoiViewEnabled,
+        setRoiViewEnabled: toggleRoiView,
         roiRef,
-        cameraAspectRatio,
+        rotationDegrees,
     });
-
     const stopCurrentStream = useCallback(() => {
         if (streamRef.current) {
             streamRef.current.getTracks().forEach((track) => track.stop());
@@ -1284,6 +1278,7 @@ export const useCameraPipeline = ({
                         blobParams,
                         runDetection: true,
                         preferFallbackDetector: !useWasmDetector || !nativeBlobDetectorAvailable,
+                        rotation: rotationDegrees,
                     });
                     if (cancelled) {
                         result.frame.close();
@@ -1347,6 +1342,7 @@ export const useCameraPipeline = ({
         opencvStatus,
         previewMode,
         reportVideoDimensions,
+        rotationDegrees,
         useWasmDetector,
         workerSupported,
     ]);
@@ -1416,7 +1412,12 @@ export const useCameraPipeline = ({
                     rotatedCtx.save();
                     rotatedCtx.clearRect(0, 0, baseWidth, baseHeight);
                     rotatedCtx.translate(baseWidth / 2, baseHeight / 2);
-                    rotatedCtx.rotate((rotationDegrees * Math.PI) / 180);
+                    // Rotate (match CSS rotation direction)
+                    // CSS rotate(Ndeg) rotates CW. Canvas rotate(rad) rotates CW.
+                    // We want to rotate the crop so it appears "upright" as per the user's view rotation.
+                    // Since the image is rotated CW by 'rotationDegrees', we need to rotate CCW by the same amount to rectify it.
+                    const rad = (rotationDegrees * Math.PI) / 180;
+                    rotatedCtx.rotate(-rad);
                     rotatedCtx.translate(-baseWidth / 2, -baseHeight / 2);
                     const sourceForRotation =
                         processedSourceAvailable && processedCanvas ? processedCanvas : video;
@@ -1567,6 +1568,8 @@ export const useCameraPipeline = ({
                     };
                     renderDetectionOverlay(roiOverlayCanvas, targetWidth, targetHeight, {
                         displayRectOverride,
+                        // Rotation is handled by the worker/image transformation, so the overlay should not apply additional rotation.
+                        rotation: null,
                         calibrationOverlayCounterRotationRadians: 0,
                     });
                 } else {

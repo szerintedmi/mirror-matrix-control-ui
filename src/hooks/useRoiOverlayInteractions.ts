@@ -11,7 +11,6 @@ import {
 
 import { clamp01 } from '@/constants/calibration';
 import type { NormalizedRoi } from '@/types';
-import { buildLetterboxTransform, viewportToCamera } from '@/utils/letterbox';
 
 export type RoiEditingMode = 'idle' | 'drag' | 'resize' | 'draw';
 
@@ -22,14 +21,50 @@ export interface CameraPipelineOverlayHandlers {
     onPointerLeave: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
-interface UseRoiOverlayInteractionsParams {
+export interface UseRoiOverlayInteractionsParams {
     roi: NormalizedRoi;
     setRoi: (next: NormalizedRoi | ((prev: NormalizedRoi) => NormalizedRoi)) => void;
     roiViewEnabled: boolean;
     setRoiViewEnabled: Dispatch<SetStateAction<boolean>>;
     roiRef: MutableRefObject<NormalizedRoi>;
-    cameraAspectRatio: number;
+    rotationDegrees: number;
 }
+
+// Helper to transform ROI between Source Space and Screen Space
+const transformRoi = (
+    inputRoi: NormalizedRoi,
+    degrees: number,
+    direction: 'toScreen' | 'toSource',
+): NormalizedRoi => {
+    const normDeg = ((degrees % 360) + 360) % 360;
+    if (normDeg === 0) return { ...inputRoi };
+
+    const rot = direction === 'toScreen' ? normDeg : (360 - normDeg) % 360;
+    const rad = (rot * Math.PI) / 180;
+    const c = Math.round(Math.cos(rad));
+    const s = Math.round(Math.sin(rad));
+
+    const cx = inputRoi.x + inputRoi.width / 2;
+    const cy = inputRoi.y + inputRoi.height / 2;
+    const tx = cx - 0.5;
+    const ty = cy - 0.5;
+    const rx = tx * c - ty * s;
+    const ry = tx * s + ty * c;
+    const newCx = rx + 0.5;
+    const newCy = ry + 0.5;
+
+    const swap = Math.abs(s) === 1;
+    const newW = swap ? inputRoi.height : inputRoi.width;
+    const newH = swap ? inputRoi.width : inputRoi.height;
+
+    return {
+        ...inputRoi,
+        x: newCx - newW / 2,
+        y: newCy - newH / 2,
+        width: newW,
+        height: newH,
+    };
+};
 
 export const useRoiOverlayInteractions = ({
     roi,
@@ -37,7 +72,7 @@ export const useRoiOverlayInteractions = ({
     roiViewEnabled,
     setRoiViewEnabled,
     roiRef,
-    cameraAspectRatio,
+    rotationDegrees,
 }: UseRoiOverlayInteractionsParams): {
     roiEditingMode: RoiEditingMode;
     overlayHandlers: CameraPipelineOverlayHandlers;
@@ -49,7 +84,7 @@ export const useRoiOverlayInteractions = ({
         pointerId: number;
         mode: 'move' | 'resize' | 'draw';
         origin: { x: number; y: number };
-        initialRoi: NormalizedRoi;
+        initialScreenRoi: NormalizedRoi;
         handle?: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
     } | null>(null);
 
@@ -73,19 +108,15 @@ export const useRoiOverlayInteractions = ({
         };
     }, [roi.enabled, roiViewEnabled, setRoiViewEnabled]);
 
-    const mapPointerToCamera = useCallback(
+    const mapPointerToScreen = useCallback(
         (event: ReactPointerEvent<HTMLDivElement>, container: HTMLDivElement) => {
             const rect = container.getBoundingClientRect();
             const relativeX = clamp01((event.clientX - rect.left) / rect.width);
             const relativeY = clamp01((event.clientY - rect.top) / rect.height);
-            const viewportAspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1;
-            const transform = buildLetterboxTransform(cameraAspectRatio || 1, viewportAspect || 1);
-            return {
-                x: viewportToCamera(relativeX, 'x', transform),
-                y: viewportToCamera(relativeY, 'y', transform),
-            };
+            // We assume the container is perfectly aligned with the visual video (Screen Space)
+            return { x: relativeX, y: relativeY };
         },
-        [cameraAspectRatio],
+        [],
     );
 
     const handleOverlayPointerDown = useCallback(
@@ -100,7 +131,7 @@ export const useRoiOverlayInteractions = ({
             if (!container) {
                 return;
             }
-            const { x: cameraX, y: cameraY } = mapPointerToCamera(event, container);
+            const { x: screenX, y: screenY } = mapPointerToScreen(event, container);
             const target = event.target as HTMLElement;
             const handle = target.dataset.roiHandle as
                 | 'n'
@@ -118,17 +149,21 @@ export const useRoiOverlayInteractions = ({
             } else if (handle) {
                 mode = 'resize';
             }
+
+            // Calculate initial Screen ROI
+            const initialScreenRoi = transformRoi(roiRef.current, rotationDegrees, 'toScreen');
+
             pointerStateRef.current = {
                 pointerId: event.pointerId,
                 mode,
-                origin: { x: cameraX, y: cameraY },
-                initialRoi: roiRef.current,
+                origin: { x: screenX, y: screenY },
+                initialScreenRoi,
                 handle,
             };
             setRoiEditingMode(mode === 'draw' ? 'draw' : mode === 'move' ? 'drag' : 'resize');
             container.setPointerCapture(event.pointerId);
         },
-        [mapPointerToCamera, roi.enabled, roiViewEnabled, roiRef],
+        [mapPointerToScreen, roi.enabled, roiViewEnabled, roiRef, rotationDegrees],
     );
 
     const handleOverlayPointerMove = useCallback(
@@ -138,54 +173,55 @@ export const useRoiOverlayInteractions = ({
             if (!state || !container || state.pointerId !== event.pointerId) {
                 return;
             }
-            const { x: cameraX, y: cameraY } = mapPointerToCamera(event, container);
+            const { x: screenX, y: screenY } = mapPointerToScreen(event, container);
+
+            let newScreenRoi = { ...state.initialScreenRoi };
+
             if (state.mode === 'draw') {
                 const startX = state.origin.x;
                 const startY = state.origin.y;
-                const x = Math.min(startX, cameraX);
-                const y = Math.min(startY, cameraY);
-                const width = Math.abs(cameraX - startX);
-                const height = Math.abs(cameraY - startY);
-                setRoi((prev) => ({ ...prev, x, y, width, height }));
-                return;
-            }
-            if (state.mode === 'move') {
-                const deltaX = cameraX - state.origin.x;
-                const deltaY = cameraY - state.origin.y;
-                const next = {
-                    ...state.initialRoi,
-                    x: state.initialRoi.x + deltaX,
-                    y: state.initialRoi.y + deltaY,
+                const x = Math.min(startX, screenX);
+                const y = Math.min(startY, screenY);
+                const width = Math.abs(screenX - startX);
+                const height = Math.abs(screenY - startY);
+                newScreenRoi = { ...newScreenRoi, x, y, width, height };
+            } else if (state.mode === 'move') {
+                const deltaX = screenX - state.origin.x;
+                const deltaY = screenY - state.origin.y;
+                newScreenRoi = {
+                    ...state.initialScreenRoi,
+                    x: state.initialScreenRoi.x + deltaX,
+                    y: state.initialScreenRoi.y + deltaY,
                 };
-                setRoi(next);
-                return;
-            }
-            if (state.mode === 'resize' && state.handle) {
+            } else if (state.mode === 'resize' && state.handle) {
                 const { handle } = state;
-                const initial = state.initialRoi;
-                let next = { ...initial };
+                const initial = state.initialScreenRoi;
+
                 if (handle.includes('n')) {
                     const bottom = initial.y + initial.height;
-                    next.y = Math.min(cameraY, bottom - 0.02);
-                    next.height = bottom - next.y;
+                    newScreenRoi.y = Math.min(screenY, bottom - 0.02);
+                    newScreenRoi.height = bottom - newScreenRoi.y;
                 }
                 if (handle.includes('s')) {
                     const top = initial.y;
-                    next.height = clamp01(cameraY - top);
+                    newScreenRoi.height = clamp01(screenY - top);
                 }
                 if (handle.includes('w')) {
                     const right = initial.x + initial.width;
-                    next.x = Math.min(cameraX, right - 0.02);
-                    next.width = right - next.x;
+                    newScreenRoi.x = Math.min(screenX, right - 0.02);
+                    newScreenRoi.width = right - newScreenRoi.x;
                 }
                 if (handle.includes('e')) {
                     const left = initial.x;
-                    next.width = clamp01(cameraX - left);
+                    newScreenRoi.width = clamp01(screenX - left);
                 }
-                setRoi(next);
             }
+
+            // Transform Screen ROI -> Source ROI
+            const newSourceRoi = transformRoi(newScreenRoi, rotationDegrees, 'toSource');
+            setRoi(newSourceRoi);
         },
-        [mapPointerToCamera, setRoi],
+        [mapPointerToScreen, setRoi, rotationDegrees],
     );
 
     const handleOverlayPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

@@ -429,7 +429,11 @@ const handleProcessFrame = async (payload) => {
     clahe.apply(adjusted, claheResult);
     clahe.delete();
 
-    const detectionRect = roi && roi.enabled ? buildRect(roi, width, height) : null;
+    const processingWidth = claheResult.cols;
+    const processingHeight = claheResult.rows;
+
+    const detectionRect =
+        roi && roi.enabled ? buildRect(roi, processingWidth, processingHeight) : null;
     const detectionView = detectionRect ? claheResult.roi(detectionRect) : claheResult;
     const keypoints = runDetection
         ? detectBlobs(detectionView, detectionRect, blobParams, Boolean(preferFallbackDetector))
@@ -461,7 +465,9 @@ const handleProcessFrame = async (payload) => {
         },
         [bitmap],
     );
-    cleanupMats([rgba, claheResult, adjusted, gray, src]);
+
+    const matsToDelete = [rgba, claheResult, adjusted, gray, src];
+    cleanupMats(matsToDelete);
 };
 
 workerCtx.addEventListener('message', (event) => {

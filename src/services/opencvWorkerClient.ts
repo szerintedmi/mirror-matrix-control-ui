@@ -25,6 +25,7 @@ export interface ProcessFrameParams {
     blobParams: BlobDetectorParams;
     runDetection: boolean;
     preferFallbackDetector?: boolean;
+    rotation?: number;
 }
 
 export interface ProcessFrameResult {

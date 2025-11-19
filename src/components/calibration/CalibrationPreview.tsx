@@ -8,11 +8,6 @@ import type {
 } from '@/hooks/useCameraPipeline';
 import type { OpenCvWorkerStatus } from '@/services/opencvWorkerClient';
 import type { NormalizedRoi } from '@/types';
-import {
-    buildLetterboxTransform,
-    cameraDeltaToViewport,
-    cameraToViewport,
-} from '@/utils/letterbox';
 
 interface CalibrationPreviewProps {
     previewMode: PreviewMode;
@@ -63,6 +58,13 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     tileBoundsOverlayAvailable,
     onToggleTileBoundsOverlay,
 }) => {
+    const { width: videoWidth, height: videoHeight } = videoDimensions;
+    const rotationRad = (rotationDegrees * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rotationRad));
+    const sin = Math.abs(Math.sin(rotationRad));
+    const rotatedWidth = videoWidth * cos + videoHeight * sin;
+    const rotatedHeight = videoWidth * sin + videoHeight * cos;
+
     const videoAspectRatio = useMemo(() => {
         if (videoDimensions.width > 0 && videoDimensions.height > 0) {
             return videoDimensions.width / videoDimensions.height;
@@ -70,10 +72,76 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         return 1;
     }, [videoDimensions.height, videoDimensions.width]);
 
+    // Helper to transform ROI between Source Space (0-1 relative to Source W,H) and Screen Space (0-1 relative to Rotated W,H)
+    const transformRoi = useCallback(
+        (
+            inputRoi: { x: number; y: number; width: number; height: number },
+            degrees: number,
+            direction: 'toScreen' | 'toSource',
+        ) => {
+            // Normalize degrees to 0, 90, 180, 270
+            const normDeg = ((degrees % 360) + 360) % 360;
+
+            if (normDeg === 0) return { ...inputRoi };
+
+            // For 90 degree steps, we can map coordinates.
+            // Source (u, v) -> Screen (x, y)
+            // 90 CW: x = 1-v-h, y = u. (Wait, let's re-verify)
+            // Source TL(0,0) -> Screen TR(1,0).
+            // Source BL(0,1) -> Screen TL(0,0).
+            // Source TR(1,0) -> Screen BR(1,1).
+            // Source BR(1,1) -> Screen BL(0,1).
+
+            // Let's use a geometric approach:
+            // Center is 0.5, 0.5.
+            // Rotate point around center.
+            // If direction is 'toScreen', we rotate by `degrees` CW.
+            // If direction is 'toSource', we rotate by `-degrees` (or `360-degrees`) CW.
+
+            const rot = direction === 'toScreen' ? normDeg : (360 - normDeg) % 360;
+            const rad = (rot * Math.PI) / 180;
+            const c = Math.round(Math.cos(rad)); // 0, 1, -1
+            const s = Math.round(Math.sin(rad)); // 0, 1, -1
+
+            // Rotate center of ROI
+            const cx = inputRoi.x + inputRoi.width / 2;
+            const cy = inputRoi.y + inputRoi.height / 2;
+
+            // Translate to origin (0.5, 0.5)
+            const tx = cx - 0.5;
+            const ty = cy - 0.5;
+
+            // Rotate
+            // x' = x*c - y*s
+            // y' = x*s + y*c
+            const rx = tx * c - ty * s;
+            const ry = tx * s + ty * c;
+
+            // Translate back
+            const newCx = rx + 0.5;
+            const newCy = ry + 0.5;
+
+            // Rotate dimensions
+            // If 90 or 270, swap width/height
+            const swap = Math.abs(s) === 1;
+            const newW = swap ? inputRoi.height : inputRoi.width;
+            const newH = swap ? inputRoi.width : inputRoi.height;
+
+            return {
+                x: newCx - newW / 2,
+                y: newCy - newH / 2,
+                width: newW,
+                height: newH,
+            };
+        },
+        [],
+    );
+
     const roiAspectRatio = useMemo(() => {
         if (!roiViewEnabled || !roi.enabled) {
             return null;
         }
+        // ROI is relative to the source video dimensions
         if (videoDimensions.width <= 0 || videoDimensions.height <= 0) {
             return null;
         }
@@ -98,18 +166,26 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
 
     const previewAspectRatio = useMemo(() => {
         if (showFullFrame) {
-            if (videoAspectRatio > 0) {
-                return videoAspectRatio;
+            // When showing full frame, we want to fit the ROTATED video
+            if (rotatedWidth > 0 && rotatedHeight > 0) {
+                return rotatedWidth / rotatedHeight;
             }
             return 16 / 9;
         }
         return roiAspectRatio ?? videoAspectRatio ?? 16 / 9;
-    }, [roiAspectRatio, showFullFrame, videoAspectRatio]);
+    }, [roiAspectRatio, rotatedHeight, rotatedWidth, showFullFrame, videoAspectRatio]);
 
-    const letterboxTransform = useMemo(
-        () => buildLetterboxTransform(videoAspectRatio || 1, previewAspectRatio || 1),
-        [previewAspectRatio, videoAspectRatio],
-    );
+    // For the ROI overlay (Screen Space), we need a transform that maps 0-1 (Screen) to Viewport.
+    // Since the container has `previewAspectRatio` (Rotated), and we want to draw on it.
+    // If `showFullFrame` is true, `previewAspectRatio` matches `rotatedWidth/rotatedHeight`.
+    // So Screen Space 0-1 maps directly to Container 0-1.
+    // So we don't need `letterboxTransform` for the ROI overlay if it's screen aligned!
+    // Wait, `letterboxTransform` handles "fitting" the content.
+    // If `previewAspectRatio` matches the content aspect ratio, then transform is Identity.
+    // Here `previewAspectRatio` is calculated from `rotatedWidth/rotatedHeight`.
+    // So the content (Rotated Video) fits perfectly.
+    // So Screen Space 0-1 is exactly the video area.
+
     const processedVisible =
         showFullFrame && previewMode === 'processed' && opencvStatus === 'ready';
     const rawVisible =
@@ -240,7 +316,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         tileBoundsOverlayEnabled
                             ? 'border-amber-400/70 bg-amber-400/15 text-amber-200'
                             : 'border-gray-700 bg-gray-900 text-gray-400'
-                    } ${!tileBoundsOverlayAvailable ? 'opacity-50' : ''}`}
+                    }`}
                     title="Visualize each tile's inferred reach bounds"
                     aria-pressed={tileBoundsOverlayEnabled}
                     disabled={!tileBoundsOverlayAvailable}
@@ -269,8 +345,14 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     onPointerLeave={overlayHandlers.onPointerLeave}
                 >
                     <div
-                        className="absolute inset-0 origin-center transition-transform duration-150 ease-out"
-                        style={{ transform: `rotate(${rotationDegrees}deg)` }}
+                        className="absolute origin-center"
+                        style={{
+                            width: `${(videoWidth / rotatedWidth) * 100}%`,
+                            height: `${(videoHeight / rotatedHeight) * 100}%`,
+                            left: '50%',
+                            top: '50%',
+                            transform: `translate(-50%, -50%) rotate(${rotationDegrees}deg)`,
+                        }}
                     >
                         <video
                             ref={bindVideoRef}
@@ -293,6 +375,8 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                             }`}
                         />
                     </div>
+
+                    {/* ROI Canvas and Overlay are OUTSIDE the rotated wrapper, so they are Screen Aligned */}
                     <canvas
                         ref={bindRoiCanvasRef}
                         className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
@@ -308,11 +392,16 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     {showFullFrame &&
                         roi.enabled &&
                         (() => {
+                            // Transform Source ROI to Screen ROI
+                            const screenRoi = transformRoi(roi, rotationDegrees, 'toScreen');
+
+                            // Since we are outside the rotated wrapper, and the container fits the rotated video,
+                            // Screen Space (0-1) maps directly to the container.
                             const roiViewport = {
-                                x: cameraToViewport(roi.x, 'x', letterboxTransform),
-                                y: cameraToViewport(roi.y, 'y', letterboxTransform),
-                                width: cameraDeltaToViewport(roi.width, 'x', letterboxTransform),
-                                height: cameraDeltaToViewport(roi.height, 'y', letterboxTransform),
+                                x: screenRoi.x,
+                                y: screenRoi.y,
+                                width: screenRoi.width,
+                                height: screenRoi.height,
                             };
                             return (
                                 <div
@@ -362,12 +451,11 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     {rotationOverlayVisible && (
                         <div
                             data-testid="rotation-grid-overlay"
-                            className="pointer-events-none absolute inset-0"
+                            className="pointer-events-none absolute inset-0 z-10"
                             style={{
-                                backgroundImage:
-                                    'linear-gradient(#1c9cbf66 1px, transparent 1px), linear-gradient(90deg, #1c9cbf66 1px, transparent 1px)',
+                                backgroundImage: `linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                                                  linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
                                 backgroundSize: '50px 50px',
-                                opacity: 0.7,
                             }}
                         />
                     )}
