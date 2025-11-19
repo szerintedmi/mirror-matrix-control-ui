@@ -825,32 +825,19 @@ export class CalibrationRunner {
                 const size = entry.homeMeasurement?.size ?? 0;
                 return size > max ? size : max;
             }, 0);
-            const referenceMeasurement =
-                measuredTiles.find((entry) => entry.homeMeasurement)?.homeMeasurement ?? null;
-            const referenceWidth = referenceMeasurement?.sourceWidth ?? 1;
-            const referenceHeight = referenceMeasurement?.sourceHeight ?? 1;
-            const dominantDimension = Math.max(referenceWidth, referenceHeight, 1);
-            const normalizeX = referenceWidth > 0 ? dominantDimension / referenceWidth : 1;
-            const normalizeY = referenceHeight > 0 ? dominantDimension / referenceHeight : 1;
+            const tileWidth = largestSize;
+            const tileHeight = largestSize;
             const normalizedGap = Math.max(0, Math.min(1, this.settings.gridGapNormalized)) * 2;
-            let tileWidth = largestSize * normalizeX;
-            let tileHeight = largestSize * normalizeY;
-            let gapX = normalizedGap * normalizeX;
-            let gapY = normalizedGap * normalizeY;
+            const gapX = normalizedGap;
+            const gapY = normalizedGap;
             let spacingX = tileWidth + gapX;
             let spacingY = tileHeight + gapY;
             let totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * gapX;
             let totalHeight = this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * gapY;
             if (totalWidth > 2 || totalHeight > 2) {
-                const scale = 2 / Math.max(totalWidth, totalHeight);
-                tileWidth *= scale;
-                tileHeight *= scale;
-                gapX *= scale;
-                gapY *= scale;
-                spacingX = tileWidth + gapX;
-                spacingY = tileHeight + gapY;
-                totalWidth *= scale;
-                totalHeight *= scale;
+                // Scaling logic removed to preserve isotropic aspect ratio.
+                // If the grid is too large, it will simply extend beyond the [-1, 1] bounds,
+                // which is acceptable for the coordinate system (it just means it's larger than the view).
             }
             let originX = 0;
             let originY = 0;

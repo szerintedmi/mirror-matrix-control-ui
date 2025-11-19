@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DEFAULT_ROI, clamp01, type ResolutionOption } from '@/constants/calibration';
+import { DEFAULT_ROI, type ResolutionOption } from '@/constants/calibration';
 import {
     type CameraPipelineOverlayHandlers,
     useRoiOverlayInteractions,
@@ -23,6 +23,11 @@ import {
     cameraDeltaToViewport,
     cameraToViewport,
 } from '@/utils/letterbox';
+import {
+    denormalizeIsotropic,
+    denormalizeIsotropicDelta,
+    normalizeIsotropic,
+} from '@/utils/normalization';
 
 import type React from 'react';
 
@@ -351,8 +356,12 @@ export const useCameraPipeline = ({
             return null;
         }
         const normalized = blobs.map((blob) => {
-            const normalizedX = clamp01(blob.x / meta.sourceWidth);
-            const normalizedY = clamp01(blob.y / meta.sourceHeight);
+            const { x: normalizedX, y: normalizedY } = normalizeIsotropic(
+                blob.x,
+                blob.y,
+                meta.sourceWidth,
+                meta.sourceHeight,
+            );
             const normalizedSize = blob.size / Math.max(meta.sourceWidth, meta.sourceHeight);
             return {
                 blob,
@@ -696,23 +705,15 @@ export const useCameraPipeline = ({
                     return;
                 }
                 const { bounds, cameraOriginOffset } = payload;
-                const sourceWidth = captureWidth;
-                const sourceHeight = captureHeight;
                 const normalizedWidth = bounds.x.max - bounds.x.min;
                 const normalizedHeight = bounds.y.max - bounds.y.min;
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                     return;
                 }
-                const pxLeft = convertCoordToPixels(
-                    bounds.x.min + cameraOriginOffset.x,
-                    sourceWidth,
-                );
-                const pxTop = convertCoordToPixels(
-                    bounds.y.min + cameraOriginOffset.y,
-                    sourceHeight,
-                );
-                const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
-                const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                const pxLeft = convertCoordToPixelsX(bounds.x.min + cameraOriginOffset.x);
+                const pxTop = convertCoordToPixelsY(bounds.y.min + cameraOriginOffset.y);
+                const pxWidth = convertDeltaToPixels(normalizedWidth);
+                const pxHeight = convertDeltaToPixels(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
                 const localTop = projectCameraValue(pxTop, 'y');
                 const rectWidth = projectCameraDelta(pxWidth, 'x');
@@ -728,10 +729,16 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
-            const convertCoordToPixels = (value: number, dimension: number): number =>
-                centeredToView(value) * dimension;
-            const convertDeltaToPixels = (delta: number, dimension: number): number =>
-                centeredDeltaToView(delta) * dimension;
+            const convertCoordToPixelsX = (value: number): number => {
+                const iso = centeredToView(value);
+                return denormalizeIsotropic(iso, 0, captureWidth, captureHeight).x;
+            };
+            const convertCoordToPixelsY = (value: number): number => {
+                const iso = centeredToView(value);
+                return denormalizeIsotropic(0, iso, captureWidth, captureHeight).y;
+            };
+            const convertDeltaToPixels = (delta: number): number =>
+                denormalizeIsotropicDelta(centeredDeltaToView(delta), captureWidth, captureHeight);
 
             const drawTileBoundsCanvas = () => {
                 const payload = tileBoundsOverlayRef.current;
@@ -739,8 +746,6 @@ export const useCameraPipeline = ({
                     return;
                 }
                 const { entries, cameraOriginOffset } = payload;
-                const sourceWidth = captureWidth;
-                const sourceHeight = captureHeight;
                 ctx.save();
                 ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.0035);
                 entries.forEach((entry, index) => {
@@ -749,16 +754,10 @@ export const useCameraPipeline = ({
                     if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                         return;
                     }
-                    const pxLeft = convertCoordToPixels(
-                        entry.bounds.x.min + cameraOriginOffset.x,
-                        sourceWidth,
-                    );
-                    const pxTop = convertCoordToPixels(
-                        entry.bounds.y.min + cameraOriginOffset.y,
-                        sourceHeight,
-                    );
-                    const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
-                    const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                    const pxLeft = convertCoordToPixelsX(entry.bounds.x.min + cameraOriginOffset.x);
+                    const pxTop = convertCoordToPixelsY(entry.bounds.y.min + cameraOriginOffset.y);
+                    const pxWidth = convertDeltaToPixels(normalizedWidth);
+                    const pxHeight = convertDeltaToPixels(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     const rectWidth = projectCameraDelta(pxWidth, 'x');
@@ -806,8 +805,6 @@ export const useCameraPipeline = ({
                     blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
-                const sourceWidth = captureWidth;
-                const sourceHeight = captureHeight;
                 ctx.save();
                 ctx.lineWidth = 2;
                 const alignmentStrokeColor = formatAlignmentRgba(0.7);
@@ -826,16 +823,10 @@ export const useCameraPipeline = ({
                         adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
                     const normalizedTop =
                         adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = convertCoordToPixels(normalizedLeft + offsetX, sourceWidth);
-                    const pxTop = convertCoordToPixels(normalizedTop + offsetY, sourceHeight);
-                    const pxWidth = convertDeltaToPixels(
-                        blueprint.adjustedTileFootprint.width,
-                        sourceWidth,
-                    );
-                    const pxHeight = convertDeltaToPixels(
-                        blueprint.adjustedTileFootprint.height,
-                        sourceHeight,
-                    );
+                    const pxLeft = convertCoordToPixelsX(normalizedLeft + offsetX);
+                    const pxTop = convertCoordToPixelsY(normalizedTop + offsetY);
+                    const pxWidth = convertDeltaToPixels(blueprint.adjustedTileFootprint.width);
+                    const pxHeight = convertDeltaToPixels(blueprint.adjustedTileFootprint.height);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     const rectWidth = projectCameraDelta(pxWidth, 'x');
@@ -875,11 +866,11 @@ export const useCameraPipeline = ({
                         : undefined;
                     if (measurement) {
                         const measurementX = projectCameraValue(
-                            convertCoordToPixels(measurement.x, sourceWidth),
+                            convertCoordToPixelsX(measurement.x),
                             'x',
                         );
                         const measurementY = projectCameraValue(
-                            convertCoordToPixels(measurement.y, sourceHeight),
+                            convertCoordToPixelsY(measurement.y),
                             'y',
                         );
                         if (measurementX == null || measurementY == null) {
@@ -981,8 +972,6 @@ export const useCameraPipeline = ({
                     blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
-                const sourceWidth = meta.sourceWidth || width;
-                const sourceHeight = meta.sourceHeight || height;
                 const squareColor = new runtime.Scalar(
                     ALIGNMENT_TEAL.b,
                     ALIGNMENT_TEAL.g,
@@ -1009,16 +998,10 @@ export const useCameraPipeline = ({
                         adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
                     const normalizedTop =
                         adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = convertCoordToPixels(normalizedLeft + offsetX, sourceWidth);
-                    const pxTop = convertCoordToPixels(normalizedTop + offsetY, sourceHeight);
-                    const pxWidth = convertDeltaToPixels(
-                        blueprint.adjustedTileFootprint.width,
-                        sourceWidth,
-                    );
-                    const pxHeight = convertDeltaToPixels(
-                        blueprint.adjustedTileFootprint.height,
-                        sourceHeight,
-                    );
+                    const pxLeft = convertCoordToPixelsX(normalizedLeft + offsetX);
+                    const pxTop = convertCoordToPixelsY(normalizedTop + offsetY);
+                    const pxWidth = convertDeltaToPixels(blueprint.adjustedTileFootprint.width);
+                    const pxHeight = convertDeltaToPixels(blueprint.adjustedTileFootprint.height);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     const rectWidth = projectCameraDelta(pxWidth, 'x');
@@ -1072,11 +1055,11 @@ export const useCameraPipeline = ({
                         : undefined;
                     if (measurement) {
                         const measurementX = projectCameraValue(
-                            convertCoordToPixels(measurement.x, sourceWidth),
+                            convertCoordToPixelsX(measurement.x),
                             'x',
                         );
                         const measurementY = projectCameraValue(
-                            convertCoordToPixels(measurement.y, sourceHeight),
+                            convertCoordToPixelsY(measurement.y),
                             'y',
                         );
                         if (measurementX == null || measurementY == null) {
@@ -1119,18 +1102,10 @@ export const useCameraPipeline = ({
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                     return;
                 }
-                const sourceWidth = captureWidth;
-                const sourceHeight = captureHeight;
-                const pxLeft = convertCoordToPixels(
-                    bounds.x.min + cameraOriginOffset.x,
-                    sourceWidth,
-                );
-                const pxTop = convertCoordToPixels(
-                    bounds.y.min + cameraOriginOffset.y,
-                    sourceHeight,
-                );
-                const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
-                const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                const pxLeft = convertCoordToPixelsX(bounds.x.min + cameraOriginOffset.x);
+                const pxTop = convertCoordToPixelsY(bounds.y.min + cameraOriginOffset.y);
+                const pxWidth = convertDeltaToPixels(normalizedWidth);
+                const pxHeight = convertDeltaToPixels(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
                 const localTop = projectCameraValue(pxTop, 'y');
                 const rectWidth = projectCameraDelta(pxWidth, 'x');
@@ -1153,24 +1128,16 @@ export const useCameraPipeline = ({
                     return;
                 }
                 const { entries, cameraOriginOffset } = payload;
-                const sourceWidth = captureWidth;
-                const sourceHeight = captureHeight;
                 entries.forEach((entry, index) => {
                     const normalizedWidth = entry.bounds.x.max - entry.bounds.x.min;
                     const normalizedHeight = entry.bounds.y.max - entry.bounds.y.min;
                     if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                         return;
                     }
-                    const pxLeft = convertCoordToPixels(
-                        entry.bounds.x.min + cameraOriginOffset.x,
-                        sourceWidth,
-                    );
-                    const pxTop = convertCoordToPixels(
-                        entry.bounds.y.min + cameraOriginOffset.y,
-                        sourceHeight,
-                    );
-                    const pxWidth = convertDeltaToPixels(normalizedWidth, sourceWidth);
-                    const pxHeight = convertDeltaToPixels(normalizedHeight, sourceHeight);
+                    const pxLeft = convertCoordToPixelsX(entry.bounds.x.min + cameraOriginOffset.x);
+                    const pxTop = convertCoordToPixelsY(entry.bounds.y.min + cameraOriginOffset.y);
+                    const pxWidth = convertDeltaToPixels(normalizedWidth);
+                    const pxHeight = convertDeltaToPixels(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     const rectWidth = projectCameraDelta(pxWidth, 'x');
