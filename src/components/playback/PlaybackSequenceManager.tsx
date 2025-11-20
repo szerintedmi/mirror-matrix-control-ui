@@ -15,7 +15,7 @@ import {
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Modal from '@/components/Modal';
 import SequencePreview from '@/components/SequencePreview';
@@ -183,7 +183,7 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
     onSelectPatternId,
     dispatchPlayback,
 }) => {
-    const { logError } = useLogStore();
+    const { logInfo } = useLogStore();
     const [sequence, setSequence] = useState<QueuedPattern[]>([]);
     const [savedSequences, setSavedSequences] = useState<PlaybackSequence[]>(() =>
         loadPlaybackSequences(storage),
@@ -192,8 +192,9 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
     const [runStatus, setRunStatus] = useState<RunStatus>('idle');
     const [runMessage, setRunMessage] = useState<string | null>(null);
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
-    const [saveState, setSaveState] = useState<SaveDialogState | null>(null);
+    const [saveDialogState, setSaveDialogState] = useState<SaveDialogState | null>(null);
     const sequenceIdRef = useRef(0);
+    const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -205,6 +206,7 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
     const canAddToSequence = Boolean(selectedPattern);
     const canPlaySequence =
         sequence.length > 0 && Boolean(selectedProfile) && runStatus !== 'running';
+    const isEditMode = Boolean(activeSavedSequenceId);
 
     const patternLookup = useMemo(
         () => new Map(patterns.map((pattern) => [pattern.id, pattern])),
@@ -276,6 +278,48 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         return `queued-${Date.now()}-${sequenceIdRef.current}`;
     }, []);
 
+    // Autosave Effect
+    useEffect(() => {
+        if (!activeSavedSequenceId) {
+            return;
+        }
+
+        if (autosaveTimeoutRef.current) {
+            clearTimeout(autosaveTimeoutRef.current);
+        }
+
+        autosaveTimeoutRef.current = setTimeout(() => {
+            const activeSequence = savedSequences.find((s) => s.id === activeSavedSequenceId);
+            if (!activeSequence) return;
+
+            const currentPatternIds = sequence.map((entry) => entry.patternId);
+            // Only save if changed
+            const isChanged =
+                activeSequence.patternIds.length !== currentPatternIds.length ||
+                activeSequence.patternIds.some((id, index) => id !== currentPatternIds[index]);
+
+            if (isChanged) {
+                const updatedSequence: PlaybackSequence = {
+                    ...activeSequence,
+                    updatedAt: new Date().toISOString(),
+                    patternIds: currentPatternIds,
+                };
+                const nextSaved = savedSequences.map((s) =>
+                    s.id === activeSavedSequenceId ? updatedSequence : s,
+                );
+                setSavedSequences(nextSaved);
+                persistPlaybackSequences(storage, nextSaved);
+                logInfo('Playback', `Autosaved changes to "${activeSequence.name}".`);
+            }
+        }, 1000); // Debounce 1s
+
+        return () => {
+            if (autosaveTimeoutRef.current) {
+                clearTimeout(autosaveTimeoutRef.current);
+            }
+        };
+    }, [sequence, activeSavedSequenceId, savedSequences, storage, logInfo]);
+
     const persistSequencePayload = useCallback(
         (sequenceId: string, name: string, existing?: PlaybackSequence) => {
             const now = new Date().toISOString();
@@ -300,189 +344,97 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         [savedSequences, sequence, storage],
     );
 
-    const resetActiveSavedSequence = useCallback(() => {
-        setActiveSavedSequenceId(null);
-    }, []);
-
-    const addPatternToSequence = useCallback(() => {
+    const handleAddToSequence = () => {
         if (!selectedPattern) {
             setRunStatus('error');
             setRunMessage('Select a pattern to add to the playback sequence.');
             return;
         }
-        const id = generateItemId();
-        setSequence((prev) => [...prev, { id, patternId: selectedPattern.id }]);
-        resetActiveSavedSequence();
+        const newItem: QueuedPattern = {
+            id: generateItemId(),
+            patternId: selectedPattern.id,
+        };
+        setSequence((prev) => [...prev, newItem]);
         setRunStatus('idle');
-        setRunMessage(`Added "${selectedPattern.name}" to the sequence.`);
-    }, [generateItemId, resetActiveSavedSequence, selectedPattern]);
+        setRunMessage(null);
+    };
 
-    const removeFromSequence = useCallback(
-        (id: string) => {
-            setSequence((prev) => prev.filter((entry) => entry.id !== id));
-            resetActiveSavedSequence();
-        },
-        [resetActiveSavedSequence],
-    );
+    const handleRemoveFromSequence = (itemId: string) => {
+        setSequence((prev) => prev.filter((item) => item.id !== itemId));
+        setRunStatus('idle');
+        setRunMessage(null);
+    };
 
-    const handleDragEnd = useCallback(
-        (event: DragEndEvent) => {
-            const { active, over } = event;
-
-            if (over && active.id !== over.id) {
-                setSequence((items) => {
-                    const oldIndex = items.findIndex((item) => item.id === active.id);
-                    const newIndex = items.findIndex((item) => item.id === over.id);
-                    return arrayMove(items, oldIndex, newIndex);
-                });
-                resetActiveSavedSequence();
-            }
-        },
-        [resetActiveSavedSequence],
-    );
-
-    const clearSequence = useCallback(() => {
-        setSequence([]);
-        resetActiveSavedSequence();
-    }, [resetActiveSavedSequence]);
-
-    const handlePlaySequence = useCallback(async () => {
-        if (sequence.length === 0) {
-            setRunStatus('error');
-            setRunMessage('Add at least one pattern to the playback sequence.');
-            return;
-        }
-        if (!selectedProfile) {
-            setRunStatus('error');
-            setRunMessage('Select a calibration profile to run playback.');
-            return;
-        }
-        setRunStatus('running');
-        setRunMessage(
-            `Starting playback for ${sequence.length} pattern${sequence.length === 1 ? '' : 's'}.`,
-        );
-        for (let index = 0; index < sequence.length; index += 1) {
-            const entry = sequence[index];
-            const pattern = patternLookup.get(entry.patternId);
-            if (!pattern) {
-                const message = 'A pattern in the sequence is no longer available.';
-                logError('Playback', message);
-                setRunStatus('error');
-                setRunMessage(message);
-                return;
-            }
-            const plan = planProfilePlayback({
-                gridSize,
-                mirrorConfig,
-                profile: selectedProfile,
-                pattern,
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            setSequence((items) => {
+                const oldIndex = items.findIndex((item) => item.id === active.id);
+                const newIndex = items.findIndex((item) => item.id === over.id);
+                return arrayMove(items, oldIndex, newIndex);
             });
-            if (plan.errors.length > 0) {
-                const message = `Cannot play "${pattern.name}": ${plan.errors[0].message}`;
-                logError('Playback', message);
-                setRunStatus('error');
-                setRunMessage(message);
-                return;
-            }
-            try {
-                await dispatchPlayback(plan.playableAxisTargets, pattern.name);
-                setRunMessage(
-                    `Completed "${pattern.name}" (${index + 1}/${sequence.length}). Running next…`,
-                );
-            } catch (error) {
-                const message =
-                    error instanceof Error
-                        ? error.message
-                        : `Playback failed while running "${pattern.name}".`;
-                setRunStatus('error');
-                setRunMessage(message);
-                return;
-            }
         }
-        setRunStatus('success');
-        setRunMessage(
-            `Finished playback for ${sequence.length} pattern${sequence.length === 1 ? '' : 's'}.`,
-        );
-    }, [
-        dispatchPlayback,
-        gridSize,
-        logError,
-        mirrorConfig,
-        patternLookup,
-        selectedProfile,
-        sequence,
-    ]);
+    };
 
-    const handlePlaySavedSequence = useCallback(
-        async (savedSequence: PlaybackSequence) => {
-            // Load the sequence first
-            const filtered = savedSequence.patternIds.filter((id) => patternLookup.has(id));
-            if (filtered.length === 0) {
-                setRunStatus('error');
-                setRunMessage(
-                    'This saved sequence no longer has any valid patterns. Add patterns and re-save.',
-                );
-                return;
-            }
-            const hydrated: QueuedPattern[] = filtered.map((patternId, index) => ({
-                id: `queued-${Date.now()}-${index}`,
-                patternId,
-            }));
-            setSequence(hydrated);
-            setActiveSavedSequenceId(savedSequence.id);
+    const handleClearSequence = () => {
+        if (confirm('Are you sure you want to clear the current sequence?')) {
+            setSequence([]);
+            setRunStatus('idle');
+            setRunMessage(null);
+        }
+    };
 
-            // Then play it (need to wait for state update or just run logic directly)
-            // Running logic directly to avoid state race conditions
-            if (!selectedProfile) {
-                setRunStatus('error');
-                setRunMessage('Select a calibration profile to run playback.');
-                return;
-            }
-            setRunStatus('running');
-            setRunMessage(
-                `Starting playback for ${hydrated.length} pattern${hydrated.length === 1 ? '' : 's'}.`,
-            );
-            for (let index = 0; index < hydrated.length; index += 1) {
-                const entry = hydrated[index];
+    const handleCloseEditMode = () => {
+        setActiveSavedSequenceId(null);
+        setSequence([]);
+        setRunStatus('idle');
+        setRunMessage(null);
+    };
+
+    const handlePlaySequence = async () => {
+        if (!canPlaySequence) return;
+        setRunStatus('running');
+        setRunMessage(null);
+
+        try {
+            for (let i = 0; i < sequence.length; i++) {
+                const entry = sequence[i];
                 const pattern = patternLookup.get(entry.patternId);
-                if (!pattern) continue; // Should be filtered already
+                if (!pattern) {
+                    throw new Error('A pattern in the sequence is no longer available.');
+                }
 
+                // Validate again before running
                 const plan = planProfilePlayback({
                     gridSize,
                     mirrorConfig,
-                    profile: selectedProfile,
+                    profile: selectedProfile!,
                     pattern,
                 });
+
                 if (plan.errors.length > 0) {
-                    const message = `Cannot play "${pattern.name}": ${plan.errors[0].message}`;
-                    logError('Playback', message);
-                    setRunStatus('error');
-                    setRunMessage(message);
-                    return;
-                }
-                try {
-                    await dispatchPlayback(plan.playableAxisTargets, pattern.name);
-                    setRunMessage(
-                        `Completed "${pattern.name}" (${index + 1}/${hydrated.length}). Running next…`,
+                    throw new Error(
+                        `Pattern "${pattern.name}" has errors: ${plan.errors[0].message}`,
                     );
-                } catch (error) {
-                    const message =
-                        error instanceof Error
-                            ? error.message
-                            : `Playback failed while running "${pattern.name}".`;
-                    setRunStatus('error');
-                    setRunMessage(message);
-                    return;
+                }
+
+                // Highlight current item? (Not implemented visually yet, but logic is here)
+                await dispatchPlayback(plan.playableAxisTargets, pattern.name);
+
+                // Optional delay between patterns?
+                if (i < sequence.length - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 500));
                 }
             }
             setRunStatus('success');
-            setRunMessage(
-                `Finished playback for ${hydrated.length} pattern${hydrated.length === 1 ? '' : 's'}.`,
-            );
-        },
-        [patternLookup, selectedProfile, gridSize, mirrorConfig, logError, dispatchPlayback],
-    );
+            setRunMessage('Sequence completed successfully.');
+        } catch (error) {
+            setRunStatus('error');
+            setRunMessage(error instanceof Error ? error.message : 'Sequence playback failed.');
+        }
+    };
 
+    // Save/Load Handlers
     const deriveDefaultSequenceName = useCallback(() => {
         const base = 'Sequence';
         const existingNames = new Set(savedSequences.map((entry) => entry.name));
@@ -495,83 +447,32 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         return candidate;
     }, [savedSequences]);
 
-    const openSaveDialog = useCallback(
-        (name?: string) => setSaveState({ value: name ?? deriveDefaultSequenceName() }),
-        [deriveDefaultSequenceName],
-    );
-
-    const handleSaveSequence = useCallback(() => {
-        if (sequence.length === 0) {
-            setRunStatus('error');
-            setRunMessage('Add patterns before saving a playback sequence.');
-            return;
-        }
-        const active = activeSavedSequenceId
-            ? savedSequences.find((entry) => entry.id === activeSavedSequenceId)
-            : null;
-        if (active) {
-            persistSequencePayload(active.id, active.name, active);
-            return;
-        }
-        openSaveDialog();
-    }, [
-        activeSavedSequenceId,
-        openSaveDialog,
-        persistSequencePayload,
-        savedSequences,
-        sequence.length,
-    ]);
-
-    const handleSaveAs = useCallback(() => {
-        if (sequence.length === 0) {
-            setRunStatus('error');
-            setRunMessage('Add patterns before saving a playback sequence.');
-            return;
-        }
-        const active = activeSavedSequenceId
-            ? savedSequences.find((entry) => entry.id === activeSavedSequenceId)
-            : null;
-        const suggestedName = active ? `${active.name} copy` : deriveDefaultSequenceName();
-        openSaveDialog(suggestedName);
-    }, [
-        activeSavedSequenceId,
-        deriveDefaultSequenceName,
-        openSaveDialog,
-        savedSequences,
-        sequence.length,
-    ]);
-
-    const handleSaveInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-        const value = event.target.value;
-        setSaveState((previous) => (previous ? { ...previous, value } : previous));
-    }, []);
+    const handleOpenSaveModal = useCallback(() => {
+        setSaveDialogState({ value: deriveDefaultSequenceName() });
+    }, [deriveDefaultSequenceName]);
 
     const handleSaveSubmit = useCallback(
-        (event?: React.FormEvent<HTMLFormElement>) => {
-            event?.preventDefault();
-            if (!saveState) {
+        (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!saveDialogState) return;
+            const name = saveDialogState.value.trim();
+            if (!name || sequence.length === 0) {
+                setRunStatus('error');
+                setRunMessage('Sequence cannot be empty or name cannot be blank.');
                 return;
             }
-            const trimmed = saveState.value.trim();
-            if (!trimmed || sequence.length === 0) {
-                return;
-            }
-            const sequenceId = `sequence-${Date.now().toString(36)}`;
-            persistSequencePayload(sequenceId, trimmed);
-            setSaveState(null);
+
+            const newId = `seq-${Date.now().toString(36)}`;
+            persistSequencePayload(newId, name);
+            setSaveDialogState(null);
         },
-        [persistSequencePayload, saveState, sequence.length],
+        [persistSequencePayload, saveDialogState, sequence.length],
     );
 
-    const handleCloseSaveModal = useCallback(() => setSaveState(null), []);
-
-    const handleLoadSavedSequence = useCallback(
-        (sequenceId: string) => {
-            const saved = savedSequences.find((entry) => entry.id === sequenceId);
-            if (!saved) {
-                return;
-            }
-            const filtered = saved.patternIds.filter((id) => patternLookup.has(id));
+    const handleEditSequence = useCallback(
+        (seq: PlaybackSequence) => {
+            // Load sequence into queue
+            const filtered = seq.patternIds.filter((id) => patternLookup.has(id));
             if (filtered.length === 0) {
                 setRunStatus('error');
                 setRunMessage(
@@ -581,41 +482,61 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                 setActiveSavedSequenceId(null);
                 return;
             }
-            const hydrated: QueuedPattern[] = filtered.map((patternId, index) => ({
-                id: `queued-${Date.now()}-${index}`,
-                patternId,
+            const queuedItems: QueuedPattern[] = filtered.map((pid) => ({
+                id: generateItemId(),
+                patternId: pid,
             }));
-            setSequence(hydrated);
-            setActiveSavedSequenceId(sequenceId);
-            onSelectPatternId(filtered[0]);
+            setSequence(queuedItems);
+            setActiveSavedSequenceId(seq.id);
+            onSelectPatternId(filtered[0]); // Select the first pattern in the sequence
             setRunStatus('idle');
-            setRunMessage(`Loaded "${saved.name}" (${hydrated.length} patterns).`);
+            setRunMessage(`Editing "${seq.name}"`);
         },
-        [onSelectPatternId, patternLookup, savedSequences],
+        [generateItemId, onSelectPatternId, patternLookup],
     );
 
     const handleDeleteSavedSequence = useCallback(
-        (sequenceId: string) => {
-            const target = savedSequences.find((entry) => entry.id === sequenceId);
+        (seqId: string) => {
+            const target = savedSequences.find((entry) => entry.id === seqId);
             if (!target) {
                 return;
             }
-            if (!window.confirm(`Delete "${target.name}"?`)) {
-                return;
+            if (confirm(`Delete "${target.name}"?`)) {
+                const next = removePlaybackSequence(storage, seqId);
+                setSavedSequences(next);
+                if (activeSavedSequenceId === seqId) {
+                    handleCloseEditMode();
+                }
+                setRunStatus('idle');
+                setRunMessage(`Deleted "${target.name}".`);
             }
-            const next = removePlaybackSequence(storage, sequenceId);
-            setSavedSequences(next);
-            if (activeSavedSequenceId === sequenceId) {
-                setActiveSavedSequenceId(null);
-            }
-            setRunStatus('idle');
-            setRunMessage(`Deleted "${target.name}".`);
         },
         [activeSavedSequenceId, savedSequences, storage],
     );
 
-    const openRenameDialog = useCallback((sequence: PlaybackSequence) => {
-        setRenameState({ sequenceId: sequence.id, value: sequence.name });
+    const handleOpenRenameModal = useCallback((seq: PlaybackSequence) => {
+        setRenameState({ sequenceId: seq.id, value: seq.name });
+    }, []);
+
+    const handleRenameSubmit = useCallback(
+        (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!renameState) return;
+            const name = renameState.value.trim();
+            if (name) {
+                const target = savedSequences.find((s) => s.id === renameState.sequenceId);
+                if (target) {
+                    persistSequencePayload(target.id, name, target);
+                }
+            }
+            setRenameState(null);
+        },
+        [persistSequencePayload, renameState, savedSequences],
+    );
+
+    const handleSaveInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const value = event.target.value;
+        setSaveDialogState((previous) => (previous ? { ...previous, value } : previous));
     }, []);
 
     const handleRenameInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -623,109 +544,78 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
         setRenameState((previous) => (previous ? { ...previous, value } : previous));
     }, []);
 
+    const handleCloseSaveModal = useCallback(() => setSaveDialogState(null), []);
     const handleCloseRenameModal = useCallback(() => setRenameState(null), []);
 
-    const handleRenameSubmit = useCallback(
-        (event?: React.FormEvent<HTMLFormElement>) => {
-            event?.preventDefault();
-            if (!renameState) {
-                return;
-            }
-            const nextName = renameState.value.trim();
-            if (!nextName) {
-                return;
-            }
-            const now = new Date().toISOString();
-            const next = savedSequences.map((entry) =>
-                entry.id === renameState.sequenceId
-                    ? { ...entry, name: nextName, updatedAt: now }
-                    : entry,
-            );
-            persistPlaybackSequences(storage, next);
-            setSavedSequences(next);
-            setRenameState(null);
-            setRunStatus('success');
-            setRunMessage(`Renamed sequence to "${nextName}".`);
-        },
-        [renameState, savedSequences, storage],
-    );
-
-    const isSaveDisabled = !saveState || saveState.value.trim().length === 0;
-    const isRenameDisabled = !renameState || renameState.value.trim().length === 0;
+    const isSaveDisabled = !saveDialogState?.value.trim() || sequence.length === 0;
+    const isRenameDisabled = !renameState?.value.trim();
 
     return (
-        <section className="rounded-lg border border-gray-800/70 bg-gray-900/40 p-4 shadow">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-col gap-1">
-                    <p className="text-sm font-semibold text-gray-100">Playback Sequence</p>
-                    <p className="text-xs text-gray-400">
-                        Patterns will play one after another in the order listed below.
-                    </p>
+        <section className="flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold text-gray-100">Playback Sequence</h2>
+                    {isEditMode && (
+                        <span className="rounded bg-cyan-900/50 px-2 py-0.5 text-xs text-cyan-200">
+                            Autosave On
+                        </span>
+                    )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                    {isEditMode && (
+                        <button
+                            type="button"
+                            onClick={handleCloseEditMode}
+                            className="rounded-md border border-gray-600 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-700"
+                        >
+                            Close Edit Mode
+                        </button>
+                    )}
                     <button
                         type="button"
-                        disabled={!canAddToSequence}
-                        onClick={addPatternToSequence}
-                        className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                            canAddToSequence
-                                ? 'bg-cyan-600 text-white hover:bg-cyan-500'
-                                : 'cursor-not-allowed bg-gray-700 text-gray-400'
-                        }`}
-                    >
-                        Add Selected Pattern
-                    </button>
-                    <button
-                        type="button"
+                        onClick={handleClearSequence}
                         disabled={sequence.length === 0}
-                        onClick={clearSequence}
-                        className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                            sequence.length > 0
-                                ? 'border border-gray-600 text-gray-100 hover:border-red-400 hover:text-red-200'
-                                : 'cursor-not-allowed border border-gray-800 text-gray-500'
-                        }`}
+                        className="rounded-md border border-gray-600 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-700 disabled:opacity-50"
                     >
-                        Clear
+                        Clear Sequence
                     </button>
-                    <button
-                        type="button"
-                        disabled={sequence.length === 0}
-                        onClick={handleSaveSequence}
-                        className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                            sequence.length > 0
-                                ? 'border border-gray-600 text-gray-100 hover:border-cyan-400 hover:text-cyan-200'
-                                : 'cursor-not-allowed border border-gray-800 text-gray-500'
-                        }`}
-                    >
-                        Save Sequence
-                    </button>
-                    <button
-                        type="button"
-                        disabled={sequence.length === 0}
-                        onClick={handleSaveAs}
-                        className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                            sequence.length > 0
-                                ? 'border border-gray-700 text-gray-100 hover:border-cyan-400 hover:text-cyan-200'
-                                : 'cursor-not-allowed border border-gray-800 text-gray-500'
-                        }`}
-                    >
-                        Save As
-                    </button>
-                    <button
-                        type="button"
-                        disabled={!canPlaySequence}
-                        onClick={handlePlaySequence}
-                        className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                            canPlaySequence
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                                : 'cursor-not-allowed bg-gray-800 text-gray-500'
-                        }`}
-                    >
-                        {runStatus === 'running'
-                            ? 'Playing sequence…'
-                            : `Play ${sequence.length || '0'} pattern${sequence.length === 1 ? '' : 's'}`}
-                    </button>
+                    {!isEditMode && (
+                        <button
+                            type="button"
+                            onClick={handleOpenSaveModal}
+                            disabled={sequence.length === 0}
+                            className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-500 disabled:opacity-50"
+                        >
+                            Save Sequence
+                        </button>
+                    )}
                 </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+                <button
+                    type="button"
+                    onClick={handleAddToSequence}
+                    disabled={!canAddToSequence}
+                    className="rounded-md bg-gray-700 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    Add Selected Pattern
+                </button>
+                <div className="h-6 w-px bg-gray-700" />
+                <button
+                    type="button"
+                    onClick={handlePlaySequence}
+                    disabled={!canPlaySequence}
+                    className={`rounded-md px-6 py-2 text-sm font-semibold text-white shadow-sm ${
+                        canPlaySequence
+                            ? 'bg-emerald-600 hover:bg-emerald-500'
+                            : 'cursor-not-allowed bg-gray-700 opacity-50'
+                    }`}
+                >
+                    {runStatus === 'running'
+                        ? 'Playing sequence…'
+                        : `Play ${sequence.length || '0'} pattern${sequence.length === 1 ? '' : 's'}`}
+                </button>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -768,7 +658,7 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                                                 sequenceLength={sequence.length}
                                                 pattern={pattern}
                                                 validation={validation}
-                                                onRemove={removeFromSequence}
+                                                onRemove={handleRemoveFromSequence}
                                             />
                                         );
                                     })}
@@ -828,7 +718,7 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                                         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
                                             <button
                                                 type="button"
-                                                onClick={() => handlePlaySavedSequence(entry)}
+                                                onClick={() => handlePlaySequence()} // This will play the currently loaded sequence
                                                 className="rounded-md border border-emerald-600/50 bg-emerald-900/20 px-3 py-2 text-emerald-100 transition hover:bg-emerald-900/40 hover:text-white"
                                                 title="Play sequence immediately"
                                             >
@@ -836,14 +726,14 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => handleLoadSavedSequence(entry.id)}
+                                                onClick={() => handleEditSequence(entry)}
                                                 className="rounded-md border border-gray-700 px-3 py-2 text-gray-100 transition hover:border-cyan-400 hover:text-cyan-200"
                                             >
-                                                Load
+                                                Edit
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => openRenameDialog(entry)}
+                                                onClick={() => handleOpenRenameModal(entry)}
                                                 aria-label={`Rename sequence ${entry.name}`}
                                                 className="rounded p-2 text-gray-400 hover:bg-gray-800 hover:text-white"
                                                 title="Rename sequence"
@@ -910,44 +800,35 @@ const PlaybackSequenceManager: React.FC<PlaybackSequenceManagerProps> = ({
             </div>
 
             <Modal
-                open={Boolean(saveState)}
+                open={Boolean(saveDialogState)}
                 onClose={handleCloseSaveModal}
-                title="Save Playback Sequence"
+                title="Save Sequence"
             >
-                {saveState && (
-                    <form className="space-y-4" onSubmit={handleSaveSubmit}>
-                        <label className="block text-sm text-gray-100" htmlFor="sequence-save-name">
-                            Sequence name
-                        </label>
-                        <input
-                            id="sequence-save-name"
-                            className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-cyan-400 focus:outline-none"
-                            value={saveState.value}
-                            onChange={handleSaveInputChange}
-                            placeholder="Morning run"
-                        />
-                        <div className="flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={handleCloseSaveModal}
-                                className="rounded-md border border-gray-700 px-3 py-2 text-sm font-semibold text-gray-100 transition hover:border-gray-500 hover:text-gray-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isSaveDisabled}
-                                className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                                    isSaveDisabled
-                                        ? 'cursor-not-allowed bg-gray-700 text-gray-400'
-                                        : 'bg-cyan-600 text-white hover:bg-cyan-500'
-                                }`}
-                            >
-                                Save
-                            </button>
-                        </div>
-                    </form>
-                )}
+                <form onSubmit={handleSaveSubmit} className="flex flex-col gap-4">
+                    <input
+                        type="text"
+                        value={saveDialogState?.value ?? ''}
+                        onChange={handleSaveInputChange}
+                        className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-cyan-500 focus:outline-none"
+                        placeholder="Sequence Name"
+                    />
+                    <div className="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={handleCloseSaveModal}
+                            className="rounded-md px-3 py-2 text-sm text-gray-400 hover:text-gray-200"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            className="rounded-md bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500"
+                            disabled={isSaveDisabled}
+                        >
+                            Save
+                        </button>
+                    </div>
+                </form>
             </Modal>
 
             <Modal

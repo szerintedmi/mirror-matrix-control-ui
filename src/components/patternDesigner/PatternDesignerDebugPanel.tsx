@@ -40,7 +40,7 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
                     </span>
                 </div>
                 <p className="text-xs text-gray-500">Range: -1.000 – 1.000 on both axes.</p>
-                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="rounded-md bg-gray-800/60 p-3">
                         <dt className="text-xs uppercase tracking-wide text-gray-400">Mode</dt>
                         <dd className="font-mono text-sm text-gray-100">{formatMode(editMode)}</dd>
@@ -53,9 +53,11 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
                             {formatCoordinate(blobRadius)}
                         </dd>
                     </div>
+                </dl>
+                <dl className="grid grid-cols-1 gap-3">
                     <div className="rounded-md bg-gray-800/60 p-3">
                         <dt className="text-xs uppercase tracking-wide text-gray-400">Pointer</dt>
-                        <dd className="font-mono text-sm text-gray-100">
+                        <dd className="font-mono text-sm text-gray-100 min-w-[200px]">
                             {hoverPoint
                                 ? `x: ${formatCoordinate(hoverPoint.x)}  y: ${formatCoordinate(hoverPoint.y)}`
                                 : '—'}
