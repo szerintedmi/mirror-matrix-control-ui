@@ -347,4 +347,33 @@ describe('profilePlaybackPlanner', () => {
         expect(p2Assignment!.mirrorId).toBe('0-0'); // P2 must take 0-0
         expect(p1Assignment!.mirrorId).toBe('0-1'); // P1 forced to 0-1
     });
+
+    it('allows playback with mismatched grid size if tiles are available', () => {
+        // Profile is 8x8
+        const profile = createProfile(8, 8);
+        // Current grid is 2x2
+        const currentGrid = { rows: 2, cols: 2 };
+        const mirrorConfig = buildMirrorConfig(2, 2);
+
+        // Pattern with 2 points
+        const pattern = createPattern([
+            { x: 0, y: 0 },
+            { x: 0.1, y: 0.1 },
+        ]);
+
+        const result = planProfilePlayback({
+            gridSize: currentGrid,
+            mirrorConfig,
+            profile,
+            pattern,
+        });
+
+        // Should NOT have profile_grid_mismatch error blocking everything
+        // We might still want to warn, but it should NOT block assignment.
+        // If it blocks, tiles will be empty or unassigned.
+
+        // Expect successful assignment
+        const assignedTiles = result.tiles.filter((t) => t.patternPointId !== null);
+        expect(assignedTiles).toHaveLength(2);
+    });
 });

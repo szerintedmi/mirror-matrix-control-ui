@@ -281,19 +281,11 @@ export const planProfilePlayback = ({
         };
     }
 
-    if (profile.gridSize.rows !== gridSize.rows || profile.gridSize.cols !== gridSize.cols) {
-        return {
-            patternId: pattern.id,
-            tiles: [],
-            playableAxisTargets: [],
-            errors: [
-                createError(
-                    'profile_grid_mismatch',
-                    'Profile grid size does not match the current array configuration.',
-                ),
-            ],
-        };
-    }
+    // Removed strict grid mismatch check to allow playback on subsets of the array
+    // if the profile covers the necessary tiles.
+    // if (profile.gridSize.rows !== gridSize.rows || profile.gridSize.cols !== gridSize.cols) {
+    //    ...
+    // }
 
     const totalMirrors = gridSize.rows * gridSize.cols;
     const globalErrors: ProfilePlaybackValidationError[] = [];

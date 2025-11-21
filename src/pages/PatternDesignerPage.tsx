@@ -528,20 +528,48 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             return new Set<string>();
         }
 
-        // If there are errors, try to map them back to points if possible.
-        // The planner returns generic errors, but for "out of bounds", we can re-check here for visual feedback.
-        // Or we can just trust the planner's validation if it gave us point IDs, but it currently doesn't return point IDs directly in the error message easily.
-        // So let's do a quick check similar to what the planner does for "bounds"
+        // Collect errors from the planner
+        const plannerInvalidIds = new Set<string>();
+
+        plan.errors.forEach((err) => {
+            if (err.patternPointId) {
+                plannerInvalidIds.add(err.patternPointId);
+            }
+        });
+
+        // If we have specific point errors from the planner, use them.
+        // (This covers capacity issues, out of bounds on specific axes, etc.)
+        if (plannerInvalidIds.size > 0) {
+            return plannerInvalidIds;
+        }
+
+        // If we have a grid mismatch (and thus no specific point errors),
+        // OR if we have other global errors but no specific point errors,
+        // we fall back to the geometric bounds check.
+        // This is useful for "profile_grid_mismatch" so we can still see if points are roughly valid.
+        // We also do this if there are NO specific errors but still global errors, just in case.
         const invalid = new Set<string>();
         const bounds = Object.values(selectedCalibrationProfile.tiles)
-            .map((t) => t.homeMeasurement)
-            .filter((m): m is NonNullable<typeof m> => Boolean(m))
-            .map((m) => ({
-                x: m.x - m.size / 2,
-                y: m.y - m.size / 2,
-                width: m.size,
-                height: m.size,
-            }));
+            .map((t) => {
+                if (t.inferredBounds) {
+                    return {
+                        x: t.inferredBounds.x.min,
+                        y: t.inferredBounds.y.min,
+                        width: t.inferredBounds.x.max - t.inferredBounds.x.min,
+                        height: t.inferredBounds.y.max - t.inferredBounds.y.min,
+                    };
+                }
+                if (t.homeMeasurement) {
+                    return {
+                        x: t.homeMeasurement.x - t.homeMeasurement.size / 2,
+                        y: t.homeMeasurement.y - t.homeMeasurement.size / 2,
+                        width: t.homeMeasurement.size,
+                        height: t.homeMeasurement.size,
+                    };
+                }
+                return null;
+            })
+            .filter((b): b is NonNullable<typeof b> => Boolean(b));
 
         selectedPattern.points.forEach((pt) => {
             // Check if point is inside ANY bounding box
