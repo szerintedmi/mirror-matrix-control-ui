@@ -9,7 +9,9 @@ interface PatternLibraryListProps {
     onDelete?: (patternId: string) => void;
     onRename?: (pattern: Pattern) => void;
     onEdit?: (pattern: Pattern) => void;
-    getValidationStatus?: (pattern: Pattern) => { isValid: boolean; message?: string } | null;
+    getValidationStatus?: (
+        pattern: Pattern,
+    ) => { isValid: boolean; message?: string; details?: string } | null;
     className?: string;
 }
 
@@ -42,14 +44,21 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
 
                 return (
                     <li key={pattern.id}>
-                        <button
-                            type="button"
-                            className={`group relative flex w-full cursor-pointer flex-col rounded-md border p-3 text-left transition-all ${
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            className={`group relative flex w-full cursor-pointer flex-col rounded-md border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
                                 isSelected
                                     ? 'border-cyan-500/50 bg-cyan-900/10 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
                                     : 'border-transparent bg-gray-800/40 hover:bg-gray-800/80'
                             }`}
                             onClick={() => onSelect(pattern.id)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    onSelect(pattern.id);
+                                }
+                            }}
                         >
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex min-w-0 flex-1 flex-col">
@@ -65,7 +74,10 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                         {pattern.points.length} spots
                                     </span>
                                     {isInvalid && (
-                                        <span className="mt-1 text-xs text-red-400 flex items-center gap-1">
+                                        <span
+                                            className="mt-1 flex items-center gap-1 text-xs text-red-400"
+                                            title={validation?.details ?? validation?.message}
+                                        >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
                                                 viewBox="0 0 20 20"
@@ -170,7 +182,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                     )}
                                 </div>
                             </div>
-                        </button>
+                        </div>
                     </li>
                 );
             })}

@@ -59,6 +59,71 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         [previewPlan.tiles],
     );
 
+    const validationByPatternId = useMemo(() => {
+        if (!selectedCalibrationProfile) {
+            return null;
+        }
+
+        const map = new Map<string, { isValid: boolean; message?: string; details?: string }>();
+
+        patterns.forEach((pattern) => {
+            if (pattern.points.length === 0) {
+                map.set(pattern.id, {
+                    isValid: false,
+                    message: 'Empty pattern',
+                    details: 'Add at least one point to enable playback.',
+                });
+                return;
+            }
+
+            const plan = planProfilePlayback({
+                gridSize,
+                mirrorConfig,
+                profile: selectedCalibrationProfile,
+                pattern,
+            });
+
+            const relevantErrors = plan.errors.filter(
+                (error) => error.code !== 'missing_profile' && error.code !== 'missing_pattern',
+            );
+
+            if (relevantErrors.length === 0) {
+                map.set(pattern.id, { isValid: true });
+                return;
+            }
+
+            const outOfBoundsErrors = relevantErrors.filter(
+                (error) => error.code === 'target_out_of_bounds',
+            );
+            const prioritizedErrors =
+                outOfBoundsErrors.length > 0 ? outOfBoundsErrors : relevantErrors;
+
+            const message =
+                outOfBoundsErrors.length > 0
+                    ? `Points out of bounds (${outOfBoundsErrors.length})`
+                    : prioritizedErrors[0].message;
+
+            const detailsList = prioritizedErrors.slice(0, 3).map((error) => {
+                const pointLabel = error.patternPointId ? `Point ${error.patternPointId}` : 'Point';
+                const axisLabel = error.axis ? ` ${error.axis.toUpperCase()}` : '';
+                const tileLabel = error.mirrorId ? ` @ ${error.mirrorId}` : '';
+                return `${pointLabel}${axisLabel}${tileLabel}: ${error.message}`;
+            });
+
+            const remainingCount = prioritizedErrors.length > 3 ? prioritizedErrors.length - 3 : 0;
+            const details =
+                detailsList.join(' • ') + (remainingCount > 0 ? ` • +${remainingCount} more` : '');
+
+            map.set(pattern.id, {
+                isValid: false,
+                message,
+                details,
+            });
+        });
+
+        return map;
+    }, [gridSize, mirrorConfig, patterns, selectedCalibrationProfile]);
+
     const dispatchPlayback = useCallback(
         async (targets: ProfilePlaybackAxisTarget[], patternName: string) => {
             if (targets.length === 0) {
@@ -90,41 +155,12 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
     const getValidationStatus = useCallback(
         (pattern: Pattern) => {
             if (!selectedCalibrationProfile) {
-                return { isValid: true }; // Cannot validate without profile, assume valid or neutral
+                // Cannot validate without profile, assume valid or neutral
+                return { isValid: true };
             }
-            if (pattern.points.length === 0) {
-                return { isValid: false, message: 'Empty pattern' };
-            }
-            // Quick check using planner or bounds
-            // We can use the planner for the *selected* pattern, but for others in the list it might be expensive to run full planner.
-            // However, the list is small enough usually.
-            // Let's do a lightweight check: check if points are within any blob bounds of the profile.
-            const bounds = Object.values(selectedCalibrationProfile.tiles)
-                .map((t) => t.homeMeasurement)
-                .filter((m): m is NonNullable<typeof m> => Boolean(m))
-                .map((m) => ({
-                    x: m.x - m.size / 2,
-                    y: m.y - m.size / 2,
-                    width: m.size,
-                    height: m.size,
-                }));
-            const allPointsInBounds = pattern.points.every((pt) =>
-                bounds.some(
-                    (box) =>
-                        pt.x >= box.x &&
-                        pt.x <= box.x + box.width &&
-                        pt.y >= box.y &&
-                        pt.y <= box.y + box.height,
-                ),
-            );
-
-            if (!allPointsInBounds) {
-                return { isValid: false, message: 'Points out of bounds' };
-            }
-
-            return { isValid: true };
+            return validationByPatternId?.get(pattern.id) ?? { isValid: true };
         },
-        [selectedCalibrationProfile],
+        [selectedCalibrationProfile, validationByPatternId],
     );
 
     const handleEditPattern = useCallback(
