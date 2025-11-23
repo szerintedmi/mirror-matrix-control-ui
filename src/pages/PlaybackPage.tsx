@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
 import PatternLibraryList from '@/components/PatternLibraryList';
@@ -46,6 +46,10 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
     );
 
     const sequenceManagerRef = useRef<PlaybackSequenceManagerHandle | null>(null);
+    const [editState, setEditState] = useState<{ isEditing: boolean; sequenceName: string | null }>(
+        { isEditing: false, sequenceName: null },
+    );
+    const isEditingSequence = editState.isEditing;
 
     const previewPlan: ProfilePlaybackPlanResult = useMemo(
         () =>
@@ -213,21 +217,29 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         [dispatchPlayback, gridSize, logError, mirrorConfig, selectedCalibrationProfile],
     );
 
+    const handleEditStateChange = useCallback(
+        (state: { isEditing: boolean; sequenceName: string | null }) => {
+            setEditState(state);
+        },
+        [],
+    );
+
     return (
         <div className="flex h-full gap-6">
             {/* Left Sidebar: Pattern Library */}
-            <div className="flex w-80 flex-col gap-4 rounded-lg bg-gray-900/50 p-4">
+            <div className="flex w-80 flex-none flex-col gap-4 rounded-lg bg-gray-900/50 p-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-100">Patterns</h2>
                 </div>
+
                 <PatternLibraryList
                     patterns={patterns}
                     selectedPatternId={selectedPatternId}
                     onSelect={selectPattern}
                     onEdit={handleEditPattern}
-                    onAdd={handleAddPatternToSequence}
+                    onAdd={isEditingSequence ? handleAddPatternToSequence : undefined}
                     onPlay={handleQuickPlay}
-                    enableDragAdd
+                    enableDragAdd={isEditingSequence}
                     disablePrimaryClick
                     suppressSelectionHighlight
                     getValidationStatus={getValidationStatus}
@@ -237,24 +249,16 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
 
             {/* Main Content */}
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto pr-2">
-                <section className="rounded-lg border border-gray-800/70 bg-gray-900/40 p-4 shadow">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex-1">
-                            <h3 className="text-lg font-medium text-gray-100">Build a sequence</h3>
-                            <p className="mt-1 text-sm text-gray-400">
-                                Drag any pattern from the library or tap the + icon to queue it.
-                                Reorder in the sequence panel and save reusable sets once they look
-                                right.
-                            </p>
-                        </div>
-                        <CalibrationProfileSelector
-                            profiles={calibrationProfiles}
-                            selectedProfileId={selectedCalibrationProfileId ?? ''}
-                            onSelect={selectCalibrationProfile}
-                            onRefresh={refreshCalibrationProfiles}
-                            label="Calibration Profile"
-                        />
-                    </div>
+                <section className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
+                    <CalibrationProfileSelector
+                        profiles={calibrationProfiles}
+                        selectedProfileId={selectedCalibrationProfileId ?? ''}
+                        onSelect={selectCalibrationProfile}
+                        onRefresh={refreshCalibrationProfiles}
+                        label="Calibration Profile"
+                        placeholder="No calibration profiles"
+                        selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
+                    />
                 </section>
 
                 <PlaybackSequenceManager
@@ -265,6 +269,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
                     mirrorConfig={mirrorConfig}
                     storage={resolvedStorage}
                     onSelectPatternId={selectPattern}
+                    onEditStateChange={handleEditStateChange}
                     dispatchPlayback={dispatchPlayback}
                 />
 
