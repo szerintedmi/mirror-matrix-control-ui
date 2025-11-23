@@ -645,6 +645,42 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     const renameInputId = 'rename-pattern-input';
     const isRenameDisabled = !renameState?.value.trim();
 
+    const [quickPlayMessage, setQuickPlayMessage] = useState<{
+        tone: 'success' | 'error';
+        text: string;
+    } | null>(null);
+
+    const handleQuickPlay = useCallback(
+        (pattern: Pattern) => {
+            if (!selectedCalibrationProfile) {
+                setQuickPlayMessage({
+                    tone: 'error',
+                    text: 'Select a calibration profile to simulate playback.',
+                });
+                return;
+            }
+
+            const plan = planProfilePlayback({
+                gridSize,
+                mirrorConfig,
+                profile: selectedCalibrationProfile,
+                pattern,
+            });
+
+            if (plan.errors.length > 0) {
+                setQuickPlayMessage({ tone: 'error', text: plan.errors[0].message });
+                return;
+            }
+
+            setQuickPlayMessage({
+                tone: 'success',
+                text: `Ready: would move ${plan.playableAxisTargets.length} axes for "${pattern.name}"`,
+            });
+            selectPattern(pattern.id);
+        },
+        [gridSize, mirrorConfig, selectPattern, selectedCalibrationProfile],
+    );
+
     return (
         <div className="flex h-full flex-wrap gap-6 overflow-y-auto p-6">
             {/* Left Sidebar: Pattern Library */}
@@ -660,12 +696,25 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     </button>
                 </div>
 
+                {quickPlayMessage && (
+                    <p
+                        className={`text-xs font-semibold ${
+                            quickPlayMessage.tone === 'success'
+                                ? 'text-emerald-300'
+                                : 'text-amber-300'
+                        }`}
+                    >
+                        {quickPlayMessage.text}
+                    </p>
+                )}
+
                 <PatternLibraryList
                     patterns={patterns}
                     selectedPatternId={selectedPattern?.id ?? null}
                     onSelect={selectPattern}
                     onDelete={deletePattern}
                     onRename={handleOpenRenameModal}
+                    onPlay={handleQuickPlay}
                     className="flex-1"
                 />
             </div>

@@ -1,8 +1,10 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
 import PatternLibraryList from '@/components/PatternLibraryList';
-import PlaybackSequenceManager from '@/components/playback/PlaybackSequenceManager';
+import PlaybackSequenceManager, {
+    type PlaybackSequenceManagerHandle,
+} from '@/components/playback/PlaybackSequenceManager';
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { useLogStore } from '@/context/LogContext';
 import { usePatternContext } from '@/context/PatternContext';
@@ -43,6 +45,12 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         [patterns, selectedPatternId],
     );
 
+    const sequenceManagerRef = useRef<PlaybackSequenceManagerHandle | null>(null);
+    const [editState, setEditState] = useState<{ isEditing: boolean; sequenceName: string | null }>(
+        { isEditing: false, sequenceName: null },
+    );
+    const isEditingSequence = editState.isEditing;
+
     const previewPlan: ProfilePlaybackPlanResult = useMemo(
         () =>
             planProfilePlayback({
@@ -55,8 +63,8 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
     );
 
     const assignedTiles = useMemo(
-        () => previewPlan.tiles.filter((tile) => tile.patternPointId),
-        [previewPlan.tiles],
+        () => (selectedPattern ? previewPlan.tiles.filter((tile) => tile.patternPointId) : []),
+        [previewPlan.tiles, selectedPattern],
     );
 
     const validationByPatternId = useMemo(() => {
@@ -171,18 +179,69 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         [onNavigate, selectPattern],
     );
 
+    const handleAddPatternToSequence = useCallback(
+        (pattern: Pattern) => {
+            sequenceManagerRef.current?.addPatternById(pattern.id);
+            selectPattern(pattern.id);
+        },
+        [selectPattern],
+    );
+
+    const handleQuickPlay = useCallback(
+        async (pattern: Pattern) => {
+            if (!selectedCalibrationProfile) {
+                logError('Playback', 'Select a calibration profile before playing a pattern.');
+                return;
+            }
+
+            const plan = planProfilePlayback({
+                gridSize,
+                mirrorConfig,
+                profile: selectedCalibrationProfile,
+                pattern,
+            });
+
+            if (plan.errors.length > 0) {
+                logError('Playback', plan.errors[0].message);
+                return;
+            }
+
+            try {
+                await dispatchPlayback(plan.playableAxisTargets, pattern.name);
+            } catch (error) {
+                if (error instanceof Error) {
+                    logError('Playback', error.message);
+                }
+            }
+        },
+        [dispatchPlayback, gridSize, logError, mirrorConfig, selectedCalibrationProfile],
+    );
+
+    const handleEditStateChange = useCallback(
+        (state: { isEditing: boolean; sequenceName: string | null }) => {
+            setEditState(state);
+        },
+        [],
+    );
+
     return (
         <div className="flex h-full gap-6">
             {/* Left Sidebar: Pattern Library */}
-            <div className="flex w-80 flex-col gap-4 rounded-lg bg-gray-900/50 p-4">
+            <div className="flex w-80 flex-none flex-col gap-4 rounded-lg bg-gray-900/50 p-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-100">Patterns</h2>
                 </div>
+
                 <PatternLibraryList
                     patterns={patterns}
                     selectedPatternId={selectedPatternId}
                     onSelect={selectPattern}
                     onEdit={handleEditPattern}
+                    onAdd={isEditingSequence ? handleAddPatternToSequence : undefined}
+                    onPlay={handleQuickPlay}
+                    enableDragAdd={isEditingSequence}
+                    disablePrimaryClick
+                    suppressSelectionHighlight
                     getValidationStatus={getValidationStatus}
                     className="flex-1"
                 />
@@ -190,46 +249,47 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
 
             {/* Main Content */}
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto pr-2">
-                <section className="rounded-lg border border-gray-800/70 bg-gray-900/40 p-4 shadow">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex-1">
-                            <h3 className="text-lg font-medium text-gray-100">
-                                {selectedPattern ? selectedPattern.name : 'Select a Pattern'}
-                            </h3>
-                            <p className="mt-1 text-sm text-gray-400">
-                                {previewPlan.playableAxisTargets.length > 0
-                                    ? `Ready to move ${previewPlan.playableAxisTargets.length} axes.`
-                                    : selectedPattern
-                                      ? 'No playable targets found for this pattern.'
-                                      : 'Select a pattern from the list to preview.'}
-                            </p>
-                        </div>
-                        <CalibrationProfileSelector
-                            profiles={calibrationProfiles}
-                            selectedProfileId={selectedCalibrationProfileId ?? ''}
-                            onSelect={selectCalibrationProfile}
-                            onRefresh={refreshCalibrationProfiles}
-                            label="Calibration Profile"
-                        />
-                    </div>
+                <section className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
+                    <CalibrationProfileSelector
+                        profiles={calibrationProfiles}
+                        selectedProfileId={selectedCalibrationProfileId ?? ''}
+                        onSelect={selectCalibrationProfile}
+                        onRefresh={refreshCalibrationProfiles}
+                        label="Calibration Profile"
+                        placeholder="No calibration profiles"
+                        selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
+                    />
                 </section>
 
                 <PlaybackSequenceManager
+                    ref={sequenceManagerRef}
                     patterns={patterns}
-                    selectedPattern={selectedPattern}
                     selectedProfile={selectedCalibrationProfile}
                     gridSize={gridSize}
                     mirrorConfig={mirrorConfig}
                     storage={resolvedStorage}
                     onSelectPatternId={selectPattern}
+                    onEditStateChange={handleEditStateChange}
                     dispatchPlayback={dispatchPlayback}
                 />
 
                 <section className="rounded-lg border border-gray-800/70 bg-gray-900/50 p-4 shadow">
-                    <h3 className="text-sm font-semibold text-gray-200">Planned Targets</h3>
-                    {assignedTiles.length === 0 ? (
-                        <p className="mt-2 text-sm text-gray-400">
-                            No pattern points assigned yet.
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-200">Pattern preview</h3>
+                            <p className="text-xs text-gray-400">
+                                Click a pattern to inspect its targets with the current calibration
+                                profile.
+                            </p>
+                        </div>
+                    </div>
+                    {!selectedPattern ? (
+                        <p className="mt-3 text-sm text-gray-400">
+                            Select a pattern from the library to see its planned targets.
+                        </p>
+                    ) : assignedTiles.length === 0 ? (
+                        <p className="mt-3 text-sm text-gray-400">
+                            No playable targets found for this pattern.
                         </p>
                     ) : (
                         <div className="mt-3 overflow-x-auto">
