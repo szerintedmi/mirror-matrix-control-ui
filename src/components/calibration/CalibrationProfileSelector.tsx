@@ -6,7 +6,6 @@ export interface CalibrationProfileSelectorProps {
     profiles: CalibrationProfile[];
     selectedProfileId: string;
     onSelect: (profileId: string) => void;
-    onRefresh: () => void;
     label?: string;
     placeholder?: string;
     selectClassName?: string;
@@ -20,7 +19,6 @@ const CalibrationProfileSelector: React.FC<CalibrationProfileSelectorProps> = ({
     profiles,
     selectedProfileId,
     onSelect,
-    onRefresh,
     label = 'Calibration Profile',
     placeholder = 'No profiles available',
     selectClassName,
@@ -39,7 +37,7 @@ const CalibrationProfileSelector: React.FC<CalibrationProfileSelectorProps> = ({
                 {label}
             </label>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                <div className="flex flex-1 items-center gap-2">
+                <div className="flex flex-1 items-center">
                     <select
                         id={selectId}
                         className={`rounded-md border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm text-gray-100 ${selectClassName ?? 'flex-1 min-w-0'}`}
@@ -57,13 +55,6 @@ const CalibrationProfileSelector: React.FC<CalibrationProfileSelectorProps> = ({
                             <option value="">{placeholder}</option>
                         )}
                     </select>
-                    <button
-                        type="button"
-                        onClick={onRefresh}
-                        className="rounded-md border border-gray-600 px-3 py-2 text-sm text-gray-100 hover:border-cyan-400 hover:text-cyan-200"
-                    >
-                        Refresh
-                    </button>
                 </div>
                 {rightAccessory ? (
                     <div className="text-xs font-semibold sm:text-right">{rightAccessory}</div>

@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
+    CALIBRATION_PROFILES_CHANGED_EVENT,
+    CALIBRATION_PROFILES_STORAGE_KEY,
     loadCalibrationProfiles,
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
@@ -85,12 +87,18 @@ export const CalibrationProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // Sync with external changes
     useEffect(() => {
         const handleStorage = (event: StorageEvent) => {
-            if (event.key === 'mirror:calibration-profiles') {
+            if (event.key === CALIBRATION_PROFILES_STORAGE_KEY) {
                 refreshProfiles();
             }
         };
+        const handleProfilesChanged = () => refreshProfiles();
+
         window.addEventListener('storage', handleStorage);
-        return () => window.removeEventListener('storage', handleStorage);
+        window.addEventListener(CALIBRATION_PROFILES_CHANGED_EVENT, handleProfilesChanged);
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            window.removeEventListener(CALIBRATION_PROFILES_CHANGED_EVENT, handleProfilesChanged);
+        };
     }, [refreshProfiles]);
 
     const value = useMemo(

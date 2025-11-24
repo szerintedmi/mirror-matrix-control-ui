@@ -36,7 +36,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         profiles: calibrationProfiles,
         selectedProfileId: selectedCalibrationProfileId,
         selectProfile: selectCalibrationProfile,
-        refreshProfiles: refreshCalibrationProfiles,
         selectedProfile: selectedCalibrationProfile,
     } = useCalibrationContext();
 
@@ -254,7 +253,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
                         profiles={calibrationProfiles}
                         selectedProfileId={selectedCalibrationProfileId ?? ''}
                         onSelect={selectCalibrationProfile}
-                        onRefresh={refreshCalibrationProfiles}
                         label="Calibration Profile"
                         placeholder="No calibration profiles"
                         selectClassName="min-w-[10rem] flex-none max-w-[14rem]"

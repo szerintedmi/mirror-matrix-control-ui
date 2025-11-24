@@ -22,7 +22,8 @@ import type {
 } from '@/types';
 import { STEP_EPSILON, clampNormalized, convertDeltaToSteps } from '@/utils/calibrationMath';
 
-const STORAGE_KEY = 'mirror:calibration:profiles';
+export const CALIBRATION_PROFILES_STORAGE_KEY = 'mirror:calibration:profiles';
+export const CALIBRATION_PROFILES_CHANGED_EVENT = 'mirror:calibration-profiles-changed';
 const LAST_SELECTED_PROFILE_KEY = 'mirror:calibration:last-profile-id';
 const STORAGE_VERSION = 2;
 const PROFILE_SCHEMA_VERSION = 2;
@@ -352,13 +353,21 @@ const deriveCalibrationCameraMetadata = (
     };
 };
 
+const dispatchProfilesChangedEvent = () => {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+        return;
+    }
+    window.dispatchEvent(new Event(CALIBRATION_PROFILES_CHANGED_EVENT));
+};
+
 const persistProfiles = (storage: Storage, profiles: CalibrationProfile[]): void => {
     const payload: StoredPayload = {
         version: STORAGE_VERSION,
         entries: profiles,
     };
     try {
-        storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        storage.setItem(CALIBRATION_PROFILES_STORAGE_KEY, JSON.stringify(payload));
+        dispatchProfilesChangedEvent();
     } catch (error) {
         console.warn('Failed to persist calibration profiles', error);
     }
@@ -368,7 +377,7 @@ const readProfilesFromStorage = (storage?: Storage): CalibrationProfile[] => {
     if (!storage) {
         return [];
     }
-    const raw = storage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(CALIBRATION_PROFILES_STORAGE_KEY);
     if (!raw) {
         return [];
     }

@@ -438,7 +438,6 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         profiles: calibrationProfiles,
         selectedProfileId: selectedCalibrationProfileId,
         selectProfile: selectCalibrationProfile,
-        refreshProfiles: refreshCalibrationProfiles,
         selectedProfile: selectedCalibrationProfile,
     } = useCalibrationContext();
 
@@ -726,7 +725,6 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                         profiles={calibrationProfiles}
                         selectedProfileId={selectedCalibrationProfileId ?? ''}
                         onSelect={selectCalibrationProfile}
-                        onRefresh={refreshCalibrationProfiles}
                         label="Calibration Profile (optional)"
                         placeholder="No calibration profiles"
                         selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
