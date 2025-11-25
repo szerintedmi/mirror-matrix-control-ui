@@ -317,30 +317,41 @@ describe('calibrationProfileStorage', () => {
             expect(saved).not.toBeNull();
             const bounds = saved!.tiles[tileKey].inferredBounds!;
 
-            const expectedXMin = clampNormalized(
+            const axisXMin = clampNormalized(
                 adjustedHome.x +
                     (MOTOR_MIN_POSITION_STEPS - adjustedHome.stepsX) * stepToDisplacement.x,
             );
-            const expectedXMax = clampNormalized(
+            const axisXMax = clampNormalized(
                 adjustedHome.x +
                     (MOTOR_MAX_POSITION_STEPS - adjustedHome.stepsX) * stepToDisplacement.x,
             );
-            const expectedYMin = clampNormalized(
+            const axisYMin = clampNormalized(
                 adjustedHome.y +
                     (MOTOR_MIN_POSITION_STEPS - adjustedHome.stepsY) * stepToDisplacement.y,
             );
-            const expectedYMax = clampNormalized(
+            const axisYMax = clampNormalized(
                 adjustedHome.y +
                     (MOTOR_MAX_POSITION_STEPS - adjustedHome.stepsY) * stepToDisplacement.y,
             );
 
-            expect(bounds.x.min).toBeCloseTo(Math.min(expectedXMin, expectedXMax), 6);
-            expect(bounds.x.max).toBeCloseTo(Math.max(expectedXMin, expectedXMax), 6);
-            expect(bounds.y.min).toBeCloseTo(Math.min(expectedYMin, expectedYMax), 6);
-            expect(bounds.y.max).toBeCloseTo(Math.max(expectedYMin, expectedYMax), 6);
+            const blueprint = summary.gridBlueprint!;
+            const footprintXMin = blueprint.gridOrigin.x;
+            const footprintXMax = blueprint.gridOrigin.x + blueprint.adjustedTileFootprint.width;
+            const footprintYMin = blueprint.gridOrigin.y;
+            const footprintYMax = blueprint.gridOrigin.y + blueprint.adjustedTileFootprint.height;
+
+            const expectedXMin = Math.min(Math.min(axisXMin, axisXMax), footprintXMin);
+            const expectedXMax = Math.max(Math.max(axisXMin, axisXMax), footprintXMax);
+            const expectedYMin = Math.min(Math.min(axisYMin, axisYMax), footprintYMin);
+            const expectedYMax = Math.max(Math.max(axisYMin, axisYMax), footprintYMax);
+
+            expect(bounds.x.min).toBeCloseTo(expectedXMin, 6);
+            expect(bounds.x.max).toBeCloseTo(expectedXMax, 6);
+            expect(bounds.y.min).toBeCloseTo(expectedYMin, 6);
+            expect(bounds.y.max).toBeCloseTo(expectedYMax, 6);
         });
 
-        it('does not derive inferred bounds when adjusted home is missing', () => {
+        it('falls back to blueprint footprint when adjusted home is missing', () => {
             const tileKey = '0-0';
 
             runnerState.summary!.tiles[tileKey] = {
@@ -359,7 +370,18 @@ describe('calibrationProfileStorage', () => {
             const saved = saveProfile({ name: 'Missing adjusted home' });
 
             expect(saved).not.toBeNull();
-            expect(saved!.tiles[tileKey].inferredBounds).toBeNull();
+            const bounds = saved!.tiles[tileKey].inferredBounds!;
+            const blueprint = runnerState.summary!.gridBlueprint!;
+            expect(bounds).toEqual({
+                x: {
+                    min: blueprint.gridOrigin.x,
+                    max: blueprint.gridOrigin.x + blueprint.adjustedTileFootprint.width,
+                },
+                y: {
+                    min: blueprint.gridOrigin.y,
+                    max: blueprint.gridOrigin.y + blueprint.adjustedTileFootprint.height,
+                },
+            });
         });
     });
 

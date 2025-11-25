@@ -8,6 +8,7 @@ import type {
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type {
     BlobMeasurement,
+    CalibrationGridBlueprint,
     CalibrationProfile,
     CalibrationCameraResolution,
     CalibrationProfileBlobStats,
@@ -186,6 +187,28 @@ const mergeBoundsIntersection = (
     };
 };
 
+const mergeBoundsUnion = (
+    current: CalibrationProfileBounds | null,
+    candidate: CalibrationProfileBounds,
+): CalibrationProfileBounds => {
+    if (!current) {
+        return {
+            x: { ...candidate.x },
+            y: { ...candidate.y },
+        };
+    }
+    return {
+        x: {
+            min: Math.min(current.x.min, candidate.x.min),
+            max: Math.max(current.x.max, candidate.x.max),
+        },
+        y: {
+            min: Math.min(current.y.min, candidate.y.min),
+            max: Math.max(current.y.max, candidate.y.max),
+        },
+    };
+};
+
 const computeProfileBlobStats = (
     tiles: Record<string, TileCalibrationResults>,
 ): CalibrationProfileBlobStats | null => {
@@ -305,14 +328,59 @@ const buildTileEntry = (
     };
 };
 
+const computeBlueprintFootprintBounds = (
+    blueprint: CalibrationGridBlueprint,
+    row: number,
+    col: number,
+): CalibrationProfileBounds => {
+    const spacingX = blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
+    const spacingY = blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+    const minX = blueprint.gridOrigin.x + col * spacingX;
+    const minY = blueprint.gridOrigin.y + row * spacingY;
+    return {
+        x: {
+            min: minX,
+            max: minX + blueprint.adjustedTileFootprint.width,
+        },
+        y: {
+            min: minY,
+            max: minY + blueprint.adjustedTileFootprint.height,
+        },
+    };
+};
+
+const mergeWithBlueprintFootprint = (
+    bounds: CalibrationProfileBounds | null,
+    blueprint: CalibrationGridBlueprint | null,
+    row: number,
+    col: number,
+): CalibrationProfileBounds | null => {
+    if (!blueprint) {
+        return bounds;
+    }
+    const footprint = computeBlueprintFootprintBounds(blueprint, row, col);
+    if (!bounds) {
+        return footprint;
+    }
+    return mergeBoundsUnion(bounds, footprint);
+};
+
 const buildProfileTiles = (
     tiles: Record<string, TileRunState>,
     summaryTiles: CalibrationRunSummary['tiles'] | undefined,
+    gridBlueprint: CalibrationGridBlueprint | null,
 ): Record<string, TileCalibrationResults> => {
     const entries: Record<string, TileCalibrationResults> = {};
     Object.values(tiles).forEach((tile) => {
         const summaryTile = summaryTiles?.[tile.tile.key];
-        entries[tile.tile.key] = buildTileEntry(tile, summaryTile);
+        const entry = buildTileEntry(tile, summaryTile);
+        entry.inferredBounds = mergeWithBlueprintFootprint(
+            entry.inferredBounds,
+            gridBlueprint,
+            tile.tile.row,
+            tile.tile.col,
+        );
+        entries[tile.tile.key] = entry;
     });
     if (summaryTiles) {
         Object.entries(summaryTiles).forEach(([key, summaryTile]) => {
@@ -322,7 +390,14 @@ const buildProfileTiles = (
                     status: summaryTile.status,
                     assignment: { x: null, y: null },
                 };
-                entries[key] = buildTileEntry(fallback, summaryTile);
+                const entry = buildTileEntry(fallback, summaryTile);
+                entry.inferredBounds = mergeWithBlueprintFootprint(
+                    entry.inferredBounds,
+                    gridBlueprint,
+                    summaryTile.tile.row,
+                    summaryTile.tile.col,
+                );
+                entries[key] = entry;
             }
         });
     }
@@ -428,7 +503,7 @@ export const saveCalibrationProfile = (
         console.warn('Cannot save calibration profile before a summary is available.');
         return null;
     }
-    const tiles = buildProfileTiles(options.runnerState.tiles, summary.tiles);
+    const tiles = buildProfileTiles(options.runnerState.tiles, summary.tiles, summary.gridBlueprint);
     const metrics = computeMetrics(tiles);
     const fingerprint = getGridStateFingerprint(options.gridSnapshot);
     const now = new Date().toISOString();
