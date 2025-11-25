@@ -58,7 +58,7 @@ export interface CalibrationRunnerSettings {
 }
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
-    deltaSteps: 500,
+    deltaSteps: 1200,
     gridGapNormalized: 0.0,
     sampleTimeoutMs: 1_500,
     maxDetectionRetries: 5,

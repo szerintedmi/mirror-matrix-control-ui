@@ -11,6 +11,7 @@ import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerCont
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
+import { useStepwiseCalibrationController } from '@/hooks/useStepwiseCalibrationController';
 import type { CalibrationCameraResolution, MirrorConfig } from '@/types';
 
 interface CalibrationPageProps {
@@ -172,8 +173,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     const {
         runnerState,
         runnerSettings,
+        commandLog,
         updateSetting: updateRunnerSetting,
-        tileEntries,
         startRunner,
         pauseRunner,
         resumeRunner,
@@ -185,6 +186,17 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         captureMeasurement: captureBlobMeasurement,
         detectionReady,
     });
+
+    const stepRunnerController = useStepwiseCalibrationController({
+        gridSize,
+        mirrorConfig,
+        motorApi: motorCommands,
+        captureMeasurement: captureBlobMeasurement,
+        detectionReady,
+        settings: runnerSettings,
+    });
+
+    const [runnerMode, setRunnerMode] = useState<'auto' | 'step'>('auto');
 
     const calibrationProfilesController = useCalibrationProfilesController({
         runnerState,
@@ -354,16 +366,31 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 </div>
             )}
             <CalibrationRunnerPanel
-                runnerState={runnerState}
+                runMode={runnerMode}
+                onRunModeChange={setRunnerMode}
                 runnerSettings={runnerSettings}
-                tileEntries={tileEntries}
                 detectionReady={detectionReady}
                 drivers={drivers}
                 onUpdateSetting={updateRunnerSetting}
-                onStart={startRunner}
-                onPause={pauseRunner}
-                onResume={resumeRunner}
-                onAbort={abortRunner}
+                autoControls={{
+                    runnerState,
+                    start: startRunner,
+                    pause: pauseRunner,
+                    resume: resumeRunner,
+                    abort: abortRunner,
+                    commandLog,
+                }}
+                stepControls={{
+                    runnerState: stepRunnerController.runnerState,
+                    stepState: stepRunnerController.stepState,
+                    commandLog: stepRunnerController.commandLog,
+                    isAwaitingAdvance: stepRunnerController.isAwaitingAdvance,
+                    isActive: stepRunnerController.isActive,
+                    start: stepRunnerController.start,
+                    advance: stepRunnerController.advance,
+                    abort: stepRunnerController.abort,
+                    reset: stepRunnerController.reset,
+                }}
             />
             <div className="flex flex-col gap-6 lg:flex-row">
                 <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">

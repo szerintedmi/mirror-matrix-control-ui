@@ -1,28 +1,51 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
+import CalibrationCommandLog from '@/components/calibration/CalibrationCommandLog';
 import CalibrationHomeControls from '@/components/calibration/CalibrationHomeControls';
 import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
 import type { DriverView } from '@/context/StatusContext';
-import type { CalibrationRunnerState, TileRunState } from '@/services/calibrationRunner';
+import type {
+    CalibrationCommandLogEntry,
+    CalibrationRunnerState,
+    CalibrationStepState,
+    TileRunState,
+} from '@/services/calibrationRunner';
 import type { Motor, MotorTelemetry } from '@/types';
 
+type RunMode = 'auto' | 'step';
+
 interface CalibrationRunnerPanelProps {
-    runnerState: CalibrationRunnerState;
+    runMode: RunMode;
+    onRunModeChange: (mode: RunMode) => void;
     runnerSettings: CalibrationRunnerSettings;
-    tileEntries: TileRunState[];
     detectionReady: boolean;
     drivers: DriverView[];
     onUpdateSetting: <K extends keyof CalibrationRunnerSettings>(
         key: K,
         value: CalibrationRunnerSettings[K],
     ) => void;
-    onStart: () => void;
-    onPause: () => void;
-    onResume: () => void;
-    onAbort: () => void;
+    autoControls: {
+        runnerState: CalibrationRunnerState;
+        start: () => void;
+        pause: () => void;
+        resume: () => void;
+        abort: () => void;
+        commandLog: CalibrationCommandLogEntry[];
+    };
+    stepControls: {
+        runnerState: CalibrationRunnerState;
+        stepState: CalibrationStepState | null;
+        commandLog: CalibrationCommandLogEntry[];
+        isAwaitingAdvance: boolean;
+        isActive: boolean;
+        start: () => void;
+        advance: () => void;
+        abort: () => void;
+        reset: () => void;
+    };
 }
 
 const getTileStatusClasses = (status: TileRunState['status']): string => {
@@ -54,32 +77,39 @@ const formatGridGapPercent = (normalizedGap: number): string => {
 };
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
-    runnerState,
+    runMode,
+    onRunModeChange,
     runnerSettings,
-    tileEntries,
     detectionReady,
     drivers,
     onUpdateSetting,
-    onStart,
-    onPause,
-    onResume,
-    onAbort,
+    autoControls,
+    stepControls,
 }) => {
-    const phaseLabel = runnerState.phase.charAt(0).toUpperCase() + runnerState.phase.slice(1);
-    const activeTileLabel = runnerState.activeTile
-        ? `R${runnerState.activeTile.row}C${runnerState.activeTile.col}`
+    const activeRunnerState =
+        runMode === 'step' ? stepControls.runnerState : autoControls.runnerState;
+    const phaseLabel =
+        activeRunnerState.phase.charAt(0).toUpperCase() + activeRunnerState.phase.slice(1);
+    const activeTileLabel = activeRunnerState.activeTile
+        ? `R${activeRunnerState.activeTile.row}C${activeRunnerState.activeTile.col}`
         : '—';
     const isRunnerBusy =
-        runnerState.phase === 'homing' ||
-        runnerState.phase === 'staging' ||
-        runnerState.phase === 'measuring' ||
-        runnerState.phase === 'aligning';
-    const isRunnerPaused = runnerState.phase === 'paused';
-    const canStartRunner = !isRunnerBusy && !isRunnerPaused;
-    const canPauseRunner = isRunnerBusy;
-    const canResumeRunner = isRunnerPaused;
-    const canAbortRunner = isRunnerBusy || isRunnerPaused;
-    const blueprint = runnerState.summary?.gridBlueprint;
+        activeRunnerState.phase === 'homing' ||
+        activeRunnerState.phase === 'staging' ||
+        activeRunnerState.phase === 'measuring' ||
+        activeRunnerState.phase === 'aligning';
+    const isRunnerPaused = activeRunnerState.phase === 'paused';
+    const isStepActive = stepControls.isActive;
+    const isStepAwaiting = stepControls.isAwaitingAdvance;
+    const canStartRunner = runMode === 'step' ? !isStepActive : !isRunnerBusy && !isRunnerPaused;
+    const canPauseRunner = runMode === 'step' ? false : isRunnerBusy;
+    const canResumeRunner = runMode === 'step' ? false : isRunnerPaused;
+    const canAbortRunner = runMode === 'step' ? isStepActive : isRunnerBusy || isRunnerPaused;
+    const blueprint = activeRunnerState.summary?.gridBlueprint;
+    const handleStart = runMode === 'step' ? stepControls.start : autoControls.start;
+    const handlePause = autoControls.pause;
+    const handleResume = autoControls.resume;
+    const handleAbort = runMode === 'step' ? stepControls.abort : autoControls.abort;
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [summaryModalOpen, setSummaryModalOpen] = useState(false);
     const canonicalStepDelta = useMemo(
@@ -155,20 +185,29 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
         setIsEditingGridGap(false);
         setGridGapDraft('');
     }, []);
+    const displayedTileEntries = useMemo(() => {
+        return Object.values(activeRunnerState.tiles).sort((a, b) => {
+            if (a.tile.row === b.tile.row) {
+                return a.tile.col - b.tile.col;
+            }
+            return a.tile.row - b.tile.row;
+        });
+    }, [activeRunnerState.tiles]);
+
     const debugTileEntry = useMemo(() => {
         if (!debugTileKey) {
             return null;
         }
-        return tileEntries.find((entry) => entry.tile.key === debugTileKey) ?? null;
-    }, [debugTileKey, tileEntries]);
+        return displayedTileEntries.find((entry) => entry.tile.key === debugTileKey) ?? null;
+    }, [debugTileKey, displayedTileEntries]);
     const debugTileSummary = useMemo(() => {
-        if (!debugTileKey || !runnerState.summary) {
+        if (!debugTileKey || !activeRunnerState.summary) {
             return null;
         }
-        return runnerState.summary.tiles[debugTileKey] ?? null;
-    }, [debugTileKey, runnerState.summary]);
+        return activeRunnerState.summary.tiles[debugTileKey] ?? null;
+    }, [activeRunnerState.summary, debugTileKey]);
     const stepTestSnapshot =
-        runnerState.summary?.stepTestSettings ??
+        activeRunnerState.summary?.stepTestSettings ??
         ({
             deltaSteps: runnerSettings.deltaSteps,
         } as const);
@@ -236,7 +275,15 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     );
 
     const gridColumnCount =
-        tileEntries.reduce((max, entry) => (entry.tile.col > max ? entry.tile.col : max), 0) + 1;
+        displayedTileEntries.reduce(
+            (max, entry) => (entry.tile.col > max ? entry.tile.col : max),
+            0,
+        ) + 1;
+
+    const activeCommandLog = useMemo(
+        () => (runMode === 'step' ? stepControls.commandLog : autoControls.commandLog),
+        [autoControls.commandLog, runMode, stepControls.commandLog],
+    );
 
     return (
         <>
@@ -255,6 +302,30 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs uppercase tracking-wide text-gray-500">
+                                Mode
+                            </span>
+                            <div className="flex rounded-md border border-gray-700 bg-gray-900 text-xs font-semibold">
+                                {(['auto', 'step'] as RunMode[]).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        className={`px-3 py-1 transition-colors ${
+                                            runMode === mode
+                                                ? 'bg-emerald-700 text-white'
+                                                : 'text-gray-300 hover:bg-gray-800'
+                                        } first:rounded-l-md last:rounded-r-md`}
+                                        onClick={() => onRunModeChange(mode)}
+                                        aria-pressed={runMode === mode}
+                                    >
+                                        {mode === 'auto' ? 'Auto' : 'Step-by-step'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
                             className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
@@ -263,10 +334,24 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     : 'bg-gray-800 text-gray-500'
                             }`}
                             disabled={!canStartRunner || !detectionReady}
-                            onClick={onStart}
+                            onClick={handleStart}
                         >
                             Start
                         </button>
+                        {runMode === 'step' && (
+                            <button
+                                type="button"
+                                className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
+                                    isStepAwaiting
+                                        ? 'bg-sky-600 text-white hover:bg-sky-500'
+                                        : 'bg-gray-800 text-gray-500'
+                                }`}
+                                disabled={!isStepAwaiting}
+                                onClick={stepControls.advance}
+                            >
+                                Next step
+                            </button>
+                        )}
                         <button
                             type="button"
                             className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
@@ -275,7 +360,8 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     : 'bg-gray-800 text-gray-500'
                             }`}
                             disabled={!canPauseRunner}
-                            onClick={onPause}
+                            onClick={handlePause}
+                            title={runMode === 'step' ? 'Pause not available in step mode' : ''}
                         >
                             Pause
                         </button>
@@ -287,7 +373,8 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     : 'bg-gray-800 text-gray-500'
                             }`}
                             disabled={!canResumeRunner}
-                            onClick={onResume}
+                            onClick={handleResume}
+                            title={runMode === 'step' ? 'Resume not available in step mode' : ''}
                         >
                             Resume
                         </button>
@@ -299,37 +386,40 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     : 'bg-gray-800 text-gray-500'
                             }`}
                             disabled={!canAbortRunner}
-                            onClick={onAbort}
+                            onClick={handleAbort}
                         >
                             Abort
                         </button>
                     </div>
                 </div>
-                {runnerState.error && (
-                    <p className="mt-3 text-sm text-rose-300">{runnerState.error}</p>
+                {activeRunnerState.error && (
+                    <p className="mt-3 text-sm text-rose-300">{activeRunnerState.error}</p>
                 )}
                 <div className="mt-4 grid gap-3 text-sm text-gray-300 sm:grid-cols-4">
                     <div>
                         <p className="text-xs uppercase tracking-wide text-gray-500">Ready tiles</p>
-                        <p className="font-semibold">{runnerState.progress.total}</p>
+                        <p className="font-semibold">{activeRunnerState.progress.total}</p>
                     </div>
                     <div>
                         <p className="text-xs uppercase tracking-wide text-gray-500">Completed</p>
                         <p className="font-semibold text-emerald-300">
-                            {runnerState.progress.completed}
+                            {activeRunnerState.progress.completed}
                         </p>
                     </div>
                     <div>
                         <p className="text-xs uppercase tracking-wide text-gray-500">Failed</p>
-                        <p className="font-semibold text-rose-300">{runnerState.progress.failed}</p>
+                        <p className="font-semibold text-rose-300">
+                            {activeRunnerState.progress.failed}
+                        </p>
                     </div>
                     <div>
                         <p className="text-xs uppercase tracking-wide text-gray-500">Skipped</p>
                         <p className="font-semibold text-gray-400">
-                            {runnerState.progress.skipped}
+                            {activeRunnerState.progress.skipped}
                         </p>
                     </div>
                 </div>
+                <CalibrationCommandLog entries={activeCommandLog} mode={runMode} />
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <label className="text-sm text-gray-300">
                         <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
@@ -382,8 +472,8 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             </div>
                             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                                 <CalibrationHomeControls
-                                    runnerState={runnerState}
-                                    tileEntries={tileEntries}
+                                    runnerState={activeRunnerState}
+                                    tileEntries={displayedTileEntries}
                                     isRunnerBusy={isRunnerBusy}
                                 />
                                 <button
@@ -407,7 +497,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             gridTemplateColumns: `repeat(${Math.max(gridColumnCount, 1)}, minmax(0, 1fr))`,
                         }}
                     >
-                        {tileEntries.map((entry) => (
+                        {displayedTileEntries.map((entry) => (
                             <div
                                 key={entry.tile.key}
                                 role="button"
@@ -477,7 +567,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
             />
             <CalibrationSummaryModal
                 open={summaryModalOpen}
-                summary={runnerState.summary ?? null}
+                summary={activeRunnerState.summary ?? null}
                 onClose={() => setSummaryModalOpen(false)}
             />
         </>

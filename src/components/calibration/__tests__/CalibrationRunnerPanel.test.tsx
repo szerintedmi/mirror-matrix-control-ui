@@ -13,6 +13,7 @@ import type {
     TileRunState,
     TileCalibrationMetrics,
     CalibrationRunSummary,
+    CalibrationStepState,
 } from '@/services/calibrationRunner';
 import type { Motor } from '@/types';
 
@@ -121,6 +122,7 @@ const runnerState: CalibrationRunnerState = {
 const runnerSettings: CalibrationRunnerSettings = DEFAULT_CALIBRATION_RUNNER_SETTINGS;
 
 const drivers: DriverView[] = [];
+const detectionReady = true;
 
 const noop = () => {};
 
@@ -132,33 +134,45 @@ const handleUpdateSetting = <K extends keyof CalibrationRunnerSettings>(
     void value;
 };
 
-interface RenderOptions {
-    runnerState?: CalibrationRunnerState;
-    tileEntries?: TileRunState[];
-    drivers?: DriverView[];
-    detectionReady?: boolean;
-}
-
-const renderPanel = async (options: RenderOptions = {}) => {
+const renderPanel = async (
+    options: { runnerState?: CalibrationRunnerState; drivers?: DriverView[] } = {},
+) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const state = options.runnerState ?? runnerState;
-    const entries = options.tileEntries ?? [pendingTile, completedTile];
     const driverList = options.drivers ?? drivers;
-    const detectionReady = options.detectionReady ?? true;
+    const stepState: CalibrationStepState = {
+        step: { kind: 'home-all', label: 'Home all tiles' },
+        status: 'waiting',
+    };
     await act(async () => {
         const element = (
             <CalibrationRunnerPanel
-                runnerState={state}
+                runMode="auto"
+                onRunModeChange={() => {}}
                 runnerSettings={runnerSettings}
-                tileEntries={entries}
                 detectionReady={detectionReady}
                 drivers={driverList}
                 onUpdateSetting={handleUpdateSetting}
-                onStart={noop}
-                onPause={noop}
-                onResume={noop}
-                onAbort={noop}
+                autoControls={{
+                    runnerState: state,
+                    start: noop,
+                    pause: noop,
+                    resume: noop,
+                    abort: noop,
+                    commandLog: [],
+                }}
+                stepControls={{
+                    runnerState: state,
+                    stepState,
+                    commandLog: [],
+                    isAwaitingAdvance: false,
+                    isActive: false,
+                    start: noop,
+                    advance: noop,
+                    abort: noop,
+                    reset: noop,
+                }}
             />
         );
         const root = createRoot(container);

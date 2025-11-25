@@ -8,6 +8,7 @@ import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import {
     CalibrationRunner,
+    type CalibrationCommandLogEntry,
     type CalibrationRunnerState,
     type TileRunState,
     type CaptureBlobMeasurement,
@@ -29,6 +30,7 @@ interface UseCalibrationRunnerControllerParams {
 export interface CalibrationRunnerController {
     runnerState: CalibrationRunnerState;
     runnerSettings: CalibrationRunnerSettings;
+    commandLog: CalibrationCommandLogEntry[];
     updateSetting: <K extends keyof CalibrationRunnerSettings>(
         key: K,
         value: CalibrationRunnerSettings[K],
@@ -54,6 +56,7 @@ export const useCalibrationRunnerController = ({
     const [runnerState, setRunnerState] = useState<CalibrationRunnerState>(() =>
         createBaselineRunnerState(gridSize, mirrorConfig),
     );
+    const [commandLog, setCommandLog] = useState<CalibrationCommandLogEntry[]>([]);
     const runnerRef = useRef<CalibrationRunner | null>(null);
 
     const updateSetting = useCallback(
@@ -86,7 +89,12 @@ export const useCalibrationRunnerController = ({
         runnerRef.current = null;
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setRunnerState(createBaselineRunnerState(gridSize, mirrorConfig));
+        setCommandLog([]);
     }, [gridSize, mirrorConfig]);
+
+    const appendLogEntry = useCallback((entry: CalibrationCommandLogEntry) => {
+        setCommandLog((prev) => [entry, ...prev].slice(0, 120));
+    }, []);
 
     const startRunner = useCallback(() => {
         if (!detectionReady) {
@@ -107,10 +115,20 @@ export const useCalibrationRunnerController = ({
             onStateChange: (next) => {
                 setRunnerState(next);
             },
+            onCommandLog: appendLogEntry,
         });
         runnerRef.current = runner;
+        setCommandLog([]);
         runner.start();
-    }, [captureMeasurement, detectionReady, gridSize, mirrorConfig, motorApi, runnerSettings]);
+    }, [
+        appendLogEntry,
+        captureMeasurement,
+        detectionReady,
+        gridSize,
+        mirrorConfig,
+        motorApi,
+        runnerSettings,
+    ]);
 
     const pauseRunner = useCallback(() => {
         runnerRef.current?.pause();
@@ -138,6 +156,7 @@ export const useCalibrationRunnerController = ({
     return {
         runnerState,
         runnerSettings,
+        commandLog,
         updateSetting: (key, value) => {
             if (key === 'deltaSteps') {
                 updateSetting(key, clampSetting(Number(value), 50, MOTOR_MAX_POSITION_STEPS));
