@@ -163,12 +163,11 @@ const roundSteps = (value: number): number => {
     return Math.round(value);
 };
 
-const getAxisStepDelta = (axis: Axis, deltaSteps: number): number | null => {
+const getAxisStepDelta = (_axis: Axis, deltaSteps: number): number | null => {
     if (deltaSteps <= 0) {
         return null;
     }
-    const rawDelta = clampSteps(deltaSteps);
-    return axis === 'x' ? -rawDelta : rawDelta;
+    return clampSteps(deltaSteps);
 };
 
 class RunnerAbortError extends Error {
@@ -841,7 +840,7 @@ export class CalibrationRunner {
             return { x: 0, y: 0 };
         }
         return {
-            x: MOTOR_MAX_POSITION_STEPS,
+            x: MOTOR_MIN_POSITION_STEPS,
             y: this.computeAsideYTarget(tile.col),
         };
     }
