@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
+import PatternDesignerToolbar from '@/components/patternDesigner/PatternDesignerToolbar';
 import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDesigner/types';
 import PatternLibraryList from '@/components/PatternLibraryList';
 import { useCalibrationContext } from '@/context/CalibrationContext';
@@ -12,6 +13,18 @@ import { loadGridState } from '@/services/gridStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
+import {
+    createHistoryStacks,
+    pushHistorySnapshot,
+    redoHistorySnapshot,
+    undoHistorySnapshot,
+    type HistoryStacks,
+} from '@/utils/history';
+import {
+    transformPatternRotate,
+    transformPatternScale,
+    transformPatternShift,
+} from '@/utils/patternTransforms';
 
 import { calculateMaxOverlapCount } from '../utils/patternOverlaps';
 
@@ -42,10 +55,7 @@ interface RenameDialogState {
 }
 
 const DEFAULT_BLOB_RADIUS = 0.04;
-const EDIT_MODE_LABEL: Record<PatternEditMode, string> = {
-    placement: 'Placement',
-    erase: 'Erase',
-};
+const HISTORY_LIMIT = 50;
 
 const clampUnit = (value: number): number => {
     if (Number.isNaN(value)) {
@@ -450,6 +460,90 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
     const [showBounds, setShowBounds] = useState(false);
 
+    // Derive selected pattern first, as it's needed by many handlers
+    const selectedPattern = useMemo(
+        () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
+        [patterns, selectedPatternId],
+    );
+
+    // Undo/Redo history
+    const historyRef = useRef<HistoryStacks<Pattern>>(createHistoryStacks<Pattern>());
+    const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+
+    const syncHistoryState = useCallback(() => {
+        setHistoryState({
+            canUndo: historyRef.current.past.length > 0,
+            canRedo: historyRef.current.future.length > 0,
+        });
+    }, []);
+
+    // Reset history when switching patterns
+    useEffect(() => {
+        historyRef.current = createHistoryStacks<Pattern>();
+        syncHistoryState();
+    }, [selectedPatternId, syncHistoryState]);
+
+    const recordSnapshot = useCallback(
+        (pattern: Pattern) => {
+            historyRef.current = pushHistorySnapshot(historyRef.current, pattern, HISTORY_LIMIT);
+            syncHistoryState();
+        },
+        [syncHistoryState],
+    );
+
+    const handleUndo = useCallback(() => {
+        if (!selectedPattern || historyRef.current.past.length === 0) return;
+
+        const result = undoHistorySnapshot(historyRef.current, selectedPattern);
+        if (result.value === selectedPattern) return;
+
+        historyRef.current = result.history;
+        syncHistoryState();
+        updatePattern(result.value);
+    }, [selectedPattern, updatePattern, syncHistoryState]);
+
+    const handleRedo = useCallback(() => {
+        if (!selectedPattern || historyRef.current.future.length === 0) return;
+
+        const result = redoHistorySnapshot(historyRef.current, selectedPattern);
+        if (result.value === selectedPattern) return;
+
+        historyRef.current = result.history;
+        syncHistoryState();
+        updatePattern(result.value);
+    }, [selectedPattern, updatePattern, syncHistoryState]);
+
+    // Transform handlers
+    const handleShift = useCallback(
+        (dx: number, dy: number) => {
+            if (!selectedPattern) return;
+            recordSnapshot(selectedPattern);
+            const transformed = transformPatternShift(selectedPattern, dx, dy);
+            updatePattern(transformed);
+        },
+        [selectedPattern, updatePattern, recordSnapshot],
+    );
+
+    const handleScale = useCallback(
+        (scaleX: number, scaleY: number) => {
+            if (!selectedPattern) return;
+            recordSnapshot(selectedPattern);
+            const transformed = transformPatternScale(selectedPattern, scaleX, scaleY);
+            updatePattern(transformed);
+        },
+        [selectedPattern, updatePattern, recordSnapshot],
+    );
+
+    const handleRotate = useCallback(
+        (angleDeg: number) => {
+            if (!selectedPattern) return;
+            recordSnapshot(selectedPattern);
+            const transformed = transformPatternRotate(selectedPattern, angleDeg);
+            updatePattern(transformed);
+        },
+        [selectedPattern, updatePattern, recordSnapshot],
+    );
+
     const updateEditMode = useCallback((mode: PatternEditMode) => {
         setEditMode(mode);
         setHoveredPatternPointId(null);
@@ -467,6 +561,24 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     return;
                 }
             }
+
+            // Undo: Cmd+Z (Mac) or Ctrl+Z (Windows)
+            if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
+                event.preventDefault();
+                handleUndo();
+                return;
+            }
+
+            // Redo: Cmd+Shift+Z (Mac) or Ctrl+Shift+Z (Windows) or Ctrl+Y
+            if (
+                ((event.metaKey || event.ctrlKey) && event.key === 'z' && event.shiftKey) ||
+                ((event.metaKey || event.ctrlKey) && event.key === 'y')
+            ) {
+                event.preventDefault();
+                handleRedo();
+                return;
+            }
+
             if (event.key === 'p' || event.key === 'P') {
                 updateEditMode('placement');
             } else if (event.key === 'e' || event.key === 'E') {
@@ -475,12 +587,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [updateEditMode]);
-
-    const selectedPattern = useMemo(
-        () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
-        [patterns, selectedPatternId],
-    );
+    }, [updateEditMode, handleUndo, handleRedo]);
     const calibratedBlobRadius = useMemo(() => {
         const diameter = selectedCalibrationProfile?.calibrationSpace.blobStats?.maxDiameter;
         if (typeof diameter === 'number' && Number.isFinite(diameter) && diameter > 0) {
@@ -608,10 +715,13 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     };
 
     const handlePatternChange = useCallback(
-        (updatedPattern: Pattern) => {
+        (updatedPattern: Pattern, pushToHistory: boolean = true) => {
+            if (pushToHistory && selectedPattern) {
+                recordSnapshot(selectedPattern);
+            }
             updatePattern(updatedPattern);
         },
-        [updatePattern],
+        [updatePattern, selectedPattern, recordSnapshot],
     );
 
     // Rename Modal Handlers
@@ -735,46 +845,22 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                         }
                     />
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-200">
-                    <span className="uppercase tracking-wide text-gray-400">Mode</span>
-                    <div className="inline-flex rounded-md bg-gray-800/70 p-1">
-                        {(['placement', 'erase'] as PatternEditMode[]).map((mode) => {
-                            const isActive = editMode === mode;
-                            const hotkey = mode === 'placement' ? 'P' : 'E';
-                            return (
-                                <button
-                                    key={mode}
-                                    type="button"
-                                    onClick={() => updateEditMode(mode)}
-                                    className={`${
-                                        isActive
-                                            ? 'bg-cyan-600 text-white'
-                                            : 'text-gray-300 hover:text-white'
-                                    } rounded px-3 py-1 text-xs font-semibold transition`}
-                                    aria-pressed={isActive}
-                                >
-                                    {EDIT_MODE_LABEL[mode]} ({hotkey})
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => setShowBounds((previous) => !previous)}
-                        disabled={!showSpotSummary}
-                        aria-pressed={showBounds}
-                        className={`rounded px-3 py-1 text-xs font-semibold transition ${
-                            showBounds ? 'bg-cyan-600 text-white' : 'text-gray-300 hover:text-white'
-                        } ${!showSpotSummary ? 'cursor-not-allowed opacity-50 hover:text-gray-300' : ''}`}
-                        title={
-                            showSpotSummary
-                                ? 'Toggle calibration tile bounds overlay'
-                                : 'Select a calibration profile to view bounds'
-                        }
-                    >
-                        Show Bounds
-                    </button>
-                </div>
+                <PatternDesignerToolbar
+                    editMode={editMode}
+                    onEditModeChange={updateEditMode}
+                    onShift={handleShift}
+                    onScale={handleScale}
+                    onRotate={handleRotate}
+                    canUndo={historyState.canUndo}
+                    canRedo={historyState.canRedo}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    showBounds={showBounds}
+                    onShowBoundsChange={setShowBounds}
+                    canShowBounds={showSpotSummary}
+                    blobRadius={calibratedBlobRadius}
+                    disabled={!selectedPattern}
+                />
                 <div className="flex flex-1 items-center justify-center">
                     {selectedPattern ? (
                         <PatternDesignerCanvas
