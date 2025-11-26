@@ -29,15 +29,13 @@ import Modal from '@/components/Modal';
 import PatternPreview from '@/components/PatternPreview';
 import SequencePreview from '@/components/SequencePreview';
 import { useLogStore } from '@/context/LogContext';
+import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import {
     loadPlaybackSequences,
     persistPlaybackSequences,
     removePlaybackSequence,
 } from '@/services/playbackSequenceStorage';
-import {
-    planProfilePlayback,
-    type ProfilePlaybackAxisTarget,
-} from '@/services/profilePlaybackPlanner';
+import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import type { CalibrationProfile, MirrorConfig, Pattern, PlaybackSequence } from '@/types';
 
 type RunStatus = 'idle' | 'running' | 'success' | 'error';
@@ -66,7 +64,6 @@ interface PlaybackSequenceManagerProps {
     storage: Storage | undefined;
     onSelectPatternId?: (patternId: string) => void;
     onEditStateChange?: (state: { isEditing: boolean; sequenceName: string | null }) => void;
-    dispatchPlayback: (targets: ProfilePlaybackAxisTarget[], patternName: string) => Promise<void>;
 }
 
 export interface PlaybackSequenceManagerHandle {
@@ -213,11 +210,11 @@ const PlaybackSequenceManager = React.forwardRef<
             storage,
             onSelectPatternId,
             onEditStateChange,
-            dispatchPlayback,
         },
         ref,
     ) => {
         const { logInfo } = useLogStore();
+        const { playPatternSequence, isPlaying } = usePlaybackDispatch({ gridSize, mirrorConfig });
         const [sequence, setSequence] = useState<QueuedPattern[]>([]);
         const [savedSequences, setSavedSequences] = useState<PlaybackSequence[]>(() =>
             loadPlaybackSequences(storage),
@@ -239,7 +236,10 @@ const PlaybackSequenceManager = React.forwardRef<
         );
 
         const canPlaySequence =
-            sequence.length > 0 && Boolean(selectedProfile) && runStatus !== 'running';
+            sequence.length > 0 &&
+            Boolean(selectedProfile) &&
+            runStatus !== 'running' &&
+            !isPlaying;
         const isEditMode = Boolean(activeSavedSequenceId);
         const activeSequence = useMemo(
             () =>
@@ -462,48 +462,54 @@ const PlaybackSequenceManager = React.forwardRef<
             setRunMessage(null);
         };
 
-        const handlePlaySequence = async () => {
-            if (!canPlaySequence) return;
+        const handlePlaySequence = useCallback(async () => {
+            if (!canPlaySequence || !selectedProfile) return;
+
+            const patternsToPlay = sequence
+                .map((entry) => patternLookup.get(entry.patternId))
+                .filter((p): p is Pattern => Boolean(p));
+
+            if (patternsToPlay.length === 0) {
+                setRunStatus('error');
+                setRunMessage('No valid patterns in sequence.');
+                return;
+            }
+
             setRunStatus('running');
             setRunMessage(null);
 
-            try {
-                for (let i = 0; i < sequence.length; i++) {
-                    const entry = sequence[i];
-                    const pattern = patternLookup.get(entry.patternId);
-                    if (!pattern) {
-                        throw new Error('A pattern in the sequence is no longer available.');
-                    }
+            const result = await playPatternSequence(patternsToPlay, selectedProfile);
+            setRunStatus(result.success ? 'success' : 'error');
+            setRunMessage(result.message);
+        }, [canPlaySequence, patternLookup, playPatternSequence, selectedProfile, sequence]);
 
-                    // Validate again before running
-                    const plan = planProfilePlayback({
-                        gridSize,
-                        mirrorConfig,
-                        profile: selectedProfile!,
-                        pattern,
-                    });
-
-                    if (plan.errors.length > 0) {
-                        throw new Error(
-                            `Pattern "${pattern.name}" has errors: ${plan.errors[0].message}`,
-                        );
-                    }
-
-                    // Highlight current item? (Not implemented visually yet, but logic is here)
-                    await dispatchPlayback(plan.playableAxisTargets, pattern.name);
-
-                    // Optional delay between patterns?
-                    if (i < sequence.length - 1) {
-                        await new Promise((resolve) => setTimeout(resolve, 500));
-                    }
+        const handlePlaySavedSequence = useCallback(
+            async (seq: PlaybackSequence) => {
+                if (!selectedProfile) {
+                    setRunStatus('error');
+                    setRunMessage('Select a calibration profile before playing.');
+                    return;
                 }
-                setRunStatus('success');
-                setRunMessage('Sequence completed successfully.');
-            } catch (error) {
-                setRunStatus('error');
-                setRunMessage(error instanceof Error ? error.message : 'Sequence playback failed.');
-            }
-        };
+
+                const patternsToPlay = seq.patternIds
+                    .map((id) => patternLookup.get(id))
+                    .filter((p): p is Pattern => Boolean(p));
+
+                if (patternsToPlay.length === 0) {
+                    setRunStatus('error');
+                    setRunMessage('No valid patterns in this sequence.');
+                    return;
+                }
+
+                setRunStatus('running');
+                setRunMessage(null);
+
+                const result = await playPatternSequence(patternsToPlay, selectedProfile);
+                setRunStatus(result.success ? 'success' : 'error');
+                setRunMessage(result.message);
+            },
+            [patternLookup, playPatternSequence, selectedProfile],
+        );
 
         // Save/Load Handlers
         const deriveDefaultSequenceName = useCallback(() => {
@@ -871,11 +877,14 @@ const PlaybackSequenceManager = React.forwardRef<
                                                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
                                                     <button
                                                         type="button"
-                                                        onClick={() => handlePlaySequence()} // This will play the currently loaded sequence
-                                                        className="rounded-md border border-emerald-600/50 bg-emerald-900/20 px-3 py-2 text-emerald-100 transition hover:bg-emerald-900/40 hover:text-white"
+                                                        onClick={() =>
+                                                            handlePlaySavedSequence(entry)
+                                                        }
+                                                        disabled={isPlaying || !selectedProfile}
+                                                        className="rounded-md border border-emerald-600/50 bg-emerald-900/20 px-3 py-2 text-emerald-100 transition hover:bg-emerald-900/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                                                         title="Play sequence immediately"
                                                     >
-                                                        Play
+                                                        {isPlaying ? 'Playing…' : 'Play'}
                                                     </button>
                                                     <button
                                                         type="button"

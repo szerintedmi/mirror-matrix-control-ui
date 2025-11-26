@@ -503,7 +503,11 @@ export const saveCalibrationProfile = (
         console.warn('Cannot save calibration profile before a summary is available.');
         return null;
     }
-    const tiles = buildProfileTiles(options.runnerState.tiles, summary.tiles, summary.gridBlueprint);
+    const tiles = buildProfileTiles(
+        options.runnerState.tiles,
+        summary.tiles,
+        summary.gridBlueprint,
+    );
     const metrics = computeMetrics(tiles);
     const fingerprint = getGridStateFingerprint(options.gridSnapshot);
     const now = new Date().toISOString();

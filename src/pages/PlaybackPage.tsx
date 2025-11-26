@@ -6,12 +6,10 @@ import PlaybackSequenceManager, {
     type PlaybackSequenceManagerHandle,
 } from '@/components/playback/PlaybackSequenceManager';
 import { useCalibrationContext } from '@/context/CalibrationContext';
-import { useLogStore } from '@/context/LogContext';
 import { usePatternContext } from '@/context/PatternContext';
-import { useMotorCommands } from '@/hooks/useMotorCommands';
+import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import {
     planProfilePlayback,
-    type ProfilePlaybackAxisTarget,
     type ProfilePlaybackPlanResult,
 } from '@/services/profilePlaybackPlanner';
 import type { MirrorConfig, Pattern } from '@/types';
@@ -27,8 +25,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
         [],
     );
-    const { moveMotor } = useMotorCommands();
-    const { logInfo, logError } = useLogStore();
 
     // Contexts
     const { patterns, selectedPatternId, selectPattern } = usePatternContext();
@@ -38,6 +34,8 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         selectProfile: selectCalibrationProfile,
         selectedProfile: selectedCalibrationProfile,
     } = useCalibrationContext();
+
+    const { playSinglePattern } = usePlaybackDispatch({ gridSize, mirrorConfig });
 
     const selectedPattern = useMemo(
         () => patterns.find((pattern) => pattern.id === selectedPatternId) ?? null,
@@ -131,34 +129,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
         return map;
     }, [gridSize, mirrorConfig, patterns, selectedCalibrationProfile]);
 
-    const dispatchPlayback = useCallback(
-        async (targets: ProfilePlaybackAxisTarget[], patternName: string) => {
-            if (targets.length === 0) {
-                throw new Error('No playable motors found for this pattern.');
-            }
-            const settled = await Promise.allSettled(
-                targets.map((target) =>
-                    moveMotor({
-                        mac: target.motor.nodeMac,
-                        motorId: target.motor.motorIndex,
-                        positionSteps: target.targetSteps,
-                    }),
-                ),
-            );
-            const failures = settled.filter(
-                (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
-            );
-            if (failures.length > 0) {
-                const message = `${failures.length}/${targets.length} motor commands failed for "${patternName}".`;
-                logError('Playback', message);
-                throw new Error(message);
-            }
-            const successMessage = `Sent ${targets.length} axis moves for "${patternName}".`;
-            logInfo('Playback', successMessage);
-        },
-        [logError, logInfo, moveMotor],
-    );
-
     const getValidationStatus = useCallback(
         (pattern: Pattern) => {
             if (!selectedCalibrationProfile) {
@@ -189,31 +159,11 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
     const handleQuickPlay = useCallback(
         async (pattern: Pattern) => {
             if (!selectedCalibrationProfile) {
-                logError('Playback', 'Select a calibration profile before playing a pattern.');
                 return;
             }
-
-            const plan = planProfilePlayback({
-                gridSize,
-                mirrorConfig,
-                profile: selectedCalibrationProfile,
-                pattern,
-            });
-
-            if (plan.errors.length > 0) {
-                logError('Playback', plan.errors[0].message);
-                return;
-            }
-
-            try {
-                await dispatchPlayback(plan.playableAxisTargets, pattern.name);
-            } catch (error) {
-                if (error instanceof Error) {
-                    logError('Playback', error.message);
-                }
-            }
+            await playSinglePattern(pattern, selectedCalibrationProfile);
         },
-        [dispatchPlayback, gridSize, logError, mirrorConfig, selectedCalibrationProfile],
+        [playSinglePattern, selectedCalibrationProfile],
     );
 
     const handleEditStateChange = useCallback(
@@ -268,7 +218,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
                     storage={resolvedStorage}
                     onSelectPatternId={selectPattern}
                     onEditStateChange={handleEditStateChange}
-                    dispatchPlayback={dispatchPlayback}
                 />
 
                 <section className="rounded-lg border border-gray-800/70 bg-gray-900/50 p-4 shadow">

@@ -7,6 +7,7 @@ import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDe
 import PatternLibraryList from '@/components/PatternLibraryList';
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { usePatternContext } from '@/context/PatternContext';
+import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import { loadGridState } from '@/services/gridStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
@@ -441,6 +442,8 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         selectedProfile: selectedCalibrationProfile,
     } = useCalibrationContext();
 
+    const { playSinglePattern } = usePlaybackDispatch({ gridSize, mirrorConfig });
+
     const [hoverPoint, setHoverPoint] = useState<DesignerCoordinate | null>(null);
     const [editMode, setEditMode] = useState<PatternEditMode>('placement');
     const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
@@ -650,34 +653,27 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     } | null>(null);
 
     const handleQuickPlay = useCallback(
-        (pattern: Pattern) => {
+        async (pattern: Pattern) => {
             if (!selectedCalibrationProfile) {
                 setQuickPlayMessage({
                     tone: 'error',
-                    text: 'Select a calibration profile to simulate playback.',
+                    text: 'Select a calibration profile to play.',
                 });
                 return;
             }
 
-            const plan = planProfilePlayback({
-                gridSize,
-                mirrorConfig,
-                profile: selectedCalibrationProfile,
-                pattern,
-            });
-
-            if (plan.errors.length > 0) {
-                setQuickPlayMessage({ tone: 'error', text: plan.errors[0].message });
-                return;
-            }
-
-            setQuickPlayMessage({
-                tone: 'success',
-                text: `Ready: would move ${plan.playableAxisTargets.length} axes for "${pattern.name}"`,
-            });
+            setQuickPlayMessage({ tone: 'success', text: `Playing "${pattern.name}"...` });
             selectPattern(pattern.id);
+
+            const result = await playSinglePattern(pattern, selectedCalibrationProfile);
+            setQuickPlayMessage({
+                tone: result.success ? 'success' : 'error',
+                text: result.success
+                    ? `Played "${pattern.name}" (${result.axisCount} axes)`
+                    : result.message,
+            });
         },
-        [gridSize, mirrorConfig, selectPattern, selectedCalibrationProfile],
+        [playSinglePattern, selectPattern, selectedCalibrationProfile],
     );
 
     return (
