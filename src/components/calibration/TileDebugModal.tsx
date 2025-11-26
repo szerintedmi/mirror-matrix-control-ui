@@ -2,17 +2,18 @@ import React from 'react';
 
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import Modal from '@/components/Modal';
-import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { TileCalibrationResult, TileRunState } from '@/services/calibrationRunner';
 import type { Motor, MotorTelemetry } from '@/types';
+import { computeTileMetrics, getAxisAssignmentLabel } from '@/utils/tileCalibrationCalculations';
+import { generateTileFormulas } from '@/utils/tileCalibrationFormulas';
 
 import {
-    convertNormalizedToSteps,
     formatDecimal,
     formatPercent,
     formatStepValue,
     formatTimestamp,
 } from './calibrationMetricsFormatters';
+import DebugStat from './DebugStat';
 
 interface TileDebugModalProps {
     open: boolean;
@@ -39,164 +40,35 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
             </Modal>
         );
     }
-    const metrics = entry.metrics ?? {};
-    const home = metrics.home ?? summaryTile?.homeMeasurement ?? null;
-    const adjustedHome = metrics.adjustedHome ?? summaryTile?.adjustedHome ?? null;
-    const homeOffset = metrics.homeOffset ?? summaryTile?.homeOffset ?? null;
-    const stepToDisplacement =
-        metrics.stepToDisplacement ?? summaryTile?.stepToDisplacement ?? null;
-    const sizeDeltaAtStepTest =
-        metrics.sizeDeltaAtStepTest ?? summaryTile?.sizeDeltaAtStepTest ?? null;
-    const inferredBounds = summaryTile?.inferredBounds ?? null;
-    const axisStepScale = summaryTile?.stepScale ?? null;
-    const perStepX = stepToDisplacement?.x ?? null;
-    const perStepY = stepToDisplacement?.y ?? null;
-    const fallbackStepScaleX = perStepX && Math.abs(perStepX) > 1e-9 ? 1 / perStepX : null;
-    const fallbackStepScaleY = perStepY && Math.abs(perStepY) > 1e-9 ? 1 / perStepY : null;
-    const stepScaleX = axisStepScale?.x ?? fallbackStepScaleX;
-    const stepScaleY = axisStepScale?.y ?? fallbackStepScaleY;
 
-    const alignmentStepsX = homeOffset
-        ? convertNormalizedToSteps(
-              -homeOffset.dx,
-              perStepX,
-              MOTOR_MIN_POSITION_STEPS,
-              MOTOR_MAX_POSITION_STEPS,
-          )
-        : null;
-    const alignmentStepsY = homeOffset
-        ? convertNormalizedToSteps(
-              -homeOffset.dy,
-              perStepY,
-              MOTOR_MIN_POSITION_STEPS,
-              MOTOR_MAX_POSITION_STEPS,
-          )
-        : null;
-    const measuredShiftX =
-        perStepX !== null && Number.isFinite(perStepX) && stepTestSettings.deltaSteps > 0
-            ? perStepX * stepTestSettings.deltaSteps
-            : null;
-    const measuredShiftY =
-        perStepY !== null && Number.isFinite(perStepY) && stepTestSettings.deltaSteps > 0
-            ? perStepY * stepTestSettings.deltaSteps
-            : null;
-    const sizeAfterStep =
-        home?.size !== null && home?.size !== undefined && sizeDeltaAtStepTest !== null
-            ? home.size + sizeDeltaAtStepTest
-            : null;
-    const hasMetrics = Boolean(
-        home ||
-            adjustedHome ||
-            homeOffset ||
-            inferredBounds ||
-            (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)) ||
-            (axisStepScale && (axisStepScale.x || axisStepScale.y)),
-    );
+    // Compute all metrics and formulas using extracted utilities
+    const metrics = computeTileMetrics({
+        entry,
+        summaryTile,
+        deltaSteps: stepTestSettings.deltaSteps,
+    });
+    const formulas = generateTileFormulas(metrics, stepTestSettings.deltaSteps);
 
-    const axisAssignmentLabel = (axis: 'x' | 'y'): string => {
-        const motor = entry.assignment[axis];
-        if (!motor) {
-            return 'Unassigned';
-        }
-        return `${motor.nodeMac} · M${motor.motorIndex}`;
-    };
-
-    const homeTimestamp = home?.capturedAt ?? null;
-    const measurementStats = home?.stats ?? null;
-
-    const adjustedHomeXFormula =
-        adjustedHome && home && homeOffset
-            ? `\`home.x - homeOffset.dx = ${formatDecimal(home.x)} - ${formatDecimal(
-                  homeOffset.dx,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )}\``
-            : '`home.x - homeOffset.dx`';
-    const adjustedHomeYFormula =
-        adjustedHome && home && homeOffset
-            ? `\`home.y - homeOffset.dy = ${formatDecimal(home.y)} - ${formatDecimal(
-                  homeOffset.dy,
-                  {
-                      digits: 4,
-                      signed: true,
-                  },
-              )}\``
-            : '`home.y - homeOffset.dy`';
-    const offsetXFormula =
-        homeOffset && home && adjustedHome
-            ? `\`home.x - adjustedHome.x = ${formatDecimal(home.x)} - ${formatDecimal(adjustedHome.x)}\``
-            : '`home.x - adjustedHome.x`';
-    const offsetYFormula =
-        homeOffset && home && adjustedHome
-            ? `\`home.y - adjustedHome.y = ${formatDecimal(home.y)} - ${formatDecimal(adjustedHome.y)}\``
-            : '`home.y - adjustedHome.y`';
-
-    const alignmentStepsFormulaX =
-        homeOffset && perStepX
-            ? `\`convertNormalizedToSteps(-homeOffset.dx, stepToDisplacement.x, ${MOTOR_MIN_POSITION_STEPS}, ${MOTOR_MAX_POSITION_STEPS})\``
-            : '`convertNormalizedToSteps(-homeOffset.dx, stepToDisplacement.x, minSteps, maxSteps)`';
-    const alignmentStepsFormulaY =
-        homeOffset && perStepY
-            ? `\`convertNormalizedToSteps(-homeOffset.dy, stepToDisplacement.y, ${MOTOR_MIN_POSITION_STEPS}, ${MOTOR_MAX_POSITION_STEPS})\``
-            : '`convertNormalizedToSteps(-homeOffset.dy, stepToDisplacement.y, minSteps, maxSteps)`';
-
-    const perStepFormulaX =
-        perStepX && measuredShiftX
-            ? `\`Δnorm_x ÷ deltaSteps = ${formatDecimal(measuredShiftX, {
-                  digits: 4,
-                  signed: true,
-              })} ÷ ${stepTestSettings.deltaSteps}\``
-            : '`Δnorm_x ÷ deltaSteps`';
-    const perStepFormulaY =
-        perStepY && measuredShiftY
-            ? `\`Δnorm_y ÷ deltaSteps = ${formatDecimal(measuredShiftY, {
-                  digits: 4,
-                  signed: true,
-              })} ÷ ${stepTestSettings.deltaSteps}\``
-            : '`Δnorm_y ÷ deltaSteps`';
-    const measuredShiftFormulaX =
-        perStepX && measuredShiftX
-            ? `\`stepToDisplacement.x × deltaSteps = ${formatDecimal(perStepX, {
-                  digits: 6,
-              })} × ${stepTestSettings.deltaSteps}\``
-            : '`stepToDisplacement.x × deltaSteps`';
-    const measuredShiftFormulaY =
-        perStepY && measuredShiftY
-            ? `\`stepToDisplacement.y × deltaSteps = ${formatDecimal(perStepY, {
-                  digits: 6,
-              })} × ${stepTestSettings.deltaSteps}\``
-            : '`stepToDisplacement.y × deltaSteps`';
-    const stepScaleFormulaX =
-        axisStepScale?.x !== undefined && axisStepScale?.x !== null
-            ? '`axes.x.stepScale`'
-            : fallbackStepScaleX && perStepX
-              ? `\`1 ÷ stepToDisplacement.x = 1 ÷ ${formatDecimal(perStepX, {
-                    digits: 6,
-                })}\``
-              : '`1 ÷ stepToDisplacement.x`';
-    const stepScaleFormulaY =
-        axisStepScale?.y !== undefined && axisStepScale?.y !== null
-            ? '`axes.y.stepScale`'
-            : fallbackStepScaleY && perStepY
-              ? `\`1 ÷ stepToDisplacement.y = 1 ÷ ${formatDecimal(perStepY, {
-                    digits: 6,
-                })}\``
-              : '`1 ÷ stepToDisplacement.y`';
-    const sizeDeltaFormula =
-        sizeDeltaAtStepTest !== null && home?.size !== undefined && home?.size !== null
-            ? `\`size_after_step - home.size = ${formatDecimal(sizeAfterStep, {
-                  digits: 4,
-              })} - ${formatDecimal(home.size)}\``
-            : '`size_after_step - home.size`';
-    const sizeAfterStepFormula =
-        sizeDeltaAtStepTest !== null && home?.size !== undefined && home?.size !== null
-            ? `\`home.size + sizeDeltaAtStepTest = ${formatDecimal(home.size)} + ${formatDecimal(
-                  sizeDeltaAtStepTest,
-                  { digits: 4, signed: true },
-              )}\``
-            : '`home.size + sizeDeltaAtStepTest`';
+    // Destructure commonly used values for cleaner JSX
+    const {
+        home,
+        adjustedHome,
+        homeOffset,
+        inferredBounds,
+        perStepX,
+        perStepY,
+        stepScaleX,
+        stepScaleY,
+        alignmentStepsX,
+        alignmentStepsY,
+        measuredShiftX,
+        measuredShiftY,
+        sizeAfterStep,
+        sizeDeltaAtStepTest,
+        hasMetrics,
+        homeTimestamp,
+        measurementStats,
+    } = metrics;
 
     const telemetryX = getTelemetryForMotor(entry.assignment.x);
     const telemetryY = getTelemetryForMotor(entry.assignment.y);
@@ -234,7 +106,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     />
                                 </div>
                                 <p className="mt-1 font-mono text-xs text-gray-100">
-                                    {axisAssignmentLabel('x')}
+                                    {getAxisAssignmentLabel(entry, 'x')}
                                 </p>
                             </div>
                             <div className="rounded-md border border-gray-800/70 bg-gray-950/60 p-3">
@@ -248,7 +120,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     />
                                 </div>
                                 <p className="mt-1 font-mono text-xs text-gray-100">
-                                    {axisAssignmentLabel('y')}
+                                    {getAxisAssignmentLabel(entry, 'y')}
                                 </p>
                             </div>
                         </div>
@@ -285,12 +157,12 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                             <DebugStat
                                                 label="adjustedHome.x"
                                                 value={formatDecimal(adjustedHome?.x ?? null)}
-                                                formula={adjustedHomeXFormula}
+                                                formula={formulas.adjustedHomeXFormula}
                                             />
                                             <DebugStat
                                                 label="adjustedHome.y"
                                                 value={formatDecimal(adjustedHome?.y ?? null)}
-                                                formula={adjustedHomeYFormula}
+                                                formula={formulas.adjustedHomeYFormula}
                                             />
                                         </div>
                                     </section>
@@ -356,7 +228,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                     digits: 4,
                                                     signed: true,
                                                 })}
-                                                formula={measuredShiftFormulaX}
+                                                formula={formulas.measuredShiftFormulaX}
                                             />
                                             <DebugStat
                                                 label="Δnorm_y"
@@ -364,7 +236,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                     digits: 4,
                                                     signed: true,
                                                 })}
-                                                formula={measuredShiftFormulaY}
+                                                formula={formulas.measuredShiftFormulaY}
                                             />
                                         </div>
                                     </section>
@@ -381,7 +253,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                     digits: 4,
                                                     signed: true,
                                                 })}
-                                                formula={offsetXFormula}
+                                                formula={formulas.offsetXFormula}
                                             />
                                             <DebugStat
                                                 label="homeOffset.dy"
@@ -389,7 +261,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                     digits: 4,
                                                     signed: true,
                                                 })}
-                                                formula={offsetYFormula}
+                                                formula={formulas.offsetYFormula}
                                             />
                                         </div>
                                     </section>
@@ -408,14 +280,14 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                         value={formatDecimal(perStepX, {
                                                             digits: 6,
                                                         })}
-                                                        formula={perStepFormulaX}
+                                                        formula={formulas.perStepFormulaX}
                                                     />
                                                     <DebugStat
                                                         label="stepToDisplacement.y"
                                                         value={formatDecimal(perStepY, {
                                                             digits: 6,
                                                         })}
-                                                        formula={perStepFormulaY}
+                                                        formula={formulas.perStepFormulaY}
                                                     />
                                                 </div>
                                             </div>
@@ -429,14 +301,14 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                         value={formatDecimal(stepScaleX, {
                                                             digits: 3,
                                                         })}
-                                                        formula={stepScaleFormulaX}
+                                                        formula={formulas.stepScaleFormulaX}
                                                     />
                                                     <DebugStat
                                                         label="stepScale.y"
                                                         value={formatDecimal(stepScaleY, {
                                                             digits: 3,
                                                         })}
-                                                        formula={stepScaleFormulaY}
+                                                        formula={formulas.stepScaleFormulaY}
                                                     />
                                                 </div>
                                             </div>
@@ -448,12 +320,12 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                     <DebugStat
                                                         label="alignmentSteps.x"
                                                         value={formatStepValue(alignmentStepsX)}
-                                                        formula={alignmentStepsFormulaX}
+                                                        formula={formulas.alignmentStepsFormulaX}
                                                     />
                                                     <DebugStat
                                                         label="alignmentSteps.y"
                                                         value={formatStepValue(alignmentStepsY)}
-                                                        formula={alignmentStepsFormulaY}
+                                                        formula={formulas.alignmentStepsFormulaY}
                                                     />
                                                 </div>
                                             </div>
@@ -515,7 +387,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     <DebugStat
                                         label="size_after_step"
                                         value={formatDecimal(sizeAfterStep, { digits: 4 })}
-                                        formula={sizeAfterStepFormula}
+                                        formula={formulas.sizeAfterStepFormula}
                                     />
                                     <DebugStat
                                         label="sizeDeltaAtStepTest"
@@ -523,7 +395,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                             digits: 4,
                                             signed: true,
                                         })} (${formatPercent(sizeDeltaAtStepTest, { signed: true })})`}
-                                        formula={sizeDeltaFormula}
+                                        formula={formulas.sizeDeltaFormula}
                                     />
                                 </div>
                             </section>
@@ -539,40 +411,6 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                 </div>
             </div>
         </Modal>
-    );
-};
-
-interface DebugStatProps {
-    label: string;
-    value: string;
-    formula?: React.ReactNode;
-}
-
-const DebugStat: React.FC<DebugStatProps> = ({ label, value, formula }) => {
-    const renderFormula = (content: React.ReactNode) => {
-        if (typeof content === 'string') {
-            const segments = content.split(/`([^`]+)`/g);
-            return segments.map((segment, index) =>
-                index % 2 === 1 ? (
-                    <code key={`${segment}-${index}`} className="font-mono text-emerald-200">
-                        {segment}
-                    </code>
-                ) : (
-                    <span key={index}>{segment}</span>
-                ),
-            );
-        }
-        return content;
-    };
-
-    return (
-        <div className="rounded-md border border-gray-800/70 bg-gray-950/50 p-3">
-            <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-            <p className="mt-1 font-mono text-base text-gray-100">{value}</p>
-            {formula ? (
-                <p className="mt-1 text-xs text-gray-400">{renderFormula(formula)}</p>
-            ) : null}
-        </div>
     );
 };
 

@@ -6,12 +6,13 @@ import CalibrationSummaryModal from '@/components/calibration/CalibrationSummary
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
+import { getTileStatusClasses, getTileErrorTextClass } from '@/constants/calibrationUiThemes';
 import type { DriverView } from '@/context/StatusContext';
+import { useEditableInput } from '@/hooks/useEditableInput';
 import type {
     CalibrationCommandLogEntry,
     CalibrationRunnerState,
     CalibrationStepState,
-    TileRunState,
 } from '@/services/calibrationRunner';
 import type { Motor, MotorTelemetry } from '@/types';
 
@@ -48,33 +49,11 @@ interface CalibrationRunnerPanelProps {
     };
 }
 
-const getTileStatusClasses = (status: TileRunState['status']): string => {
-    switch (status) {
-        case 'completed':
-            return 'border-emerald-600/60 bg-emerald-500/10 text-emerald-200';
-        case 'measuring':
-            return 'border-sky-500/60 bg-sky-500/10 text-sky-100';
-        case 'failed':
-            return 'border-rose-600/60 bg-rose-500/10 text-rose-100';
-        case 'skipped':
-            return 'border-gray-800 bg-gray-900 text-gray-500';
-        case 'staged':
-            return 'border-amber-500/60 bg-amber-500/10 text-amber-100';
-        default:
-            return 'border-gray-700 bg-gray-900/60 text-gray-200';
-    }
-};
-
 const SUMMARY_BUTTON_CLASS =
     'rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
 
-const INTEGER_INPUT_PATTERN = /^\d*$/;
-const DECIMAL_INPUT_PATTERN = /^\d*(?:\.\d*)?$/;
-
-const formatGridGapPercent = (normalizedGap: number): string => {
-    const percent = Number((normalizedGap * 100).toFixed(1));
-    return percent.toString();
-};
+const INTEGER_PATTERN = /^\d*$/;
+const DECIMAL_PATTERN = /^\d*(?:\.\d*)?$/;
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     runMode,
@@ -112,79 +91,38 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const handleAbort = runMode === 'step' ? stepControls.abort : autoControls.abort;
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-    const canonicalStepDelta = useMemo(
-        () => runnerSettings.deltaSteps.toString(),
-        [runnerSettings.deltaSteps],
-    );
-    const canonicalGridGapPercent = useMemo(
-        () => formatGridGapPercent(runnerSettings.gridGapNormalized),
-        [runnerSettings.gridGapNormalized],
-    );
-    const [stepDeltaDraft, setStepDeltaDraft] = useState('');
-    const [gridGapDraft, setGridGapDraft] = useState('');
-    const [isEditingStepDelta, setIsEditingStepDelta] = useState(false);
-    const [isEditingGridGap, setIsEditingGridGap] = useState(false);
-    const displayedStepDelta = isEditingStepDelta ? stepDeltaDraft : canonicalStepDelta;
-    const displayedGridGap = isEditingGridGap ? gridGapDraft : canonicalGridGapPercent;
-    const handleStepDeltaInputChange = useCallback(
-        (event: React.ChangeEvent<HTMLInputElement>) => {
-            const { value } = event.target;
-            if (!INTEGER_INPUT_PATTERN.test(value)) {
-                return;
-            }
-            setStepDeltaDraft(value);
-            if (value === '' || value.endsWith('.')) {
-                return;
-            }
-            const next = Number(value);
-            if (Number.isNaN(next) || next === runnerSettings.deltaSteps) {
-                return;
-            }
-            onUpdateSetting('deltaSteps', Math.round(next));
+
+    // Editable input for step delta
+    const stepDeltaInput = useEditableInput({
+        value: runnerSettings.deltaSteps,
+        onChange: (v) => onUpdateSetting('deltaSteps', v),
+        format: (v) => v.toString(),
+        parse: (s) => {
+            const n = Number(s);
+            return Number.isNaN(n) ? null : Math.round(n);
         },
-        [onUpdateSetting, runnerSettings.deltaSteps],
-    );
-    const handleGridGapInputChange = useCallback(
-        (event: React.ChangeEvent<HTMLInputElement>) => {
-            const { value } = event.target;
-            if (!DECIMAL_INPUT_PATTERN.test(value)) {
-                return;
-            }
-            setGridGapDraft(value);
-            if (value === '' || value.endsWith('.')) {
-                return;
-            }
-            const parsed = Number(value);
-            if (Number.isNaN(parsed)) {
-                return;
-            }
-            const clampedPercent = Math.min(Math.max(parsed, 0), 5);
-            const normalized = Number((clampedPercent / 100).toFixed(4));
-            if (clampedPercent !== parsed) {
-                setGridGapDraft(clampedPercent.toString());
-            }
-            if (normalized !== runnerSettings.gridGapNormalized) {
-                onUpdateSetting('gridGapNormalized', normalized);
-            }
+        validateInput: (s) => INTEGER_PATTERN.test(s),
+    });
+
+    // Editable input for grid gap (percent)
+    const gridGapInput = useEditableInput({
+        value: runnerSettings.gridGapNormalized,
+        onChange: (v) => onUpdateSetting('gridGapNormalized', v),
+        format: (v) => {
+            const percent = Number((v * 100).toFixed(1));
+            return percent.toString();
         },
-        [onUpdateSetting, runnerSettings.gridGapNormalized],
-    );
-    const handleStepDeltaFocus = useCallback(() => {
-        setIsEditingStepDelta(true);
-        setStepDeltaDraft(canonicalStepDelta);
-    }, [canonicalStepDelta]);
-    const handleStepDeltaBlur = useCallback(() => {
-        setIsEditingStepDelta(false);
-        setStepDeltaDraft('');
-    }, []);
-    const handleGridGapFocus = useCallback(() => {
-        setIsEditingGridGap(true);
-        setGridGapDraft(canonicalGridGapPercent);
-    }, [canonicalGridGapPercent]);
-    const handleGridGapBlur = useCallback(() => {
-        setIsEditingGridGap(false);
-        setGridGapDraft('');
-    }, []);
+        parse: (s) => {
+            const percent = Number(s);
+            return Number.isNaN(percent) ? null : percent;
+        },
+        validateInput: (s) => DECIMAL_PATTERN.test(s),
+        transform: (percent) => {
+            const clamped = Math.min(Math.max(percent, 0), 5);
+            const normalized = Number((clamped / 100).toFixed(4));
+            return [normalized, clamped.toString()];
+        },
+    });
     const displayedTileEntries = useMemo(() => {
         return Object.values(activeRunnerState.tiles).sort((a, b) => {
             if (a.tile.row === b.tile.row) {
@@ -429,10 +367,10 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             type="text"
                             inputMode="numeric"
                             pattern="[0-9]*"
-                            value={displayedStepDelta}
-                            onFocus={handleStepDeltaFocus}
-                            onBlur={handleStepDeltaBlur}
-                            onChange={handleStepDeltaInputChange}
+                            value={stepDeltaInput.displayValue}
+                            onFocus={stepDeltaInput.onFocus}
+                            onBlur={stepDeltaInput.onBlur}
+                            onChange={stepDeltaInput.onChange}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
                         />
                     </label>
@@ -444,10 +382,10 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             type="text"
                             inputMode="decimal"
                             pattern="\\d*(\\.\\d*)?"
-                            value={displayedGridGap}
-                            onFocus={handleGridGapFocus}
-                            onBlur={handleGridGapBlur}
-                            onChange={handleGridGapInputChange}
+                            value={gridGapInput.displayValue}
+                            onFocus={gridGapInput.onFocus}
+                            onBlur={gridGapInput.onBlur}
+                            onChange={gridGapInput.onChange}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
                         />
                     </label>
@@ -517,13 +455,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                 </div>
                                 {entry.error && (
                                     <div
-                                        className={`mt-1 text-[10px] leading-tight ${
-                                            entry.status === 'failed'
-                                                ? 'text-rose-200'
-                                                : entry.status === 'skipped'
-                                                  ? 'text-gray-400'
-                                                  : 'text-amber-200'
-                                        }`}
+                                        className={`mt-1 text-[10px] leading-tight ${getTileErrorTextClass(entry.status)}`}
                                     >
                                         {entry.error}
                                     </div>

@@ -9,13 +9,18 @@ import { useStatusStore } from '../context/StatusContext';
 import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import { normalizeCommandError } from '../utils/commandErrors';
+import {
+    isMotorAssigned as checkMotorAssigned,
+    moveMotorToPosition,
+    unassignMotor as unassignMotorFromConfig,
+    unassignNodeMotors,
+} from '../utils/motorAssignmentOperations';
 
 import type { GridSnapshotMetadata } from '../services/gridStorage';
 import type {
     Motor,
     MotorTelemetry,
     MirrorConfig,
-    MirrorAssignment,
     GridPosition,
     DraggedMotorInfo,
     Axis,
@@ -197,64 +202,13 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     };
 
     const isMotorAssigned = useCallback(
-        (motor: Motor) => {
-            for (const assignment of mirrorConfig.values()) {
-                if (
-                    assignment.x?.nodeMac === motor.nodeMac &&
-                    assignment.x?.motorIndex === motor.motorIndex
-                )
-                    return true;
-                if (
-                    assignment.y?.nodeMac === motor.nodeMac &&
-                    assignment.y?.motorIndex === motor.motorIndex
-                )
-                    return true;
-            }
-            return false;
-        },
+        (motor: Motor) => checkMotorAssigned(mirrorConfig, motor),
         [mirrorConfig],
     );
 
     const unassignMotor = useCallback(
         (motor: Motor) => {
-            setMirrorConfig((prevConfig) => {
-                const newConfig: MirrorConfig = new Map(prevConfig);
-                let updated = false;
-                for (const key of newConfig.keys()) {
-                    const assignment = newConfig.get(key);
-                    if (!assignment) {
-                        continue;
-                    }
-                    const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
-                    let assignmentChanged = false;
-
-                    if (
-                        newAssignment.x?.nodeMac === motor.nodeMac &&
-                        newAssignment.x?.motorIndex === motor.motorIndex
-                    ) {
-                        newAssignment.x = null;
-                        assignmentChanged = true;
-                    }
-                    if (
-                        newAssignment.y?.nodeMac === motor.nodeMac &&
-                        newAssignment.y?.motorIndex === motor.motorIndex
-                    ) {
-                        newAssignment.y = null;
-                        assignmentChanged = true;
-                    }
-
-                    if (assignmentChanged) {
-                        if (newAssignment.x === null && newAssignment.y === null) {
-                            newConfig.delete(key);
-                        } else {
-                            newConfig.set(key, newAssignment);
-                        }
-                        updated = true;
-                        break;
-                    }
-                }
-                return updated ? newConfig : prevConfig;
-            });
+            setMirrorConfig((prevConfig) => unassignMotorFromConfig(prevConfig, motor));
         },
         [setMirrorConfig],
     );
@@ -262,54 +216,9 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     const handleMotorDrop = useCallback(
         (pos: GridPosition, axis: Axis, dragDataString: string) => {
             const dragData: DraggedMotorInfo = JSON.parse(dragDataString);
-            const motorToMove = dragData.motor;
-
-            setMirrorConfig((prevConfig) => {
-                const newConfig: MirrorConfig = new Map(prevConfig);
-
-                for (const key of newConfig.keys()) {
-                    const assignment = newConfig.get(key);
-                    if (!assignment) {
-                        continue;
-                    }
-                    let assignmentChanged = false;
-                    const newAssignment: MirrorAssignment = { x: assignment.x, y: assignment.y };
-
-                    if (
-                        newAssignment.x?.nodeMac === motorToMove.nodeMac &&
-                        newAssignment.x?.motorIndex === motorToMove.motorIndex
-                    ) {
-                        newAssignment.x = null;
-                        assignmentChanged = true;
-                    }
-                    if (
-                        newAssignment.y?.nodeMac === motorToMove.nodeMac &&
-                        newAssignment.y?.motorIndex === motorToMove.motorIndex
-                    ) {
-                        newAssignment.y = null;
-                        assignmentChanged = true;
-                    }
-
-                    if (assignmentChanged) {
-                        if (newAssignment.x === null && newAssignment.y === null) {
-                            newConfig.delete(key);
-                        } else {
-                            newConfig.set(key, newAssignment);
-                        }
-                        break;
-                    }
-                }
-
-                const key = `${pos.row}-${pos.col}`;
-                const currentAssignment = newConfig.get(key) || { x: null, y: null };
-
-                newConfig.set(key, {
-                    ...currentAssignment,
-                    [axis]: motorToMove,
-                });
-
-                return newConfig;
-            });
+            setMirrorConfig((prevConfig) =>
+                moveMotorToPosition(prevConfig, dragData.motor, pos, axis),
+            );
         },
         [setMirrorConfig],
     );
@@ -385,36 +294,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             `Clear Assignments for ${label.slice(-5)}?`,
             `Are you sure you want to unassign all motors from this node?`,
             () => {
-                setMirrorConfig((prevConfig) => {
-                    const newConfig: MirrorConfig = new Map(prevConfig);
-                    for (const key of newConfig.keys()) {
-                        const assignment = newConfig.get(key);
-                        if (!assignment) {
-                            continue;
-                        }
-                        const newAssignment: MirrorAssignment = {
-                            x: assignment.x,
-                            y: assignment.y,
-                        };
-                        let changed = false;
-                        if (newAssignment.x?.nodeMac === nodeMac) {
-                            newAssignment.x = null;
-                            changed = true;
-                        }
-                        if (newAssignment.y?.nodeMac === nodeMac) {
-                            newAssignment.y = null;
-                            changed = true;
-                        }
-                        if (changed) {
-                            if (newAssignment.x || newAssignment.y) {
-                                newConfig.set(key, newAssignment);
-                            } else {
-                                newConfig.delete(key);
-                            }
-                        }
-                    }
-                    return newConfig;
-                });
+                setMirrorConfig((prevConfig) => unassignNodeMotors(prevConfig, nodeMac));
             },
         );
     };

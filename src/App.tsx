@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import AppTopBar, { type AppTopBarBreadcrumb } from './components/AppTopBar';
 import ConnectionSettingsContent from './components/ConnectionSettingsContent';
@@ -14,6 +14,12 @@ import {
     SimulationIcon,
 } from './components/NavIcons';
 import NavigationRail from './components/NavigationRail';
+import {
+    getEffectiveNavPage,
+    getPageTitle,
+    NAVIGATION_ITEMS,
+    type NavigationIconKey,
+} from './constants/navigation';
 import { BUILTIN_PATTERNS } from './constants/pattern';
 import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
 import { CalibrationProvider } from './context/CalibrationContext';
@@ -21,6 +27,7 @@ import { LogProvider } from './context/LogContext';
 import { MqttProvider } from './context/MqttContext';
 import { PatternProvider } from './context/PatternContext';
 import { StatusProvider } from './context/StatusContext';
+import { useGridPersistence } from './hooks/useGridPersistence';
 import CalibrationPage from './pages/CalibrationPage';
 import ConfiguratorPage from './pages/ConfiguratorPage';
 import LegacyPlaybackPage from './pages/LegacyPlaybackPage';
@@ -30,14 +37,6 @@ import PatternLibraryPage from './pages/PatternLibraryPage';
 import PlaybackPage from './pages/PlaybackPage';
 // Lazy load SimulationPage to avoid loading BabylonJS during tests
 const SimulationPage = React.lazy(() => import('./pages/SimulationPage'));
-import {
-    bootstrapGridSnapshots,
-    getGridStateFingerprint,
-    listGridSnapshotMetadata,
-    loadNamedGridSnapshot,
-    persistLastSelectedSnapshotName,
-    persistNamedGridSnapshot,
-} from './services/gridStorage';
 import { loadLegacyPatterns, persistLegacyPatterns } from './services/legacyPatternStorage';
 import {
     getInitialProjectionSettings,
@@ -45,8 +44,7 @@ import {
 } from './services/projectionStorage';
 import { validateProjectionSettings } from './utils/geometryValidation';
 
-import type { LegacyPattern, MirrorConfig, ProjectionSettings } from './types';
-import type { SnapshotPersistenceStatus } from './types/persistence';
+import type { LegacyPattern, ProjectionSettings } from './types';
 
 export type Page =
     | 'legacy-patterns'
@@ -64,9 +62,18 @@ export interface NavigationControls {
     editPattern: (patternId: string | null) => void;
 }
 
-type PersistenceStatus =
-    | { kind: 'idle' }
-    | (SnapshotPersistenceStatus & { kind: 'success' | 'error' });
+/**
+ * Map icon keys to React icon components.
+ */
+const NAVIGATION_ICONS: Record<NavigationIconKey, React.ReactNode> = {
+    'legacy-playback': <LegacyPlaybackIcon />,
+    playback: <PlaybackIcon />,
+    calibration: <CalibrationIcon />,
+    patterns: <PatternsIcon />,
+    simulation: <SimulationIcon />,
+    configurator: <ArrayConfigIcon />,
+    connection: <ConnectionIcon />,
+};
 
 const App: React.FC = () => {
     const [page, setPage] = useState<Page>('legacy-playback');
@@ -75,26 +82,36 @@ const App: React.FC = () => {
     const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
     const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
 
-    // Global state
+    // Grid state and persistence (extracted to hook)
+    const {
+        gridSize,
+        mirrorConfig,
+        activeSnapshotName,
+        hasUnsavedChanges: hasUnsavedGridChanges,
+        snapshotMetadata,
+        persistenceStatus,
+        canUseStorage,
+        storageUnavailableMessage,
+        setGridSize,
+        setMirrorConfig,
+        saveSnapshot: handleSaveSnapshot,
+        loadSnapshot: handleLoadSnapshot,
+    } = useGridPersistence();
+
+    // Local storage reference for patterns and projection
     const resolvedStorage = useMemo(
         () => (typeof window !== 'undefined' ? window.localStorage : undefined),
         [],
     );
-    const snapshotBootstrap = useMemo(
-        () => bootstrapGridSnapshots(resolvedStorage),
-        [resolvedStorage],
-    );
 
-    const [gridSize, setGridSize] = useState(() => ({
-        rows: snapshotBootstrap.snapshot?.gridSize.rows ?? 8,
-        cols: snapshotBootstrap.snapshot?.gridSize.cols ?? 8,
-    }));
+    // Pattern state
     const persistedPatterns = useMemo(() => loadLegacyPatterns(resolvedStorage), [resolvedStorage]);
-
     const [patterns, setPatterns] = useState<LegacyPattern[]>(persistedPatterns);
-    const [mirrorConfig, setMirrorConfig] = useState<MirrorConfig>(
-        () => new Map(snapshotBootstrap.snapshot?.mirrorConfig ?? []),
+    const [activePatternId, setActivePatternId] = useState<string | null>(
+        persistedPatterns[0]?.id ?? null,
     );
+
+    // Projection state
     const initialProjectionSettings = useMemo(() => {
         const hydrated = getInitialProjectionSettings(resolvedStorage);
         return hydrated ?? DEFAULT_PROJECTION_SETTINGS;
@@ -102,41 +119,6 @@ const App: React.FC = () => {
     const [projectionSettings, setProjectionSettings] =
         useState<ProjectionSettings>(initialProjectionSettings);
     const [projectionError, setProjectionError] = useState<string | null>(null);
-    const [activePatternId, setActivePatternId] = useState<string | null>(
-        persistedPatterns[0]?.id ?? null,
-    );
-    const [snapshotMetadata, setSnapshotMetadata] = useState(snapshotBootstrap.metadata);
-    const [activeSnapshotName, setActiveSnapshotName] = useState<string | null>(
-        snapshotBootstrap.selectedName,
-    );
-    const [lastSavedFingerprint, setLastSavedFingerprint] = useState<string | null>(() =>
-        snapshotBootstrap.snapshot
-            ? getGridStateFingerprint(snapshotBootstrap.snapshot).hash
-            : null,
-    );
-
-    const currentGridSnapshot = useMemo(
-        () => ({
-            gridSize,
-            mirrorConfig,
-        }),
-        [gridSize, mirrorConfig],
-    );
-    const currentGridFingerprint = useMemo(
-        () => getGridStateFingerprint(currentGridSnapshot).hash,
-        [currentGridSnapshot],
-    );
-    const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>({ kind: 'idle' });
-    const hasUnsavedGridChanges =
-        !activeSnapshotName || lastSavedFingerprint !== currentGridFingerprint;
-
-    const refreshSnapshotMetadata = useCallback(() => {
-        if (!resolvedStorage) {
-            setSnapshotMetadata([]);
-            return;
-        }
-        setSnapshotMetadata(listGridSnapshotMetadata(resolvedStorage));
-    }, [resolvedStorage]);
 
     const simulationPatterns = useMemo(() => [...BUILTIN_PATTERNS, ...patterns], [patterns]);
 
@@ -174,101 +156,8 @@ const App: React.FC = () => {
         setPage('legacy-patterns-editor');
     };
 
-    const handleSaveSnapshot = useCallback(
-        (name: string) => {
-            if (!resolvedStorage) {
-                setPersistenceStatus({
-                    kind: 'error',
-                    tone: 'error',
-                    action: 'save',
-                    message: 'Local storage unavailable; cannot save array configuration.',
-                    timestamp: Date.now(),
-                });
-                return;
-            }
-            const trimmed = name.trim();
-            if (!trimmed) {
-                setPersistenceStatus({
-                    kind: 'error',
-                    tone: 'error',
-                    action: 'save',
-                    message: 'Config name cannot be empty.',
-                    timestamp: Date.now(),
-                });
-                return;
-            }
-            persistNamedGridSnapshot(resolvedStorage, trimmed, currentGridSnapshot);
-            setActiveSnapshotName(trimmed);
-            setLastSavedFingerprint(currentGridFingerprint);
-            refreshSnapshotMetadata();
-            setPersistenceStatus({
-                kind: 'success',
-                tone: 'success',
-                action: 'save',
-                message: `Saved config "${trimmed}".`,
-                timestamp: Date.now(),
-            });
-        },
-        [currentGridFingerprint, currentGridSnapshot, refreshSnapshotMetadata, resolvedStorage],
-    );
-
-    const handleLoadSnapshot = useCallback(
-        (name: string) => {
-            if (!resolvedStorage) {
-                setPersistenceStatus({
-                    kind: 'error',
-                    tone: 'error',
-                    action: 'load',
-                    message: 'Local storage unavailable; cannot load saved configuration.',
-                    timestamp: Date.now(),
-                });
-                return;
-            }
-            const trimmed = name.trim();
-            if (!trimmed) {
-                setPersistenceStatus({
-                    kind: 'error',
-                    tone: 'error',
-                    action: 'load',
-                    message: 'Select a config to load.',
-                    timestamp: Date.now(),
-                });
-                return;
-            }
-            const snapshot = loadNamedGridSnapshot(resolvedStorage, trimmed);
-            if (!snapshot) {
-                setPersistenceStatus({
-                    kind: 'error',
-                    tone: 'error',
-                    action: 'load',
-                    message: 'Saved config not found; it may have been removed.',
-                    timestamp: Date.now(),
-                });
-                return;
-            }
-            setGridSize({ rows: snapshot.gridSize.rows, cols: snapshot.gridSize.cols });
-            const normalizedConfig = new Map(snapshot.mirrorConfig);
-            setMirrorConfig(normalizedConfig);
-            const fingerprint = getGridStateFingerprint({
-                gridSize: snapshot.gridSize,
-                mirrorConfig: normalizedConfig,
-            });
-            setLastSavedFingerprint(fingerprint.hash);
-            setActiveSnapshotName(trimmed);
-            persistLastSelectedSnapshotName(resolvedStorage, trimmed);
-            setPersistenceStatus({
-                kind: 'success',
-                tone: 'success',
-                action: 'load',
-                message: `Loaded config "${trimmed}".`,
-                timestamp: Date.now(),
-            });
-        },
-        [resolvedStorage, setGridSize, setMirrorConfig],
-    );
-
     const navigationControls: NavigationControls = { navigateTo, editPattern };
-    const effectiveNavPage: Page = page === 'legacy-patterns-editor' ? 'legacy-patterns' : page;
+    const effectiveNavPage = getEffectiveNavPage(page);
     const editingPattern = useMemo(
         () =>
             editingPatternId
@@ -277,48 +166,16 @@ const App: React.FC = () => {
         [editingPatternId, patterns],
     );
 
-    const navigationItems = [
-        {
-            page: 'legacy-playback' as const,
-            label: 'Playback (legacy)',
-            icon: <LegacyPlaybackIcon />,
-        },
-        {
-            page: 'playback' as const,
-            label: 'Playback',
-            icon: <PlaybackIcon />,
-        },
-        {
-            page: 'calibration' as const,
-            label: 'Calibration',
-            icon: <CalibrationIcon />,
-        },
-        {
-            page: 'legacy-patterns' as const,
-            label: 'Patterns (legacy)',
-            icon: <PatternsIcon />,
-        },
-        {
-            page: 'patterns' as const,
-            label: 'Patterns',
-            icon: <PatternsIcon />,
-        },
-        {
-            page: 'simulation' as const,
-            label: 'Simulation',
-            icon: <SimulationIcon />,
-        },
-        {
-            page: 'configurator' as const,
-            label: 'Array Config',
-            icon: <ArrayConfigIcon />,
-        },
-        {
-            page: 'connection' as const,
-            label: 'Connection',
-            icon: <ConnectionIcon />,
-        },
-    ];
+    // Build navigation items with icons
+    const navigationItems = useMemo(
+        () =>
+            NAVIGATION_ITEMS.map((item) => ({
+                page: item.page,
+                label: item.label,
+                icon: NAVIGATION_ICONS[item.iconKey],
+            })),
+        [],
+    );
 
     const handleSavePattern = (pattern: LegacyPattern) => {
         setPatterns((prev) => {
@@ -384,24 +241,14 @@ const App: React.FC = () => {
                         mirrorConfig={mirrorConfig}
                         setMirrorConfig={setMirrorConfig}
                         persistenceControls={{
-                            canUseStorage: Boolean(resolvedStorage),
+                            canUseStorage,
                             availableSnapshots: snapshotMetadata,
                             activeSnapshotName,
                             hasUnsavedChanges: hasUnsavedGridChanges,
                             onSaveSnapshot: handleSaveSnapshot,
                             onLoadSnapshot: handleLoadSnapshot,
-                            status:
-                                persistenceStatus.kind === 'idle'
-                                    ? null
-                                    : {
-                                          action: persistenceStatus.action,
-                                          tone: persistenceStatus.tone,
-                                          message: persistenceStatus.message,
-                                          timestamp: persistenceStatus.timestamp,
-                                      },
-                            storageUnavailableMessage: resolvedStorage
-                                ? null
-                                : 'Local storage is unavailable in this environment.',
+                            status: persistenceStatus,
+                            storageUnavailableMessage,
                         }}
                     />
                 );
@@ -448,30 +295,7 @@ const App: React.FC = () => {
         }
     };
 
-    const pageTitle = (() => {
-        switch (page) {
-            case 'legacy-patterns':
-                return 'Patterns (legacy)';
-            case 'legacy-patterns-editor':
-                return 'Patterns (legacy)';
-            case 'patterns':
-                return 'Patterns';
-            case 'legacy-playback':
-                return 'Playback (legacy)';
-            case 'playback':
-                return 'Playback';
-            case 'calibration':
-                return 'Calibration';
-            case 'configurator':
-                return 'Array Config';
-            case 'simulation':
-                return 'Simulation';
-            case 'connection':
-                return 'Connection';
-            default:
-                return 'Mirror Matrix';
-        }
-    })();
+    const pageTitle = getPageTitle(page);
 
     const breadcrumbs: AppTopBarBreadcrumb[] =
         page === 'legacy-patterns-editor' && editingPattern
