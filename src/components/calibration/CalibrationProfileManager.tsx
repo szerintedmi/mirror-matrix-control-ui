@@ -1,5 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 
+import Modal from '@/components/Modal';
 import { buildCalibrationProfileExportPayload } from '@/services/calibrationProfileStorage';
 import type { CalibrationProfile } from '@/types';
 
@@ -7,15 +8,12 @@ import { formatPercent } from './calibrationMetricsFormatters';
 
 interface CalibrationProfileManagerProps {
     profiles: CalibrationProfile[];
-    selectedProfileId: string;
     activeProfileId: string;
-    onSelectProfile: (profileId: string) => void;
     onDeleteProfile: (profileId: string) => void;
     onLoadProfile: (profileId: string) => void;
     profileName: string;
     onProfileNameChange: (value: string) => void;
     onSaveProfile: () => void;
-    onNewProfile: () => void;
     onImportProfile: (payload: string) => void;
     canSave: boolean;
     saveFeedback: { type: 'success' | 'error'; message: string } | null;
@@ -54,15 +52,12 @@ const buildExportFileName = (profile: CalibrationProfile): string => {
 
 const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
     profiles,
-    selectedProfileId,
     activeProfileId,
-    onSelectProfile,
     onDeleteProfile,
     onLoadProfile,
     profileName,
     onProfileNameChange,
     onSaveProfile,
-    onNewProfile,
     onImportProfile,
     canSave,
     saveFeedback,
@@ -76,17 +71,30 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
         [profiles],
     );
     const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null);
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{
+        profileId: string;
+        profileName: string;
+    } | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const handleToggleDetails = (profileId: string) => {
         setExpandedProfileId((prev) => (prev === profileId ? null : profileId));
     };
 
-    const handleLoadSelected = () => {
-        if (selectedProfileId) {
-            onLoadProfile(selectedProfileId);
+    const handleRequestDelete = useCallback((profileId: string, profileName: string) => {
+        setDeleteConfirmation({ profileId, profileName });
+    }, []);
+
+    const handleConfirmDelete = useCallback(() => {
+        if (deleteConfirmation) {
+            onDeleteProfile(deleteConfirmation.profileId);
+            setDeleteConfirmation(null);
         }
-    };
+    }, [deleteConfirmation, onDeleteProfile]);
+
+    const handleCancelDelete = useCallback(() => {
+        setDeleteConfirmation(null);
+    }, []);
 
     const handleExportProfile = (profile: CalibrationProfile) => {
         if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -152,34 +160,11 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                 </div>
             </div>
             <div className="mt-4 space-y-4 text-sm text-gray-300">
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                    <label className="flex flex-col gap-1">
-                        <span>Saved profiles</span>
-                        <div className="flex flex-wrap gap-2">
-                            <select
-                                value={selectedProfileId}
-                                onChange={(event) => onSelectProfile(event.target.value)}
-                                className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
-                            >
-                                <option value="">Select saved profile</option>
-                                {sortedProfiles.map((profile) => (
-                                    <option key={profile.id} value={profile.id}>
-                                        {profile.name}
-                                    </option>
-                                ))}
-                            </select>
-                            <button
-                                type="button"
-                                onClick={handleLoadSelected}
-                                disabled={!selectedProfileId}
-                                className="rounded-md border border-sky-500/60 bg-sky-500/10 px-3 py-2 text-sm text-sky-100 disabled:opacity-40"
-                            >
-                                Load
-                            </button>
-                        </div>
-                    </label>
-                    <label className="flex flex-col gap-1">
-                        <span>Profile name</span>
+                <div className="flex flex-wrap items-end gap-4">
+                    <label className="flex flex-1 flex-col gap-1">
+                        <span className="text-xs uppercase tracking-wide text-gray-500">
+                            Profile name
+                        </span>
                         <input
                             type="text"
                             value={profileName}
@@ -188,45 +173,38 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                             className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100"
                         />
                     </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={onSaveProfile}
+                            disabled={!canSave}
+                            className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                                canSave
+                                    ? 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400'
+                                    : 'border border-gray-700 bg-gray-800 text-gray-500'
+                            }`}
+                        >
+                            Save profile
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleImportClick}
+                            className="rounded-md border border-sky-500/60 bg-sky-500/10 px-3 py-2 text-sm text-sky-100 hover:border-sky-400"
+                        >
+                            Import
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="application/json"
+                            className="hidden"
+                            onChange={handleImportFileChange}
+                        />
+                    </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={onSaveProfile}
-                        disabled={!canSave}
-                        className={`rounded-md px-3 py-1 text-sm font-semibold transition ${
-                            canSave
-                                ? 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400'
-                                : 'border border-gray-700 bg-gray-800 text-gray-500'
-                        }`}
-                    >
-                        Save profile
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onNewProfile}
-                        className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-200 hover:border-gray-500"
-                    >
-                        New entry
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleImportClick}
-                        className="rounded-md border border-sky-500/60 bg-sky-500/10 px-3 py-1 text-sm text-sky-100 hover:border-sky-400"
-                    >
-                        Import
-                    </button>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="application/json"
-                        className="hidden"
-                        onChange={handleImportFileChange}
-                    />
-                    {!canSave && (
-                        <p className="text-xs text-amber-300">Run calibration to enable saving.</p>
-                    )}
-                </div>
+                {!canSave && (
+                    <p className="text-xs text-amber-300">Run calibration to enable saving.</p>
+                )}
                 {saveFeedback && (
                     <div
                         className={`flex items-start justify-between rounded-md border px-3 py-2 text-xs ${
@@ -248,21 +226,35 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
             </div>
             <div className="mt-6 border-t border-gray-900/60 pt-4">
                 {sortedProfiles.length === 0 ? (
-                    <p className="text-sm text-gray-400">
-                        No calibration profiles saved yet. Capture a run and click “Save profile” to
-                        store the normalized data.
-                    </p>
+                    <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                        <svg
+                            className="h-10 w-10 text-gray-700"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                            />
+                        </svg>
+                        <p className="text-sm text-gray-400">No calibration profiles saved</p>
+                        <p className="text-xs text-gray-500">
+                            Run calibration and click &ldquo;Save profile&rdquo; to store the results
+                        </p>
+                    </div>
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {sortedProfiles.map((profile) => (
                             <ProfileCard
                                 key={profile.id}
                                 profile={profile}
-                                selected={profile.id === selectedProfileId}
                                 active={profile.id === activeProfileId}
                                 expanded={expandedProfileId === profile.id}
                                 onToggle={() => handleToggleDetails(profile.id)}
-                                onDelete={onDeleteProfile}
+                                onRequestDelete={handleRequestDelete}
                                 onLoad={onLoadProfile}
                                 onExport={handleExportProfile}
                                 gridMatch={
@@ -273,17 +265,49 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Delete Confirmation Modal */}
+            <Modal
+                open={deleteConfirmation !== null}
+                onClose={handleCancelDelete}
+                title="Delete Calibration Profile"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-300">
+                        Are you sure you want to delete the profile{' '}
+                        <span className="font-semibold text-gray-100">
+                            &ldquo;{deleteConfirmation?.profileName}&rdquo;
+                        </span>
+                        ? This action cannot be undone.
+                    </p>
+                    <div className="flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={handleCancelDelete}
+                            className="rounded-md border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-gray-500"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirmDelete}
+                            className="rounded-md border border-rose-600 bg-rose-600/20 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/30"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </section>
     );
 };
 
 interface ProfileCardProps {
     profile: CalibrationProfile;
-    selected: boolean;
     active: boolean;
     expanded: boolean;
     onToggle: () => void;
-    onDelete: (profileId: string) => void;
+    onRequestDelete: (profileId: string, profileName: string) => void;
     onLoad: (profileId: string) => void;
     onExport: (profile: CalibrationProfile) => void;
     gridMatch: boolean;
@@ -291,11 +315,10 @@ interface ProfileCardProps {
 
 const ProfileCard: React.FC<ProfileCardProps> = ({
     profile,
-    selected,
     active,
     expanded,
     onToggle,
-    onDelete,
+    onRequestDelete,
     onLoad,
     onExport,
     gridMatch,
@@ -309,15 +332,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     const footprintWidth = profile.gridBlueprint?.adjustedTileFootprint.width ?? null;
     const footprintHeight = profile.gridBlueprint?.adjustedTileFootprint.height ?? null;
 
-    const handleDelete = () => {
-        if (
-            typeof window === 'undefined' ||
-            window.confirm(`Delete calibration profile "${profile.name}"?`)
-        ) {
-            onDelete(profile.id);
-        }
-    };
-
+    const handleDelete = () => onRequestDelete(profile.id, profile.name);
     const handleLoad = () => onLoad(profile.id);
     const handleExport = () => onExport(profile);
 
@@ -332,7 +347,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     return (
         <div
             className={`flex flex-col gap-3 rounded-lg border p-3 transition ${
-                selected
+                active
                     ? 'border-emerald-500/70 bg-emerald-500/5 shadow-[0_0_0_1px_rgba(16,185,129,0.2)]'
                     : 'border-gray-800 bg-gray-900/40'
             }`}

@@ -154,7 +154,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         detectedBlobCount,
         opencvStatus,
         opencvError,
-        opencvInfo,
         detectionReady,
         captureBlobMeasurement,
         previewRefs,
@@ -339,15 +338,12 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         <div className="flex flex-col gap-6">
             <CalibrationProfileManager
                 profiles={calibrationProfilesController.profiles}
-                selectedProfileId={calibrationProfilesController.selectedProfileId}
                 activeProfileId={calibrationProfilesController.activeProfileId}
-                onSelectProfile={calibrationProfilesController.selectProfileId}
                 onDeleteProfile={calibrationProfilesController.deleteProfile}
                 onLoadProfile={calibrationProfilesController.loadProfile}
                 profileName={calibrationProfilesController.profileNameInput}
                 onProfileNameChange={calibrationProfilesController.setProfileNameInput}
                 onSaveProfile={calibrationProfilesController.saveProfile}
-                onNewProfile={calibrationProfilesController.resetProfileSelection}
                 onImportProfile={calibrationProfilesController.importProfileFromJson}
                 canSave={calibrationProfilesController.canSaveProfile}
                 saveFeedback={calibrationProfilesController.saveFeedback}
@@ -406,10 +402,9 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                         previewMode={previewMode}
                         detectedBlobCount={detectedBlobCount}
                         opencvStatus={opencvStatus}
-                        opencvInfo={opencvInfo}
-                        opencvError={opencvError}
                         cameraStatus={cameraStatus}
                         cameraError={cameraError}
+                        detectionReady={detectionReady}
                         brightness={brightness}
                         onChangeBrightness={setBrightness}
                         contrast={contrast}

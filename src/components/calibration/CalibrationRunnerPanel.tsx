@@ -330,8 +330,49 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         </button>
                     </div>
                 </div>
+                {/* Step mode action required indicator */}
+                {runMode === 'step' && isStepAwaiting && (
+                    <div className="mt-3 flex items-center gap-2 rounded-md border border-sky-500/50 bg-sky-500/10 px-3 py-2">
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
+                        <span className="text-xs font-medium text-sky-200">
+                            Action required — click &ldquo;Next step&rdquo; to continue
+                        </span>
+                        {stepControls.stepState?.step.label && (
+                            <span className="ml-auto text-xs text-sky-300/70">
+                                {stepControls.stepState.step.label}
+                            </span>
+                        )}
+                    </div>
+                )}
                 {activeRunnerState.error && (
                     <p className="mt-3 text-sm text-rose-300">{activeRunnerState.error}</p>
+                )}
+                {/* Progress Bar */}
+                {activeRunnerState.progress.total > 0 && (
+                    <div className="mt-4">
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
+                            <div className="flex h-full">
+                                <div
+                                    className="bg-emerald-500 transition-all duration-300"
+                                    style={{
+                                        width: `${(activeRunnerState.progress.completed / activeRunnerState.progress.total) * 100}%`,
+                                    }}
+                                />
+                                <div
+                                    className="bg-rose-500 transition-all duration-300"
+                                    style={{
+                                        width: `${(activeRunnerState.progress.failed / activeRunnerState.progress.total) * 100}%`,
+                                    }}
+                                />
+                                <div
+                                    className="bg-gray-600 transition-all duration-300"
+                                    style={{
+                                        width: `${(activeRunnerState.progress.skipped / activeRunnerState.progress.total) * 100}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 )}
                 <div className="mt-4 grid gap-3 text-sm text-gray-300 sm:grid-cols-4">
                     <div>
@@ -426,9 +467,31 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                     </div>
                 )}
                 <div className="mt-4">
-                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
-                        Tile statuses
-                    </p>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Tile statuses
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 text-[10px] text-gray-400">
+                            <span className="flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-sm bg-gray-700" /> Pending
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-sm bg-sky-700" /> Staged
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-sm bg-amber-600" /> Measuring
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-sm bg-emerald-600" /> Completed
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-sm bg-rose-600" /> Failed
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-sm bg-gray-600" /> Skipped
+                            </span>
+                        </div>
+                    </div>
                     <div
                         className="grid gap-2"
                         style={{

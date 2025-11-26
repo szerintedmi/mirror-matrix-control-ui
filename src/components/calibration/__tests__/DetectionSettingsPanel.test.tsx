@@ -70,10 +70,9 @@ describe('DetectionSettingsPanel', () => {
                     previewMode="processed"
                     detectedBlobCount={3}
                     opencvStatus="ready"
-                    opencvInfo={{ version: '4.8.0' } as never}
-                    opencvError={null}
                     cameraStatus="ready"
                     cameraError={null}
+                    detectionReady={true}
                     brightness={0.1}
                     onChangeBrightness={handlers.onChangeBrightness}
                     contrast={1.2}
@@ -95,10 +94,9 @@ describe('DetectionSettingsPanel', () => {
             );
         });
 
-        expect(container.textContent).toContain('Feed: 800 × 600');
-        expect(container.textContent).toContain('ROI: 400 × 300');
-        expect(container.textContent).toContain('Detected blobs: 3');
-        expect(container.textContent).toContain('OpenCV: 4.8.0');
+        expect(container.textContent).toContain('Feed: 800×600');
+        expect(container.textContent).toContain('ROI: 400×300');
+        expect(container.textContent).toContain('Blobs: 3');
 
         const selects = container.querySelectorAll('select');
         expect(selects.length).toBeGreaterThanOrEqual(2);

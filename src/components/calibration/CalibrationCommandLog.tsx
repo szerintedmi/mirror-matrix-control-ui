@@ -9,11 +9,16 @@ type CommandLogMode = 'auto' | 'step';
 interface CalibrationCommandLogProps {
     entries: CalibrationCommandLogEntry[];
     mode: CommandLogMode;
+    onClearLog?: () => void;
 }
 
 const DEFAULT_MAX_HEIGHT = 'max-h-64';
 
-const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({ entries, mode }) => {
+const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({
+    entries,
+    mode,
+    onClearLog,
+}) => {
     const [collapsed, setCollapsed] = useState(true);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -40,9 +45,20 @@ const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({ entries, 
     return (
         <div className="mt-4">
             <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Command log</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">
+                    Command log <span className="text-gray-600">({entries.length})</span>
+                </p>
                 <div className="flex items-center gap-2 text-[11px] text-gray-500">
                     <span className="hidden sm:inline">Mode: {mode}</span>
+                    {onClearLog && entries.length > 0 && (
+                        <button
+                            type="button"
+                            className="text-xs text-gray-500 hover:text-gray-300"
+                            onClick={onClearLog}
+                        >
+                            Clear
+                        </button>
+                    )}
                     <button
                         type="button"
                         className="rounded border border-gray-700 px-2 py-0.5 text-xs font-semibold text-gray-200 hover:bg-gray-800"

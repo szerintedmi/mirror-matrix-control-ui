@@ -6,11 +6,7 @@ import {
     RESOLUTION_OPTIONS,
 } from '@/constants/calibration';
 import type { CameraStatus, PreviewMode } from '@/hooks/useCameraPipeline';
-import type {
-    BlobDetectorParams,
-    OpenCvReadyMessage,
-    OpenCvWorkerStatus,
-} from '@/services/opencvWorkerClient';
+import type { BlobDetectorParams, OpenCvWorkerStatus } from '@/services/opencvWorkerClient';
 import type { NormalizedRoi } from '@/types';
 
 interface DetectionSettingsPanelProps {
@@ -25,10 +21,9 @@ interface DetectionSettingsPanelProps {
     previewMode: PreviewMode;
     detectedBlobCount: number;
     opencvStatus: OpenCvWorkerStatus;
-    opencvInfo: OpenCvReadyMessage | null;
-    opencvError: string | null;
     cameraStatus: CameraStatus;
     cameraError: string | null;
+    detectionReady: boolean;
     brightness: number;
     onChangeBrightness: (value: number) => void;
     contrast: number;
@@ -63,10 +58,9 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
     previewMode,
     detectedBlobCount,
     opencvStatus,
-    opencvInfo,
-    opencvError,
     cameraStatus,
     cameraError,
+    detectionReady,
     brightness,
     onChangeBrightness,
     contrast,
@@ -97,18 +91,36 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
         };
     }, [roi.enabled, roi.height, roi.width, videoDimensions.height, videoDimensions.width]);
 
-    const openCvLabel = useMemo(() => {
-        if (opencvStatus === 'ready') {
-            return opencvInfo?.version ?? 'Ready';
-        }
-        if (opencvStatus === 'loading') {
-            return 'Loading…';
-        }
-        return opencvError ?? 'Unavailable';
-    }, [opencvError, opencvInfo, opencvStatus]);
-
     return (
         <div className="flex flex-col gap-4">
+            {/* Detection Readiness Banner */}
+            <div
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 ${
+                    detectionReady
+                        ? 'border-emerald-500/40 bg-emerald-500/10'
+                        : 'border-amber-500/40 bg-amber-500/10'
+                }`}
+            >
+                <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                        detectionReady ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
+                    }`}
+                />
+                <span
+                    className={`text-sm font-medium ${
+                        detectionReady ? 'text-emerald-200' : 'text-amber-200'
+                    }`}
+                >
+                    {detectionReady ? 'Detection Ready' : 'Initializing…'}
+                </span>
+                {!detectionReady && (
+                    <span className="ml-auto text-xs text-amber-300/70">
+                        {cameraStatus !== 'ready' && 'Camera '}
+                        {opencvStatus !== 'ready' && 'OpenCV'}
+                    </span>
+                )}
+            </div>
+
             <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
                 <h2 className="text-lg font-semibold text-gray-100">Camera Setup</h2>
                 <div className="mt-4 grid gap-4">
@@ -142,23 +154,20 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
                         </select>
                     </label>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-400">
-                    {videoDimensions.width > 0 && (
-                        <span>
-                            Feed: {videoDimensions.width} × {videoDimensions.height}
-                        </span>
-                    )}
+                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-400">
+                    <div>
+                        Feed:{' '}
+                        {videoDimensions.width > 0
+                            ? `${videoDimensions.width}×${videoDimensions.height}`
+                            : '—'}
+                    </div>
+                    <div>FPS: {processedFps}</div>
                     {roiPixelSize && (
-                        <span>
-                            ROI: {roiPixelSize.width} × {roiPixelSize.height}
-                        </span>
+                        <div>
+                            ROI: {roiPixelSize.width}×{roiPixelSize.height}
+                        </div>
                     )}
-                    <span>Processed FPS: {processedFps}</span>
-                    {previewMode === 'processed' && (
-                        <span>Detected blobs: {detectedBlobCount}</span>
-                    )}
-                    <span>OpenCV: {openCvLabel}</span>
-                    {cameraStatus !== 'ready' && <span>Status: {cameraStatus}</span>}
+                    {previewMode === 'processed' && <div>Blobs: {detectedBlobCount}</div>}
                 </div>
                 {cameraError && (
                     <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">

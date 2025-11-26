@@ -87,7 +87,8 @@ export function useGridPersistence(): UseGridPersistenceResult {
         [currentGridSnapshot],
     );
 
-    const hasUnsavedChanges = !activeSnapshotName || lastSavedFingerprint !== currentGridFingerprint;
+    const hasUnsavedChanges =
+        !activeSnapshotName || lastSavedFingerprint !== currentGridFingerprint;
 
     const refreshSnapshotMetadata = useCallback(() => {
         if (!resolvedStorage) {
