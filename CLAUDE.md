@@ -72,3 +72,9 @@ First-time E2E setup: `yarn dlx playwright install --with-deps`
 - Unit tests colocated in `__tests__/` directories adjacent to source
 - Vitest with jsdom environment
 - E2E tests in `e2e/` directory using Playwright
+
+## Pre-Completion Checklist
+
+Before reporting work as complete, run in this order: `yarn build`, `yarn format:fix`, `yarn lint:fix`, `yarn test`
+
+E2E tests (`yarn test:e2e`) are slow—run once at the end of a session after all other checks pass.
