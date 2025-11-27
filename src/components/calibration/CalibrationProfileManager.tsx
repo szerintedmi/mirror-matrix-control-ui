@@ -242,7 +242,8 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                         </svg>
                         <p className="text-sm text-gray-400">No calibration profiles saved</p>
                         <p className="text-xs text-gray-500">
-                            Run calibration and click &ldquo;Save profile&rdquo; to store the results
+                            Run calibration and click &ldquo;Save profile&rdquo; to store the
+                            results
                         </p>
                     </div>
                 ) : (

@@ -9,6 +9,7 @@ export const PAGE_TITLES: Record<Page, string> = {
     patterns: 'Patterns',
     'legacy-playback': 'Playback (legacy)',
     playback: 'Playback',
+    animation: 'Animation',
     calibration: 'Calibration',
     configurator: 'Array Config',
     simulation: 'Simulation',
@@ -30,6 +31,7 @@ export interface NavigationItem {
 export type NavigationIconKey =
     | 'legacy-playback'
     | 'playback'
+    | 'animation'
     | 'calibration'
     | 'patterns'
     | 'simulation'
@@ -37,13 +39,14 @@ export type NavigationIconKey =
     | 'connection';
 
 /**
- * Navigation items configuration for the rail and mobile drawer.
+ * Main navigation items (shown in the primary navigation).
+ * Order: Animation, Playback, Patterns, Calibration, Array Config, Connection
  */
 export const NAVIGATION_ITEMS: NavigationItem[] = [
     {
-        page: 'legacy-playback',
-        label: 'Playback (legacy)',
-        iconKey: 'legacy-playback',
+        page: 'animation',
+        label: 'Animation',
+        iconKey: 'animation',
     },
     {
         page: 'playback',
@@ -51,24 +54,14 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
         iconKey: 'playback',
     },
     {
-        page: 'calibration',
-        label: 'Calibration',
-        iconKey: 'calibration',
-    },
-    {
-        page: 'legacy-patterns',
-        label: 'Patterns (legacy)',
-        iconKey: 'patterns',
-    },
-    {
         page: 'patterns',
         label: 'Patterns',
         iconKey: 'patterns',
     },
     {
-        page: 'simulation',
-        label: 'Simulation',
-        iconKey: 'simulation',
+        page: 'calibration',
+        label: 'Calibration',
+        iconKey: 'calibration',
     },
     {
         page: 'configurator',
@@ -79,6 +72,27 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
         page: 'connection',
         label: 'Connection',
         iconKey: 'connection',
+    },
+];
+
+/**
+ * Legacy navigation items (shown in a collapsed submenu).
+ */
+export const LEGACY_NAVIGATION_ITEMS: NavigationItem[] = [
+    {
+        page: 'legacy-playback',
+        label: 'Playback (legacy)',
+        iconKey: 'legacy-playback',
+    },
+    {
+        page: 'legacy-patterns',
+        label: 'Patterns (legacy)',
+        iconKey: 'patterns',
+    },
+    {
+        page: 'simulation',
+        label: 'Simulation (legacy)',
+        iconKey: 'simulation',
     },
 ];
 

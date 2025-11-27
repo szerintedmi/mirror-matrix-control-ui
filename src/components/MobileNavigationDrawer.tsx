@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 import type { Page } from '../App';
 
@@ -12,6 +12,7 @@ interface MobileNavigationDrawerProps {
     open: boolean;
     onClose: () => void;
     items: NavigationItem[];
+    legacyItems?: NavigationItem[];
     activePage: Page;
     onNavigate: (page: Page) => void;
 }
@@ -20,9 +21,12 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
     open,
     onClose,
     items,
+    legacyItems = [],
     activePage,
     onNavigate,
 }) => {
+    const [legacyExpanded, setLegacyExpanded] = useState(false);
+    const isLegacyPageActive = legacyItems.some((item) => item.page === activePage);
     if (!open) {
         return null;
     }
@@ -71,6 +75,73 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
                             </li>
                         );
                     })}
+
+                    {/* Legacy submenu */}
+                    {legacyItems.length > 0 && (
+                        <li className="mt-2 border-t border-gray-800 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setLegacyExpanded(!legacyExpanded)}
+                                className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-sm font-medium ${
+                                    isLegacyPageActive && !legacyExpanded
+                                        ? 'border-emerald-400/50 bg-gray-800/50 text-emerald-300'
+                                        : 'border-transparent text-gray-500 hover:bg-gray-800 hover:text-gray-300'
+                                }`}
+                            >
+                                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-gray-800 text-gray-500">
+                                    <svg
+                                        className={`h-4 w-4 transition-transform ${legacyExpanded ? 'rotate-90' : ''}`}
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M9 5l7 7-7 7"
+                                        />
+                                    </svg>
+                                </span>
+                                <span>Legacy</span>
+                            </button>
+
+                            {legacyExpanded && (
+                                <ul className="ml-4 mt-1 flex flex-col gap-1 border-l border-gray-800 pl-2">
+                                    {legacyItems.map((item) => {
+                                        const isActive = item.page === activePage;
+                                        return (
+                                            <li key={item.page}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        onNavigate(item.page);
+                                                        onClose();
+                                                    }}
+                                                    className={`flex w-full items-center gap-3 rounded-md border px-3 py-1.5 text-left text-xs font-medium ${
+                                                        isActive
+                                                            ? 'border-emerald-400 bg-gray-800 text-emerald-300'
+                                                            : 'border-transparent text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`flex h-7 w-7 items-center justify-center rounded-md bg-gray-800 ${
+                                                            isActive
+                                                                ? 'text-emerald-300'
+                                                                : 'text-gray-400'
+                                                        }`}
+                                                    >
+                                                        {item.icon}
+                                                    </span>
+                                                    <span>{item.label}</span>
+                                                </button>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            )}
+                        </li>
+                    )}
                 </ul>
             </div>
             <button

@@ -121,3 +121,26 @@ export const CalibrationIcon: React.FC = () => (
         <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
     </svg>
 );
+
+export const AnimationIcon: React.FC = () => (
+    <svg
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="h-5 w-5"
+    >
+        <path d="M5 12h14" strokeLinecap="round" />
+        <circle cx="6" cy="12" r="2" />
+        <circle cx="12" cy="12" r="2" />
+        <circle cx="18" cy="12" r="2" />
+        <path d="M6 8v-2" strokeLinecap="round" />
+        <path d="M12 6v-2" strokeLinecap="round" />
+        <path d="M18 8v-2" strokeLinecap="round" />
+        <path d="M6 16v2" strokeLinecap="round" />
+        <path d="M12 18v2" strokeLinecap="round" />
+        <path d="M18 16v2" strokeLinecap="round" />
+    </svg>
+);

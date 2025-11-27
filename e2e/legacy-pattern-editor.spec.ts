@@ -9,11 +9,17 @@ const clickCanvas = async (
     await canvas.click({ position });
 };
 
+const goToLegacyPatternsPage = async (page: import('@playwright/test').Page) => {
+    // Patterns (legacy) is now in the Legacy submenu
+    await page.getByRole('button', { name: 'Legacy' }).click();
+    await page.getByRole('button', { name: 'Patterns (legacy)' }).click();
+};
+
 test.describe('Pattern editor interactions', () => {
     test('place/remove tiles with keyboard shortcuts and undo/redo history', async ({ page }) => {
         await page.goto('/');
 
-        await page.getByRole('button', { name: 'Patterns (legacy)' }).click();
+        await goToLegacyPatternsPage(page);
         await page.getByRole('button', { name: 'Create New Pattern' }).click();
 
         const canvas = page.getByTestId('pattern-editor-canvas');

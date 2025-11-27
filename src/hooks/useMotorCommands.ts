@@ -53,6 +53,8 @@ export interface MoveMotorArgs {
     motorId: number;
     positionSteps: number;
     cmdId?: string;
+    /** Motor speed in steps per second. Firmware range: 500-4000. If omitted, firmware uses default. */
+    speedSps?: number;
 }
 
 const decoder = new TextDecoder();
@@ -281,6 +283,7 @@ export const useMotorCommands = (): MotorCommandApi => {
             motorId,
             positionSteps,
             cmdId,
+            speedSps,
         }: MoveMotorArgs): Promise<CommandCompletionResult> => {
             const completion = await publishCommand({
                 mac,
@@ -288,6 +291,7 @@ export const useMotorCommands = (): MotorCommandApi => {
                 params: {
                     target_ids: motorId,
                     position_steps: positionSteps,
+                    ...(speedSps !== undefined && { speed_sps: speedSps }),
                 },
                 cmdId,
             });

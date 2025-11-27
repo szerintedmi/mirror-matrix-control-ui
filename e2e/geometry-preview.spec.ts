@@ -17,6 +17,12 @@ const setRangeValue = async (locator: Locator, value: string) => {
     }, value);
 };
 
+const goToSimulationPage = async (page: import('@playwright/test').Page) => {
+    // Simulation is now in the Legacy submenu
+    await page.getByRole('button', { name: 'Legacy' }).click();
+    await page.getByRole('button', { name: 'Simulation (legacy)' }).click();
+};
+
 test.describe('Geometry preview', () => {
     test('syncs overlay selection with debug panel and supports layer toggles', async ({
         page,
@@ -24,7 +30,7 @@ test.describe('Geometry preview', () => {
         await page.goto('/');
         await page.waitForLoadState('networkidle');
 
-        await page.getByRole('button', { name: 'Simulation' }).click();
+        await goToSimulationPage(page);
 
         await page.getByTestId('array-plan').waitFor();
 
@@ -58,7 +64,7 @@ test.describe('Geometry preview', () => {
         await page.goto('/');
         await page.waitForLoadState('networkidle');
 
-        await page.getByRole('button', { name: 'Simulation' }).click();
+        await goToSimulationPage(page);
 
         const wallSlider = page.getByTestId('projection-wall-distance-slider');
         await setRangeValue(wallSlider, '6.2');
@@ -100,7 +106,7 @@ test.describe('Geometry preview', () => {
 
         await page.reload();
         await page.waitForLoadState('networkidle');
-        await page.getByRole('button', { name: 'Simulation' }).click();
+        await goToSimulationPage(page);
 
         const persisted = await page.evaluate(() => {
             const raw = window.localStorage.getItem('mirror:projection-settings');

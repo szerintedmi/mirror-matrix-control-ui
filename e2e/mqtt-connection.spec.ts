@@ -67,6 +67,8 @@ test.describe('MQTT connection panel', () => {
 
         await connectMockTransport(page);
 
+        // Playback (legacy) is now in the Legacy submenu
+        await page.getByRole('button', { name: 'Legacy' }).click();
         await page.getByRole('button', { name: /Playback \(legacy\)/i }).click();
         await expect(page.getByTestId('motor-overview')).toBeVisible();
         await expect(page.getByTestId('motor-overview-dot').first()).toBeVisible();
