@@ -4,7 +4,11 @@ import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import { useCommandFeedback } from '@/hooks/useCommandFeedback';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
-import type { CalibrationRunnerState, TileRunState } from '@/services/calibrationRunner';
+import type {
+    CalibrationRunnerState,
+    CalibrationRunSummary,
+    TileRunState,
+} from '@/services/calibrationRunner';
 import type { Motor } from '@/types';
 import type { CommandErrorDetail } from '@/types/commandError';
 import { extractCommandErrorDetail } from '@/utils/commandErrors';
@@ -95,20 +99,25 @@ interface CalibrationHomeControlsProps {
     runnerState: CalibrationRunnerState;
     tileEntries: TileRunState[];
     isRunnerBusy: boolean;
+    /** Summary from a loaded calibration profile, used as fallback when no calibration has run. */
+    loadedProfileSummary?: CalibrationRunSummary | null;
 }
 
 const CalibrationHomeControls: React.FC<CalibrationHomeControlsProps> = ({
     runnerState,
     tileEntries,
     isRunnerBusy,
+    loadedProfileSummary,
 }) => {
     const { moveMotor } = useMotorCommands();
     const calibratedHomeFeedback = useCommandFeedback();
     const physicalHomeFeedback = useCommandFeedback();
 
+    const effectiveSummary = runnerState.summary ?? loadedProfileSummary ?? undefined;
+
     const calibratedAxisTargets = useMemo(
-        () => buildCalibratedAxisTargets(runnerState.summary, tileEntries),
-        [runnerState.summary, tileEntries],
+        () => buildCalibratedAxisTargets(effectiveSummary, tileEntries),
+        [effectiveSummary, tileEntries],
     );
     const physicalAxisTargets = useMemo(() => buildPhysicalAxisTargets(tileEntries), [tileEntries]);
 
@@ -172,7 +181,7 @@ const CalibrationHomeControls: React.FC<CalibrationHomeControlsProps> = ({
             calibratedHomeFeedback.fail('Pause calibration before moving mirrors.');
             return;
         }
-        if (!runnerState.summary?.gridBlueprint) {
+        if (!effectiveSummary?.gridBlueprint) {
             calibratedHomeFeedback.fail('Run calibration to compute an ideal grid first.');
             return;
         }
@@ -215,13 +224,7 @@ const CalibrationHomeControls: React.FC<CalibrationHomeControlsProps> = ({
         } else {
             calibratedHomeFeedback.succeed('Calibrated home applied.');
         }
-    }, [
-        calibratedAxisTargets,
-        calibratedHomeFeedback,
-        isRunnerBusy,
-        moveMotor,
-        runnerState.summary,
-    ]);
+    }, [calibratedAxisTargets, calibratedHomeFeedback, effectiveSummary, isRunnerBusy, moveMotor]);
 
     const actionFeedbackMessages = useMemo(() => {
         const entries = [

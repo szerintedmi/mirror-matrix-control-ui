@@ -47,13 +47,9 @@ export function CommandErrorToast({ context }: Props) {
                         </div>
                         <div className="flex gap-2 text-rose-300">
                             <span>{reasonLabel(e.reason)}</span>
-                            {e.errorCode && (
-                                <span className="text-rose-400">({e.errorCode})</span>
-                            )}
+                            {e.errorCode && <span className="text-rose-400">({e.errorCode})</span>}
                         </div>
-                        <div className="font-mono text-[10px] text-gray-500">
-                            cmd: {e.cmdId}
-                        </div>
+                        <div className="font-mono text-[10px] text-gray-500">cmd: {e.cmdId}</div>
                     </li>
                 ))}
             </ul>

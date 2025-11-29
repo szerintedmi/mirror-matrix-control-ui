@@ -407,6 +407,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     runnerState={activeRunnerState}
                                     tileEntries={displayedTileEntries}
                                     isRunnerBusy={isRunnerBusy}
+                                    loadedProfileSummary={loadedProfileSummary}
                                 />
                                 <button
                                     type="button"
