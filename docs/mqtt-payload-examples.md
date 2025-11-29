@@ -157,6 +157,8 @@ This document provides real-world examples of MQTT payloads exchanged with the f
 
 ## Homing
 
+Basic homing command:
+
 `devices/8857212316bc/cmd`
 
 ```json
@@ -189,7 +191,39 @@ This document provides real-world examples of MQTT payloads exchanged with the f
 }
 ```
 
+### HOME with all optional parameters
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "HOME",
+  "params": {
+    "target_ids": 0,
+    "overshoot_steps": 800,
+    "backoff_steps": 200,
+    "speed": 2000,
+    "accel": 8000,
+    "full_range_steps": 1500
+  },
+  "cmd_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+  "action": "HOME",
+  "status": "ack",
+  "result": { "est_ms": 2500 }
+}
+```
+
 ## MOVE
+
+Basic move command:
 
 `devices/8857212316bc/cmd`
 
@@ -220,6 +254,34 @@ This document provides real-world examples of MQTT payloads exchanged with the f
   "action": "MOVE",
   "status": "done",
   "result": { "actual_ms": 549, "started_ms": 311978 }
+}
+```
+
+### MOVE with speed and acceleration overrides
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "MOVE",
+  "params": {
+    "target_ids": 0,
+    "position_steps": 1200,
+    "speed": 2000,
+    "accel": 8000
+  },
+  "cmd_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "action": "MOVE",
+  "status": "ack",
+  "result": { "est_ms": 1100 }
 }
 ```
 
@@ -393,7 +455,7 @@ When `THERMAL_LIMITING == "OFF"` and the command execution will exceed thermal l
 ```json
 {
   "action": "SET",
-  "params": { "speed_sps": 300 },
+  "params": { "SPEED": 300 },
   "cmd_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 }
 ```

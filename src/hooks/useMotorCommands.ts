@@ -291,7 +291,7 @@ export const useMotorCommands = (): MotorCommandApi => {
                 params: {
                     target_ids: motorId,
                     position_steps: positionSteps,
-                    ...(speedSps !== undefined && { speed_sps: speedSps }),
+                    ...(speedSps !== undefined && { speed: speedSps }),
                 },
                 cmdId,
             });
