@@ -27,6 +27,7 @@ import { BUILTIN_PATTERNS } from './constants/pattern';
 import { DEFAULT_PROJECTION_SETTINGS } from './constants/projection';
 import { AnimationProvider } from './context/AnimationContext';
 import { CalibrationProvider } from './context/CalibrationContext';
+import { CommandTrackerProvider } from './context/CommandTrackerContext';
 import { LogProvider } from './context/LogContext';
 import { MqttProvider } from './context/MqttContext';
 import { PatternProvider } from './context/PatternContext';
@@ -338,56 +339,62 @@ const App: React.FC = () => {
 
     return (
         <MqttProvider>
-            <StatusProvider>
-                <LogProvider>
-                    <CalibrationProvider>
-                        <PatternProvider>
-                            <AnimationProvider>
-                                <div className="flex h-screen min-h-screen overflow-hidden bg-gray-900 font-sans text-gray-200">
-                                    <NavigationRail
-                                        items={navigationItems}
-                                        legacyItems={legacyNavigationItems}
-                                        activePage={effectiveNavPage}
-                                        collapsed={isRailCollapsed}
-                                        onToggleCollapse={() => setIsRailCollapsed((prev) => !prev)}
-                                        onNavigate={navigateTo}
-                                    />
-                                    <MobileNavigationDrawer
-                                        open={isMobileNavOpen}
-                                        onClose={() => setIsMobileNavOpen(false)}
-                                        items={navigationItems}
-                                        legacyItems={legacyNavigationItems}
-                                        activePage={effectiveNavPage}
-                                        onNavigate={navigateTo}
-                                    />
-                                    <div className="flex h-full flex-1 flex-col overflow-hidden">
-                                        <AppTopBar
-                                            onMenuClick={() => setIsMobileNavOpen(true)}
-                                            onOpenSettings={() => setIsConnectionModalOpen(true)}
-                                            pageTitle={pageTitle}
-                                            breadcrumbs={breadcrumbs}
+            <CommandTrackerProvider>
+                <StatusProvider>
+                    <LogProvider>
+                        <CalibrationProvider>
+                            <PatternProvider>
+                                <AnimationProvider>
+                                    <div className="flex h-screen min-h-screen overflow-hidden bg-gray-900 font-sans text-gray-200">
+                                        <NavigationRail
+                                            items={navigationItems}
+                                            legacyItems={legacyNavigationItems}
+                                            activePage={effectiveNavPage}
+                                            collapsed={isRailCollapsed}
+                                            onToggleCollapse={() =>
+                                                setIsRailCollapsed((prev) => !prev)
+                                            }
+                                            onNavigate={navigateTo}
                                         />
-                                        <main
-                                            data-testid="app-root"
-                                            className="flex-1 overflow-auto px-4 py-6 md:px-8"
+                                        <MobileNavigationDrawer
+                                            open={isMobileNavOpen}
+                                            onClose={() => setIsMobileNavOpen(false)}
+                                            items={navigationItems}
+                                            legacyItems={legacyNavigationItems}
+                                            activePage={effectiveNavPage}
+                                            onNavigate={navigateTo}
+                                        />
+                                        <div className="flex h-full flex-1 flex-col overflow-hidden">
+                                            <AppTopBar
+                                                onMenuClick={() => setIsMobileNavOpen(true)}
+                                                onOpenSettings={() =>
+                                                    setIsConnectionModalOpen(true)
+                                                }
+                                                pageTitle={pageTitle}
+                                                breadcrumbs={breadcrumbs}
+                                            />
+                                            <main
+                                                data-testid="app-root"
+                                                className="flex-1 overflow-auto px-4 py-6 md:px-8"
+                                            >
+                                                <div className="w-full">{renderPage()}</div>
+                                            </main>
+                                        </div>
+                                        <Modal
+                                            open={isConnectionModalOpen}
+                                            onClose={() => setIsConnectionModalOpen(false)}
+                                            title="Connection Settings"
                                         >
-                                            <div className="w-full">{renderPage()}</div>
-                                        </main>
+                                            <ConnectionSettingsContent />
+                                        </Modal>
+                                        <Toaster position="bottom-right" richColors />
                                     </div>
-                                    <Modal
-                                        open={isConnectionModalOpen}
-                                        onClose={() => setIsConnectionModalOpen(false)}
-                                        title="Connection Settings"
-                                    >
-                                        <ConnectionSettingsContent />
-                                    </Modal>
-                                    <Toaster position="bottom-right" richColors />
-                                </div>
-                            </AnimationProvider>
-                        </PatternProvider>
-                    </CalibrationProvider>
-                </LogProvider>
-            </StatusProvider>
+                                </AnimationProvider>
+                            </PatternProvider>
+                        </CalibrationProvider>
+                    </LogProvider>
+                </StatusProvider>
+            </CommandTrackerProvider>
         </MqttProvider>
     );
 };
