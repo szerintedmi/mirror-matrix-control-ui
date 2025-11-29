@@ -23,7 +23,7 @@ import React, {
     useState,
 } from 'react';
 
-import { showPlaybackErrorToast } from '@/components/common/PlaybackErrorToast';
+import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
 import Modal from '@/components/Modal';
 import SequencePreview from '@/components/SequencePreview';
 import { useLogStore } from '@/context/LogContext';
@@ -347,11 +347,11 @@ const PlaybackSequenceManager = React.forwardRef<
             setRunMessage(result.message);
 
             if (!result.success && result.failures && result.failures.length > 0) {
-                showPlaybackErrorToast(
-                    patternsToPlay[0]?.name ?? 'Unknown',
-                    result.axisCount ?? result.failures.length,
-                    result.failures,
-                );
+                showCommandErrorToast({
+                    title: patternsToPlay[0]?.name ?? 'Pattern playback',
+                    totalCount: result.axisCount ?? result.failures.length,
+                    errors: result.failures,
+                });
             }
         }, [canPlaySequence, patternLookup, playPatternSequence, selectedProfile, sequence]);
 
@@ -381,11 +381,11 @@ const PlaybackSequenceManager = React.forwardRef<
                 setRunMessage(result.message);
 
                 if (!result.success && result.failures && result.failures.length > 0) {
-                    showPlaybackErrorToast(
-                        patternsToPlay[0]?.name ?? 'Unknown',
-                        result.axisCount ?? result.failures.length,
-                        result.failures,
-                    );
+                    showCommandErrorToast({
+                        title: patternsToPlay[0]?.name ?? 'Pattern playback',
+                        totalCount: result.axisCount ?? result.failures.length,
+                        errors: result.failures,
+                    });
                 }
             },
             [patternLookup, playPatternSequence, selectedProfile],

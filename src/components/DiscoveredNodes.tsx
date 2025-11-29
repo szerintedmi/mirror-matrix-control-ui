@@ -3,9 +3,10 @@ import React, { useState } from 'react';
 import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import { useMotorController } from '../hooks/useMotorController';
-import { normalizeCommandError } from '../utils/commandErrors';
+import { extractCommandErrorDetail } from '../utils/commandErrors';
 import { formatRelativeTime } from '../utils/time';
 
+import { showSingleCommandErrorToast } from './common/CommandErrorToast';
 import MotorActionButtons from './MotorActionButtons';
 import MotorChip from './MotorChip';
 
@@ -50,8 +51,9 @@ const NodeCommandBar: React.FC<{ mac: string }> = ({ mac }) => {
             await homeAll({ macAddresses: [mac] });
             feedbackApi.succeed('Home All dispatched');
         } catch (error) {
-            const details = normalizeCommandError(error);
-            feedbackApi.fail(details.message, details.code);
+            const details = extractCommandErrorDetail(error, { controller: mac });
+            feedbackApi.fail(details.errorMessage ?? 'Command failed', details.errorCode);
+            showSingleCommandErrorToast('Home all', details);
         }
     };
 

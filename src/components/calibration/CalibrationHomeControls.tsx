@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo } from 'react';
 
+import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import { useCommandFeedback } from '@/hooks/useCommandFeedback';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import type { CalibrationRunnerState, TileRunState } from '@/services/calibrationRunner';
 import type { Motor } from '@/types';
-import { normalizeCommandError } from '@/utils/commandErrors';
+import type { CommandErrorDetail } from '@/types/commandError';
+import { extractCommandErrorDetail } from '@/utils/commandErrors';
 
 const ACTION_BUTTON_BASE_CLASS =
     'rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
@@ -129,20 +131,39 @@ const CalibrationHomeControls: React.FC<CalibrationHomeControlsProps> = ({
             return;
         }
         physicalHomeFeedback.begin('Moving mirrors to physical home…');
-        try {
-            await Promise.all(
-                physicalAxisTargets.map((target) =>
-                    moveMotor({
-                        mac: target.motor.nodeMac,
+
+        const settled = await Promise.allSettled(
+            physicalAxisTargets.map((target) =>
+                moveMotor({
+                    mac: target.motor.nodeMac,
+                    motorId: target.motor.motorIndex,
+                    positionSteps: 0,
+                }),
+            ),
+        );
+
+        const errors: CommandErrorDetail[] = [];
+        settled.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                const target = physicalAxisTargets[index];
+                errors.push(
+                    extractCommandErrorDetail(result.reason, {
+                        controller: target.motor.nodeMac,
                         motorId: target.motor.motorIndex,
-                        positionSteps: 0,
                     }),
-                ),
-            );
+                );
+            }
+        });
+
+        if (errors.length > 0) {
+            physicalHomeFeedback.fail(`${errors.length} motors failed`);
+            showCommandErrorToast({
+                title: 'Physical home',
+                totalCount: physicalAxisTargets.length,
+                errors,
+            });
+        } else {
             physicalHomeFeedback.succeed('Physical home applied.');
-        } catch (error) {
-            const details = normalizeCommandError(error);
-            physicalHomeFeedback.fail(details.message, details.code);
         }
     }, [isRunnerBusy, moveMotor, physicalAxisTargets, physicalHomeFeedback]);
 
@@ -160,20 +181,39 @@ const CalibrationHomeControls: React.FC<CalibrationHomeControlsProps> = ({
             return;
         }
         calibratedHomeFeedback.begin('Moving mirrors to calibrated home…');
-        try {
-            await Promise.all(
-                calibratedAxisTargets.map((target) =>
-                    moveMotor({
-                        mac: target.motor.nodeMac,
+
+        const settled = await Promise.allSettled(
+            calibratedAxisTargets.map((target) =>
+                moveMotor({
+                    mac: target.motor.nodeMac,
+                    motorId: target.motor.motorIndex,
+                    positionSteps: target.steps,
+                }),
+            ),
+        );
+
+        const errors: CommandErrorDetail[] = [];
+        settled.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                const target = calibratedAxisTargets[index];
+                errors.push(
+                    extractCommandErrorDetail(result.reason, {
+                        controller: target.motor.nodeMac,
                         motorId: target.motor.motorIndex,
-                        positionSteps: target.steps,
                     }),
-                ),
-            );
+                );
+            }
+        });
+
+        if (errors.length > 0) {
+            calibratedHomeFeedback.fail(`${errors.length} motors failed`);
+            showCommandErrorToast({
+                title: 'Calibrated home',
+                totalCount: calibratedAxisTargets.length,
+                errors,
+            });
+        } else {
             calibratedHomeFeedback.succeed('Calibrated home applied.');
-        } catch (error) {
-            const details = normalizeCommandError(error);
-            calibratedHomeFeedback.fail(details.message, details.code);
         }
     }, [
         calibratedAxisTargets,

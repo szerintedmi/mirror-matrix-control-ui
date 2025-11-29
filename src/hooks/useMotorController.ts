@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
-import { normalizeCommandError } from '../utils/commandErrors';
+import { showSingleCommandErrorToast } from '../components/common/CommandErrorToast';
+import { extractCommandErrorDetail } from '../utils/commandErrors';
 
 import { useCommandFeedback } from './useCommandFeedback';
 import { useMotorCommands } from './useMotorCommands';
@@ -42,8 +43,12 @@ export const useMotorController = (
             const directionLabel = result.direction > 0 ? '+500' : '-500';
             feedbackApi.succeed(`Nudge ${directionLabel} complete`);
         } catch (error) {
-            const details = normalizeCommandError(error);
-            feedbackApi.fail(details.message, details.code);
+            const details = extractCommandErrorDetail(error, {
+                controller: motor.nodeMac,
+                motorId: motor.motorIndex,
+            });
+            feedbackApi.fail(details.errorMessage ?? 'Command failed', details.errorCode);
+            showSingleCommandErrorToast('Nudge failed', details);
         }
     }, [feedbackApi, motor, nudgeMotor, telemetry]);
 
@@ -60,8 +65,12 @@ export const useMotorController = (
             });
             feedbackApi.succeed('Home command sent');
         } catch (error) {
-            const details = normalizeCommandError(error);
-            feedbackApi.fail(details.message, details.code);
+            const details = extractCommandErrorDetail(error, {
+                controller: motor.nodeMac,
+                motorId: motor.motorIndex,
+            });
+            feedbackApi.fail(details.errorMessage ?? 'Command failed', details.errorCode);
+            showSingleCommandErrorToast('Home failed', details);
         }
     }, [feedbackApi, homeMotor, motor]);
 

@@ -1,1 +1,37 @@
 @import 'tailwindcss';
+
+/* Sonner toast overrides - completely disable animations and hover effects */
+[data-sonner-toaster] [data-sonner-toast] {
+    /* Disable all transform-based animations */
+    --y: 0 !important;
+    --lift: 0 !important;
+    --scale: 1 !important;
+    --front-toast-height: auto !important;
+    --initial-height: auto !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    /* Prevent height recalculation issues */
+    height: auto !important;
+    will-change: auto !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='false'] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* Disable hover effects completely */
+[data-sonner-toaster] [data-sonner-toast]:hover {
+    --y: 0 !important;
+    --lift: 0 !important;
+    --scale: 1 !important;
+    transform: none !important;
+}
+
+/* Prevent Sonner from tracking/animating height changes */
+[data-sonner-toaster] [data-sonner-toast] > * {
+    transition: none !important;
+}

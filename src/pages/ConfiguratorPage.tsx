@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
 import ArrayPersistenceControls from '../components/ArrayPersistenceControls';
+import { showSingleCommandErrorToast } from '../components/common/CommandErrorToast';
 import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
@@ -8,7 +9,7 @@ import UnassignedMotorTray from '../components/UnassignedMotorTray';
 import { useStatusStore } from '../context/StatusContext';
 import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
-import { normalizeCommandError } from '../utils/commandErrors';
+import { extractCommandErrorDetail } from '../utils/commandErrors';
 import {
     isMotorAssigned as checkMotorAssigned,
     moveMotorToPosition,
@@ -283,8 +284,9 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
             await homeAll({ macAddresses: drivers.map((driver) => driver.topicMac) });
             globalHomeFeedback.succeed('Home All dispatched');
         } catch (error) {
-            const details = normalizeCommandError(error);
-            globalHomeFeedback.fail(details.message, details.code);
+            const details = extractCommandErrorDetail(error);
+            globalHomeFeedback.fail(details.errorMessage ?? 'Command failed', details.errorCode);
+            showSingleCommandErrorToast('Home all drivers', details);
         }
     };
 

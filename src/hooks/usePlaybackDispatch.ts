@@ -7,25 +7,14 @@ import {
     planProfilePlayback,
     type ProfilePlaybackAxisTarget,
 } from '@/services/profilePlaybackPlanner';
-import type { Axis, CalibrationProfile, MirrorConfig, Pattern } from '@/types';
-
-export interface PlaybackFailureDetail {
-    cmdId: string;
-    controller: string;
-    motorId: number;
-    row: number;
-    col: number;
-    axis: Axis;
-    reason: 'ack-timeout' | 'completion-timeout' | 'error';
-    errorCode?: string;
-    errorMessage?: string;
-}
+import type { CalibrationProfile, MirrorConfig, Pattern } from '@/types';
+import type { CommandErrorDetail } from '@/types/commandError';
 
 export interface PlaybackResult {
     success: boolean;
     message: string;
     axisCount?: number;
-    failures?: PlaybackFailureDetail[];
+    failures?: CommandErrorDetail[];
 }
 
 interface PlaybackConfig {
@@ -42,7 +31,7 @@ export function usePlaybackDispatch(config: PlaybackConfig) {
         async (
             targets: ProfilePlaybackAxisTarget[],
             patternName: string,
-        ): Promise<{ failures: PlaybackFailureDetail[] }> => {
+        ): Promise<{ failures: CommandErrorDetail[] }> => {
             if (targets.length === 0) {
                 throw new Error('No playable motors found for this pattern.');
             }
@@ -56,7 +45,7 @@ export function usePlaybackDispatch(config: PlaybackConfig) {
                 ),
             );
 
-            const failures: PlaybackFailureDetail[] = [];
+            const failures: CommandErrorDetail[] = [];
             settled.forEach((result, index) => {
                 if (result.status === 'rejected') {
                     const target = targets[index];

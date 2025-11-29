@@ -387,7 +387,11 @@ const App: React.FC = () => {
                                         >
                                             <ConnectionSettingsContent />
                                         </Modal>
-                                        <Toaster position="bottom-right" richColors />
+                                        <Toaster
+                                            position="bottom-right"
+                                            richColors
+                                            expand={false}
+                                        />
                                     </div>
                                 </AnimationProvider>
                             </PatternProvider>

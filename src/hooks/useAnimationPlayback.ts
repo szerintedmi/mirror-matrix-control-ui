@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
+import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
 import { useLogStore } from '@/context/LogContext';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import { planAnimation } from '@/services/animationPlanner';
@@ -11,6 +12,8 @@ import type {
     AnimationPlaybackState,
     AnimationSegmentPlan,
 } from '@/types/animation';
+import type { CommandErrorDetail } from '@/types/commandError';
+import { extractCommandErrorDetail } from '@/utils/commandErrors';
 
 // ============================================================================
 // Types
@@ -63,9 +66,9 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
     const executeSegment = useCallback(
         async (
             segment: AnimationSegmentPlan,
-        ): Promise<{ success: boolean; failureCount: number }> => {
+        ): Promise<{ success: boolean; failureCount: number; failures: CommandErrorDetail[] }> => {
             if (segment.axisMoves.length === 0) {
-                return { success: true, failureCount: 0 };
+                return { success: true, failureCount: 0, failures: [] };
             }
 
             const movePromises = segment.axisMoves.map((move) =>
@@ -79,13 +82,23 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
 
             const results = await Promise.allSettled(movePromises);
 
-            const failures = results.filter(
-                (r): r is PromiseRejectedResult => r.status === 'rejected',
-            );
+            const failures: CommandErrorDetail[] = [];
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    const move = segment.axisMoves[index];
+                    failures.push(
+                        extractCommandErrorDetail(result.reason, {
+                            controller: move.motor.nodeMac,
+                            motorId: move.motor.motorIndex,
+                        }),
+                    );
+                }
+            });
 
             return {
                 success: failures.length === 0,
                 failureCount: failures.length,
+                failures,
             };
         },
         [moveMotor],
@@ -199,6 +212,11 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
                             'Animation',
                             `Segment ${i + 1} failed: ${result.failureCount} motor commands failed`,
                         );
+                        showCommandErrorToast({
+                            title: `Animation segment ${i + 1}`,
+                            totalCount: segment.axisMoves.length,
+                            errors: result.failures,
+                        });
                         // Continue anyway - partial execution is better than stopping
                     }
 
