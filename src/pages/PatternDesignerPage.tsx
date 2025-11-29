@@ -268,10 +268,10 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     }, [onHoverPointChange]);
 
     return (
-        <div className="relative flex aspect-square w-full max-w-xl items-center justify-center bg-gray-900">
+        <div className="relative flex h-full w-full items-center justify-center bg-gray-900">
             <div
                 ref={containerRef}
-                className={`h-full w-full select-none ${
+                className={`aspect-square h-full max-h-full max-w-full select-none ${
                     editMode === 'erase' ? 'cursor-pointer' : 'cursor-crosshair'
                 }`}
                 onClick={handleCanvasClick}
@@ -458,7 +458,26 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     const [editMode, setEditMode] = useState<PatternEditMode>('placement');
     const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
-    const [showBounds, setShowBounds] = useState(false);
+
+    // Track which profile IDs we've auto-enabled bounds for to avoid re-triggering
+    const autoEnabledBoundsForRef = useRef<Set<string>>(new Set());
+
+    // Initialize showBounds based on whether a profile is already selected
+    const [showBounds, setShowBounds] = useState(() => Boolean(selectedCalibrationProfile));
+
+    // Auto-enable Show Bounds when a NEW calibration profile is selected
+    const handleShowBoundsChange = useCallback((show: boolean) => {
+        setShowBounds(show);
+    }, []);
+
+    // Auto-enable when a profile is selected that we haven't seen before
+    useEffect(() => {
+        if (selectedCalibrationProfile && !autoEnabledBoundsForRef.current.has(selectedCalibrationProfile.id)) {
+            autoEnabledBoundsForRef.current.add(selectedCalibrationProfile.id);
+            // Use requestAnimationFrame to avoid synchronous setState in effect
+            requestAnimationFrame(() => setShowBounds(true));
+        }
+    }, [selectedCalibrationProfile]);
 
     // Derive selected pattern first, as it's needed by many handlers
     const selectedPattern = useMemo(
@@ -787,7 +806,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     );
 
     return (
-        <div className="flex h-full flex-wrap gap-6 overflow-y-auto p-6">
+        <div className="flex h-full min-h-0 gap-6 p-6">
             {/* Left Sidebar: Pattern Library */}
             <div className="flex w-80 flex-none flex-col gap-4 rounded-lg bg-gray-900/50 p-4">
                 <div className="flex items-center justify-between">
@@ -820,48 +839,55 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     onDelete={deletePattern}
                     onRename={handleOpenRenameModal}
                     onPlay={handleQuickPlay}
-                    className="flex-1"
+                    className="flex-1 min-h-0 overflow-y-auto"
                 />
             </div>
 
-            {/* Main Content: Editor */}
-            <div className="flex min-h-[500px] min-w-[500px] flex-1 flex-col gap-4 rounded-md bg-gray-900/60 p-4">
-                <div className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
-                    <CalibrationProfileSelector
-                        profiles={calibrationProfiles}
-                        selectedProfileId={selectedCalibrationProfileId ?? ''}
-                        onSelect={selectCalibrationProfile}
-                        label="Calibration Profile (optional)"
-                        placeholder="No calibration profiles"
-                        selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
-                        rightAccessory={
-                            showSpotSummary ? (
-                                <span
-                                    className={`whitespace-nowrap ${spotsOverCapacity ? 'text-red-300' : 'text-gray-300'}`}
-                                >
-                                    Spots: {placedSpotCount} / {availableSpotCount}
-                                </span>
-                            ) : null
-                        }
-                    />
+            {/* Main Content: Editor + Debug below */}
+            <div className="flex min-h-0 min-w-[500px] flex-1 flex-col gap-4">
+                {/* Toolbar section - fixed height */}
+                <div className="flex-none rounded-md bg-gray-900/60 p-4">
+                    <div className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
+                        <CalibrationProfileSelector
+                            profiles={calibrationProfiles}
+                            selectedProfileId={selectedCalibrationProfileId ?? ''}
+                            onSelect={selectCalibrationProfile}
+                            label="Calibration Profile (optional)"
+                            placeholder="No calibration profiles"
+                            selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
+                            rightAccessory={
+                                showSpotSummary ? (
+                                    <span
+                                        className={`whitespace-nowrap ${spotsOverCapacity ? 'text-red-300' : 'text-gray-300'}`}
+                                    >
+                                        Spots: {placedSpotCount} / {availableSpotCount}
+                                    </span>
+                                ) : null
+                            }
+                        />
+                    </div>
+                    <div className="mt-4">
+                        <PatternDesignerToolbar
+                            editMode={editMode}
+                            onEditModeChange={updateEditMode}
+                            onShift={handleShift}
+                            onScale={handleScale}
+                            onRotate={handleRotate}
+                            canUndo={historyState.canUndo}
+                            canRedo={historyState.canRedo}
+                            onUndo={handleUndo}
+                            onRedo={handleRedo}
+                            showBounds={showBounds}
+                            onShowBoundsChange={handleShowBoundsChange}
+                            canShowBounds={showSpotSummary}
+                            blobRadius={calibratedBlobRadius}
+                            disabled={!selectedPattern}
+                        />
+                    </div>
                 </div>
-                <PatternDesignerToolbar
-                    editMode={editMode}
-                    onEditModeChange={updateEditMode}
-                    onShift={handleShift}
-                    onScale={handleScale}
-                    onRotate={handleRotate}
-                    canUndo={historyState.canUndo}
-                    canRedo={historyState.canRedo}
-                    onUndo={handleUndo}
-                    onRedo={handleRedo}
-                    showBounds={showBounds}
-                    onShowBoundsChange={setShowBounds}
-                    canShowBounds={showSpotSummary}
-                    blobRadius={calibratedBlobRadius}
-                    disabled={!selectedPattern}
-                />
-                <div className="flex flex-1 items-center justify-center">
+
+                {/* Canvas - fills remaining height, constrained to viewport */}
+                <div className="flex min-h-[200px] flex-1 items-center justify-center overflow-hidden rounded-md bg-gray-900/60 p-4">
                     {selectedPattern ? (
                         <PatternDesignerCanvas
                             pattern={selectedPattern}
@@ -883,16 +909,17 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                         <p className="text-sm text-gray-500">Create a pattern to start editing.</p>
                     )}
                 </div>
-            </div>
 
-            <div className="w-96 flex-none">
-                <PatternDesignerDebugPanel
-                    pattern={selectedPattern}
-                    hoverPoint={hoverPoint}
-                    blobRadius={calibratedBlobRadius}
-                    editMode={editMode}
-                    calibrationTileBounds={calibrationTileBounds}
-                />
+                {/* Debug panel - below canvas */}
+                <div className="flex-none">
+                    <PatternDesignerDebugPanel
+                        pattern={selectedPattern}
+                        hoverPoint={hoverPoint}
+                        blobRadius={calibratedBlobRadius}
+                        editMode={editMode}
+                        calibrationTileBounds={calibrationTileBounds}
+                    />
+                </div>
             </div>
 
             <Modal

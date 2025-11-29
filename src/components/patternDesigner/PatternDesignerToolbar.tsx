@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from 'react';
 
+import { useEditableInput } from '@/hooks/useEditableInput';
+
 import type { PatternEditMode } from './types';
 
 const EDIT_MODE_LABEL: Record<PatternEditMode, string> = {
@@ -51,17 +53,48 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
     blobRadius,
     disabled = false,
 }) => {
-    // Step sizes state
-    const defaultShiftStep = blobRadius * 2;
-    const [shiftStep, setShiftStep] = useState<number>(defaultShiftStep);
-    const [scaleStep, setScaleStep] = useState<number>(0.1);
+    // Step sizes state - use 0.01 as default for fine control over normalized coordinates
+    const [shiftStep, setShiftStep] = useState<number>(0.01);
+    const [scaleStep, setScaleStep] = useState<number>(0.01);
     const [rotateStep, setRotateStep] = useState<number>(15);
     const [showIndependentScale, setShowIndependentScale] = useState(false);
 
-    // Update shift step when blob radius changes
-    React.useEffect(() => {
-        setShiftStep(blobRadius * 2);
-    }, [blobRadius]);
+    // Editable input hooks for better UX (select-all + type works properly)
+    const shiftInput = useEditableInput({
+        value: shiftStep,
+        onChange: setShiftStep,
+        format: (v) => v.toString(),
+        parse: (s) => {
+            const n = parseFloat(s);
+            return Number.isFinite(n) && n > 0 ? n : null;
+        },
+        validateInput: (s) => /^-?\d*\.?\d*$/.test(s),
+    });
+
+    const scaleInput = useEditableInput({
+        value: scaleStep,
+        onChange: setScaleStep,
+        format: (v) => v.toString(),
+        parse: (s) => {
+            const n = parseFloat(s);
+            return Number.isFinite(n) && n > 0 && n <= 1 ? n : null;
+        },
+        validateInput: (s) => /^-?\d*\.?\d*$/.test(s),
+    });
+
+    const rotateInput = useEditableInput({
+        value: rotateStep,
+        onChange: setRotateStep,
+        format: (v) => v.toString(),
+        parse: (s) => {
+            const n = parseFloat(s);
+            return Number.isFinite(n) && n > 0 && n <= 180 ? n : null;
+        },
+        validateInput: (s) => /^\d*\.?\d*$/.test(s),
+    });
+
+    // Suppress unused variable warning - blobRadius is kept in props for future use
+    void blobRadius;
 
     // Shift handlers
     const handleShiftUp = useCallback(() => onShift(0, -shiftStep), [onShift, shiftStep]);
@@ -232,14 +265,12 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                         </button>
                     </div>
                     <input
-                        type="number"
-                        value={shiftStep}
-                        onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setShiftStep(Number.isFinite(val) && val > 0 ? val : defaultShiftStep);
-                        }}
-                        step={0.01}
-                        min={0.001}
+                        type="text"
+                        inputMode="decimal"
+                        value={shiftInput.displayValue}
+                        onFocus={shiftInput.onFocus}
+                        onBlur={shiftInput.onBlur}
+                        onChange={shiftInput.onChange}
                         disabled={disabled}
                         className="w-16 rounded border border-gray-600 bg-gray-700 px-1.5 py-0.5 text-center text-xs text-gray-100 focus:border-cyan-500 focus:outline-none"
                         title="Shift step size"
@@ -326,15 +357,12 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                         </div>
                     )}
                     <input
-                        type="number"
-                        value={scaleStep}
-                        onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setScaleStep(Number.isFinite(val) && val > 0 ? val : 0.1);
-                        }}
-                        step={0.05}
-                        min={0.01}
-                        max={1}
+                        type="text"
+                        inputMode="decimal"
+                        value={scaleInput.displayValue}
+                        onFocus={scaleInput.onFocus}
+                        onBlur={scaleInput.onBlur}
+                        onChange={scaleInput.onChange}
                         disabled={disabled}
                         className="w-14 rounded border border-gray-600 bg-gray-700 px-1.5 py-0.5 text-center text-xs text-gray-100 focus:border-cyan-500 focus:outline-none"
                         title="Scale step (e.g., 0.1 = 10%)"
@@ -387,15 +415,12 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                         </button>
                     </div>
                     <input
-                        type="number"
-                        value={rotateStep}
-                        onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setRotateStep(Number.isFinite(val) && val > 0 ? val : 15);
-                        }}
-                        step={5}
-                        min={1}
-                        max={180}
+                        type="text"
+                        inputMode="decimal"
+                        value={rotateInput.displayValue}
+                        onFocus={rotateInput.onFocus}
+                        onBlur={rotateInput.onBlur}
+                        onChange={rotateInput.onChange}
                         disabled={disabled}
                         className="w-14 rounded border border-gray-600 bg-gray-700 px-1.5 py-0.5 text-center text-xs text-gray-100 focus:border-cyan-500 focus:outline-none"
                         title="Rotation angle in degrees"
