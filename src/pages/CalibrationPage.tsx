@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
+import ArrayRotationSelector from '@/components/calibration/ArrayRotationSelector';
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
@@ -12,7 +13,7 @@ import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCamer
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import { useStepwiseCalibrationController } from '@/hooks/useStepwiseCalibrationController';
-import type { CalibrationCameraResolution, MirrorConfig } from '@/types';
+import type { ArrayRotation, CalibrationCameraResolution, MirrorConfig } from '@/types';
 
 interface CalibrationPageProps {
     gridSize: { rows: number; cols: number };
@@ -122,6 +123,9 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     const [alignmentOverlayVisible, setAlignmentOverlayVisible] = useState(false);
     const [tileBoundsOverlayVisible, setTileBoundsOverlayVisible] = useState(false);
 
+    // Array rotation setting for calibration (physical orientation of mirror array)
+    const [arrayRotation, setArrayRotation] = useState<ArrayRotation>(0);
+
     const cameraPipeline = useCameraPipeline({
         detectionSettingsLoaded,
         selectedDeviceId,
@@ -184,6 +188,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         motorApi: motorCommands,
         captureMeasurement: captureBlobMeasurement,
         detectionReady,
+        arrayRotation,
     });
 
     const stepRunnerController = useStepwiseCalibrationController({
@@ -201,6 +206,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         runnerState,
         gridSize,
         mirrorConfig,
+        arrayRotation,
     });
 
     const runSummary = {
@@ -361,6 +367,13 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     </p>
                 </div>
             )}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                <ArrayRotationSelector
+                    rotation={arrayRotation}
+                    onChange={setArrayRotation}
+                    disabled={isCalibrationActive}
+                />
+            </div>
             <CalibrationRunnerPanel
                 runMode={runnerMode}
                 onRunModeChange={setRunnerMode}

@@ -5,6 +5,7 @@ import {
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import type {
+    ArrayRotation,
     BlobMeasurement,
     CalibrationGridBlueprint,
     CalibrationProfileBounds,
@@ -12,6 +13,7 @@ import type {
     MirrorConfig,
     Motor,
 } from '@/types';
+import { getStepTestJogDirection } from '@/utils/arrayRotation';
 
 type Axis = 'x' | 'y';
 
@@ -147,6 +149,11 @@ export interface CalibrationRunnerParams {
     motorApi: MotorCommandApi;
     captureMeasurement: CaptureBlobMeasurement;
     settings?: Partial<CalibrationRunnerSettings>;
+    /**
+     * Physical array rotation (clockwise from camera view).
+     * Affects step test jog directions to match expected visual movement.
+     */
+    arrayRotation?: ArrayRotation;
     onStateChange?: (state: CalibrationRunnerState) => void;
     mode?: CalibrationRunnerMode;
     onStepStateChange?: (state: CalibrationStepState) => void;
@@ -163,11 +170,16 @@ const roundSteps = (value: number): number => {
     return Math.round(value);
 };
 
-const getAxisStepDelta = (_axis: Axis, deltaSteps: number): number | null => {
+const getAxisStepDelta = (
+    axis: Axis,
+    deltaSteps: number,
+    arrayRotation: ArrayRotation,
+): number | null => {
     if (deltaSteps <= 0) {
         return null;
     }
-    return clampSteps(deltaSteps);
+    const jogDirection = getStepTestJogDirection(axis, arrayRotation);
+    return clampSteps(deltaSteps * jogDirection);
 };
 
 class RunnerAbortError extends Error {
@@ -272,6 +284,8 @@ export class CalibrationRunner {
 
     private readonly settings: CalibrationRunnerSettings;
 
+    private readonly arrayRotation: ArrayRotation;
+
     private readonly descriptors: TileDescriptor[];
 
     private readonly calibratableTiles: TileDescriptor[];
@@ -317,6 +331,7 @@ export class CalibrationRunner {
         this.motorApi = params.motorApi;
         this.captureMeasurement = params.captureMeasurement;
         this.settings = { ...DEFAULT_CALIBRATION_RUNNER_SETTINGS, ...params.settings };
+        this.arrayRotation = params.arrayRotation ?? 0;
         this.onStateChange = params.onStateChange;
         this.mode = params.mode ?? 'auto';
         this.onStepStateChange = params.onStepStateChange;
@@ -624,8 +639,12 @@ export class CalibrationRunner {
 
         const xMotor = tile.assignment.x;
         const yMotor = tile.assignment.y;
-        const xDelta = xMotor ? getAxisStepDelta('x', this.settings.deltaSteps) : null;
-        const yDelta = yMotor ? getAxisStepDelta('y', this.settings.deltaSteps) : null;
+        const xDelta = xMotor
+            ? getAxisStepDelta('x', this.settings.deltaSteps, this.arrayRotation)
+            : null;
+        const yDelta = yMotor
+            ? getAxisStepDelta('y', this.settings.deltaSteps, this.arrayRotation)
+            : null;
         const sizeDeltas: number[] = [];
         const stepToDisplacement: { x: number | null; y: number | null } = {
             x: null,
@@ -839,8 +858,16 @@ export class CalibrationRunner {
         if (pose === 'home') {
             return { x: 0, y: 0 };
         }
+        // Compute aside position accounting for array rotation.
+        // Goal: move tiles to a consistent visual position (left side from camera view).
+        // Baseline: +X = LEFT, so MAX (+1200) = LEFT.
+        // At 0° and 90°: X_MAX moves left, at 180° and 270°: X_MIN moves left (inverted).
+        const asideX =
+            this.arrayRotation === 0 || this.arrayRotation === 90
+                ? MOTOR_MAX_POSITION_STEPS
+                : MOTOR_MIN_POSITION_STEPS;
         return {
-            x: MOTOR_MIN_POSITION_STEPS,
+            x: asideX,
             y: this.computeAsideYTarget(tile.col),
         };
     }

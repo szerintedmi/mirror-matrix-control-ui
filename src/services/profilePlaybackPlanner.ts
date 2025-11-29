@@ -1,9 +1,11 @@
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
+import { rotateVector } from '@/utils/arrayRotation';
 import { convertDeltaToSteps } from '@/utils/calibrationMath';
 
 import { getMirrorAssignment } from '../utils/grid';
 
 import type {
+    ArrayRotation,
     Axis,
     CalibrationProfile,
     CalibrationProfileBounds,
@@ -290,11 +292,22 @@ export const planProfilePlayback = ({
     const totalMirrors = gridSize.rows * gridSize.cols;
     const globalErrors: ProfilePlaybackValidationError[] = [];
 
-    if (pattern.points.length > totalMirrors) {
+    // Apply array rotation to pattern points.
+    // This transforms pattern coordinates to match the calibrated coordinate space.
+    const arrayRotation: ArrayRotation = profile.arrayRotation ?? 0;
+    const rotatedPoints: PatternPoint[] =
+        arrayRotation === 0
+            ? pattern.points
+            : pattern.points.map((point) => {
+                  const rotated = rotateVector({ x: point.x, y: point.y }, arrayRotation);
+                  return { ...point, x: rotated.x, y: rotated.y };
+              });
+
+    if (rotatedPoints.length > totalMirrors) {
         globalErrors.push(
             createError(
                 'pattern_exceeds_mirrors',
-                `Pattern has ${pattern.points.length} points, but the array only exposes ${totalMirrors} mirrors.`,
+                `Pattern has ${rotatedPoints.length} points, but the array only exposes ${totalMirrors} mirrors.`,
             ),
         );
     }
@@ -334,18 +347,18 @@ export const planProfilePlayback = ({
         }
     }
 
-    if (pattern.points.length > availableTiles.length) {
+    if (rotatedPoints.length > availableTiles.length) {
         globalErrors.push(
             createError(
                 'insufficient_calibrated_tiles',
-                `Pattern needs ${pattern.points.length} calibrated mirrors, but only ${availableTiles.length} are available.`,
+                `Pattern needs ${rotatedPoints.length} calibrated mirrors, but only ${availableTiles.length} are available.`,
             ),
         );
     }
 
-    // 2. Pre-calculate valid tiles for each point
+    // 2. Pre-calculate valid tiles for each point (using rotated coordinates)
     // We want to assign points that have FEWER options first.
-    const pointOptions = pattern.points.map((point) => {
+    const pointOptions = rotatedPoints.map((point) => {
         const validTiles = availableTiles.filter((t) => {
             const bounds = t.tile.inferredBounds;
             if (!bounds) return true; // No bounds = assume valid
@@ -419,8 +432,9 @@ export const planProfilePlayback = ({
                 }
             }
 
+            // Use rotatedPoints to get the transformed coordinates
             const patternPoint = assignedPointId
-                ? (pattern.points.find((p) => p.id === assignedPointId) ?? null)
+                ? (rotatedPoints.find((p) => p.id === assignedPointId) ?? null)
                 : null;
 
             const tileErrors: ProfilePlaybackValidationError[] = [];
@@ -474,7 +488,7 @@ export const planProfilePlayback = ({
 
     // Check for unassigned points to report errors
     // If a point was not assigned, it means we ran out of valid tiles or it was impossible
-    const unassignedPoints = pattern.points.filter((p) => !pointAssignments.has(p.id));
+    const unassignedPoints = rotatedPoints.filter((p) => !pointAssignments.has(p.id));
     for (const p of unassignedPoints) {
         // We need to attach this error somewhere.
         // The interface puts errors on tiles or global.

@@ -11,7 +11,7 @@ import {
 } from '@/services/calibrationProfileStorage';
 import type { CalibrationRunSummary, CalibrationRunnerState } from '@/services/calibrationRunner';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
-import type { CalibrationProfile, MirrorConfig } from '@/types';
+import type { ArrayRotation, CalibrationProfile, MirrorConfig } from '@/types';
 
 const getLocalStorage = (): Storage | undefined =>
     typeof window !== 'undefined' ? window.localStorage : undefined;
@@ -61,12 +61,17 @@ interface UseCalibrationProfilesControllerParams {
     runnerState: CalibrationRunnerState;
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
+    /**
+     * Array rotation to save with the calibration profile.
+     */
+    arrayRotation: ArrayRotation;
 }
 
 export const useCalibrationProfilesController = ({
     runnerState,
     gridSize,
     mirrorConfig,
+    arrayRotation,
 }: UseCalibrationProfilesControllerParams): CalibrationProfilesController => {
     const initialState = useMemo(() => loadInitialProfilesState(), []);
     const [profiles, setProfiles] = useState<CalibrationProfile[]>(initialState.entries);
@@ -155,6 +160,7 @@ export const useCalibrationProfilesController = ({
             name: profileNameInput,
             runnerState,
             gridSnapshot: snapshot,
+            arrayRotation,
         });
         if (!saved) {
             setSaveFeedback({ type: 'error', message: 'Unable to save calibration profile.' });
@@ -168,6 +174,7 @@ export const useCalibrationProfilesController = ({
         refreshProfiles();
         return saved;
     }, [
+        arrayRotation,
         gridSize,
         mirrorConfig,
         persistLastSelection,

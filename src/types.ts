@@ -381,12 +381,26 @@ export interface CalibrationProfileCalibrationSpace {
     globalBounds: CalibrationProfileBounds | null;
 }
 
+/**
+ * Supported array rotation angles (clockwise from camera view).
+ * - 0°: Normal orientation (row 0, col 0 at top-left)
+ * - 90°: Rotated 90° clockwise
+ * - 180°: Rotated 180°
+ * - 270°: Rotated 270° clockwise (= 90° counter-clockwise)
+ */
+export type ArrayRotation = 0 | 90 | 180 | 270;
+
 export interface CalibrationProfile {
     id: string;
     schemaVersion: number;
     name: string;
     createdAt: string;
     updatedAt: string;
+    /**
+     * Physical array rotation applied during calibration (clockwise from camera view).
+     * This affects motor axis interpretation and pattern coordinate mapping.
+     */
+    arrayRotation: ArrayRotation;
     gridSize: { rows: number; cols: number };
     gridBlueprint: CalibrationGridBlueprint | null;
     stepTestSettings: { deltaSteps: number };

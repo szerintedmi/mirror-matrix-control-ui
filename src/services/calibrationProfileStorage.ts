@@ -7,6 +7,7 @@ import type {
 } from '@/services/calibrationRunner';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type {
+    ArrayRotation,
     BlobMeasurement,
     CalibrationGridBlueprint,
     CalibrationProfile,
@@ -21,13 +22,14 @@ import type {
     TileAxisCalibration,
     TileCalibrationResults,
 } from '@/types';
+import { isValidArrayRotation } from '@/utils/arrayRotation';
 import { STEP_EPSILON, clampNormalized, convertDeltaToSteps } from '@/utils/calibrationMath';
 
 export const CALIBRATION_PROFILES_STORAGE_KEY = 'mirror:calibration:profiles';
 export const CALIBRATION_PROFILES_CHANGED_EVENT = 'mirror:calibration-profiles-changed';
 const LAST_SELECTED_PROFILE_KEY = 'mirror:calibration:last-profile-id';
 const STORAGE_VERSION = 2;
-const PROFILE_SCHEMA_VERSION = 2;
+const PROFILE_SCHEMA_VERSION = 3;
 const PROFILE_EXPORT_VERSION = 1;
 const PROFILE_EXPORT_TYPE = 'mirror.calibration.profile';
 
@@ -461,7 +463,18 @@ const readProfilesFromStorage = (storage?: Storage): CalibrationProfile[] => {
         if (!payload || payload.version !== STORAGE_VERSION || !Array.isArray(payload.entries)) {
             return [];
         }
-        return payload.entries.filter((entry) => entry.schemaVersion === PROFILE_SCHEMA_VERSION);
+        // Accept v2 and v3 profiles; v2 profiles will be migrated with default arrayRotation=0
+        return payload.entries
+            .filter(
+                (entry) =>
+                    entry.schemaVersion === PROFILE_SCHEMA_VERSION || entry.schemaVersion === 2,
+            )
+            .map((entry) => ({
+                ...entry,
+                schemaVersion: PROFILE_SCHEMA_VERSION,
+                // Migrate v2 profiles: add default rotation
+                arrayRotation: isValidArrayRotation(entry.arrayRotation) ? entry.arrayRotation : 0,
+            }));
     } catch (error) {
         console.warn('Failed to parse calibration profiles', error);
         return [];
@@ -489,6 +502,11 @@ export interface SaveCalibrationProfileOptions {
     name: string;
     runnerState: CalibrationRunnerState;
     gridSnapshot: GridStateSnapshot;
+    /**
+     * Array rotation that was applied during this calibration.
+     * Defaults to 0 (no rotation) if not specified.
+     */
+    arrayRotation?: ArrayRotation;
 }
 
 export const saveCalibrationProfile = (
@@ -519,6 +537,7 @@ export const saveCalibrationProfile = (
         name: options.name.trim() || 'Untitled calibration',
         createdAt: now,
         updatedAt: now,
+        arrayRotation: options.arrayRotation ?? 0,
         gridSize: {
             rows: options.gridSnapshot.gridSize.rows,
             cols: options.gridSnapshot.gridSize.cols,
@@ -665,7 +684,8 @@ const validateCalibrationProfileCandidate = (
     if (typeof input.schemaVersion !== 'number') {
         return { profile: null, error: 'Profile is missing schema version info.' };
     }
-    if (input.schemaVersion !== PROFILE_SCHEMA_VERSION) {
+    // Accept v2 profiles (will be migrated to v3 with default arrayRotation=0)
+    if (input.schemaVersion !== PROFILE_SCHEMA_VERSION && input.schemaVersion !== 2) {
         return {
             profile: null,
             error: `Unsupported profile schema version ${input.schemaVersion}.`,
@@ -679,6 +699,14 @@ const validateCalibrationProfileCandidate = (
     }
     if (typeof input.createdAt !== 'string' || typeof input.updatedAt !== 'string') {
         return { profile: null, error: 'Profile timestamps are missing.' };
+    }
+    // arrayRotation is validated but defaults to 0 if missing (for older profiles)
+    if (
+        input.arrayRotation !== undefined &&
+        input.arrayRotation !== null &&
+        !isValidArrayRotation(input.arrayRotation)
+    ) {
+        return { profile: null, error: 'Profile array rotation is invalid.' };
     }
     if (!isRecord(input.gridSize)) {
         return { profile: null, error: 'Profile grid size is invalid.' };
@@ -750,6 +778,8 @@ const sanitizeImportedProfile = (
         name,
         createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : now,
         updatedAt: now,
+        // Default to 0 (no rotation) for older profiles that don't have this field
+        arrayRotation: isValidArrayRotation(candidate.arrayRotation) ? candidate.arrayRotation : 0,
         gridSize: {
             rows: candidate.gridSize.rows,
             cols: candidate.gridSize.cols,

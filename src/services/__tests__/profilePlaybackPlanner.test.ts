@@ -80,10 +80,11 @@ const createProfile = (
     }
     return {
         id: 'profile-1',
-        schemaVersion: 2,
+        schemaVersion: 3,
         name: 'Profile',
         createdAt: new Date('2025-01-01T00:00:00.000Z').toISOString(),
         updatedAt: new Date('2025-01-01T01:00:00.000Z').toISOString(),
+        arrayRotation: 0,
         gridSize: { rows, cols },
         gridBlueprint:
             options?.includeBlueprint === false

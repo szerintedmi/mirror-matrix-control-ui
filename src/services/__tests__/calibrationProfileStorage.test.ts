@@ -246,7 +246,8 @@ describe('calibrationProfileStorage', () => {
             const saved = saveProfile();
 
             expect(saved).not.toBeNull();
-            expect(saved!.schemaVersion).toBe(2);
+            expect(saved!.schemaVersion).toBe(3);
+            expect(saved!.arrayRotation).toBe(0);
             expect(saved!.tiles['0-0']).toMatchObject({ status: 'completed' });
             expect(saved!.calibrationSpace.globalBounds).not.toBeNull();
             const measurementRecord = saved!.tiles['0-0'].homeMeasurement;

@@ -14,7 +14,7 @@ import {
     type CaptureBlobMeasurement,
     createBaselineRunnerState,
 } from '@/services/calibrationRunner';
-import type { MirrorConfig } from '@/types';
+import type { ArrayRotation, MirrorConfig } from '@/types';
 
 const clampSetting = (value: number, min: number, max: number): number =>
     Math.max(min, Math.min(max, value));
@@ -25,6 +25,11 @@ interface UseCalibrationRunnerControllerParams {
     motorApi: MotorCommandApi;
     captureMeasurement: CaptureBlobMeasurement;
     detectionReady: boolean;
+    /**
+     * Array rotation setting for calibration.
+     * Affects step test jog directions for rotated physical arrays.
+     */
+    arrayRotation: ArrayRotation;
 }
 
 export interface CalibrationRunnerController {
@@ -49,6 +54,7 @@ export const useCalibrationRunnerController = ({
     motorApi,
     captureMeasurement,
     detectionReady,
+    arrayRotation,
 }: UseCalibrationRunnerControllerParams): CalibrationRunnerController => {
     const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
         DEFAULT_CALIBRATION_RUNNER_SETTINGS,
@@ -112,6 +118,7 @@ export const useCalibrationRunnerController = ({
             motorApi,
             captureMeasurement,
             settings: runnerSettings,
+            arrayRotation,
             onStateChange: (next) => {
                 setRunnerState(next);
             },
@@ -122,6 +129,7 @@ export const useCalibrationRunnerController = ({
         runner.start();
     }, [
         appendLogEntry,
+        arrayRotation,
         captureMeasurement,
         detectionReady,
         gridSize,
