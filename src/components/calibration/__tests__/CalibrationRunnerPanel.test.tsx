@@ -126,14 +126,6 @@ const detectionReady = true;
 
 const noop = () => {};
 
-const handleUpdateSetting = <K extends keyof CalibrationRunnerSettings>(
-    key: K,
-    value: CalibrationRunnerSettings[K],
-) => {
-    void key;
-    void value;
-};
-
 const renderPanel = async (
     options: { runnerState?: CalibrationRunnerState; drivers?: DriverView[] } = {},
 ) => {
@@ -153,7 +145,6 @@ const renderPanel = async (
                 runnerSettings={runnerSettings}
                 detectionReady={detectionReady}
                 drivers={driverList}
-                onUpdateSetting={handleUpdateSetting}
                 autoControls={{
                     runnerState: state,
                     start: noop,

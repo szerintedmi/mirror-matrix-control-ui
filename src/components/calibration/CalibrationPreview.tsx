@@ -247,40 +247,38 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
 
     return (
         <section className="min-w-0 flex-1 rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-            <div className="mb-4 space-y-2">
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                 {/* View Mode */}
-                <div className="flex items-center gap-3">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-gray-500">
-                        View
-                    </span>
-                    <div className="inline-flex rounded-md border border-gray-700 bg-gray-900 text-sm">
-                        {(['raw', 'processed'] as const).map((mode) => (
-                            <button
-                                key={mode}
-                                type="button"
-                                className={`px-3 py-1 first:rounded-l-md last:rounded-r-md ${
-                                    previewMode === mode
-                                        ? 'bg-emerald-500/20 text-emerald-300'
-                                        : 'text-gray-400 hover:bg-gray-800'
-                                }`}
-                                onClick={() => onPreviewModeChange(mode)}
-                            >
-                                {mode === 'raw' ? 'Raw' : 'Processed'}
-                            </button>
-                        ))}
-                    </div>
+                <div className="inline-flex rounded-md border border-gray-700 bg-gray-900 text-sm">
+                    {(['raw', 'processed'] as const).map((mode) => (
+                        <button
+                            key={mode}
+                            type="button"
+                            className={`px-3 py-1 first:rounded-l-md last:rounded-r-md ${
+                                previewMode === mode
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'text-gray-400 hover:bg-gray-800'
+                            }`}
+                            onClick={() => onPreviewModeChange(mode)}
+                        >
+                            {mode === 'raw' ? 'Raw' : 'Processed'}
+                        </button>
+                    ))}
                 </div>
 
+                {/* Divider */}
+                <div className="hidden h-6 w-px bg-gray-700 sm:block" />
+
                 {/* Overlays */}
-                <div className="flex items-center gap-3">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-gray-500">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-gray-500">
                         Overlays
                     </span>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-1">
                         <button
                             type="button"
                             onClick={onToggleBlobsOverlay}
-                            className={`rounded-md border px-3 py-1 text-sm transition ${
+                            className={`rounded-md border px-2.5 py-1 text-xs transition ${
                                 blobsOverlayEnabled
                                     ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
                                     : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
@@ -293,7 +291,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         <button
                             type="button"
                             onClick={onToggleAlignmentOverlay}
-                            className={`rounded-md border px-3 py-1 text-sm transition ${
+                            className={`rounded-md border px-2.5 py-1 text-xs transition ${
                                 overlayButtonActive
                                     ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
                                     : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
@@ -311,7 +309,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                         <button
                             type="button"
                             onClick={onToggleTileBoundsOverlay}
-                            className={`rounded-md border px-3 py-1 text-sm transition ${
+                            className={`rounded-md border px-2.5 py-1 text-xs transition ${
                                 tileBoundsOverlayEnabled
                                     ? 'border-amber-400/70 bg-amber-400/15 text-amber-200'
                                     : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
@@ -325,34 +323,33 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     </div>
                 </div>
 
+                {/* Divider */}
+                <div className="hidden h-6 w-px bg-gray-700 sm:block" />
+
                 {/* ROI Controls */}
-                <div className="flex items-center gap-3">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-gray-500">
-                        ROI
-                    </span>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={onToggleRoiView}
-                            disabled={!roi.enabled}
-                            className={`rounded-md border px-3 py-1 text-sm ${
-                                roiViewEnabled
-                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                                    : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
-                            } ${!roi.enabled ? 'cursor-not-allowed opacity-50' : ''}`}
-                            title="Toggle cropped ROI preview"
-                            aria-pressed={roiViewEnabled}
-                        >
-                            ROI View
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onResetRoi}
-                            className="rounded-md border border-gray-700 px-3 py-1 text-sm text-gray-400 hover:border-gray-600 hover:text-gray-300"
-                        >
-                            Reset
-                        </button>
-                    </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-gray-500">ROI</span>
+                    <button
+                        type="button"
+                        onClick={onToggleRoiView}
+                        disabled={!roi.enabled}
+                        className={`rounded-md border px-2.5 py-1 text-xs ${
+                            roiViewEnabled
+                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                                : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
+                        } ${!roi.enabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                        title="Toggle cropped ROI preview"
+                        aria-pressed={roiViewEnabled}
+                    >
+                        ROI View
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onResetRoi}
+                        className="rounded-md border border-gray-700 px-2.5 py-1 text-xs text-gray-400 hover:border-gray-600 hover:text-gray-300"
+                    >
+                        Reset
+                    </button>
                 </div>
             </div>
             <div

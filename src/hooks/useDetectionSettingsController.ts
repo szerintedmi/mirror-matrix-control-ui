@@ -21,8 +21,10 @@ import {
     type DetectionSettings,
     type DetectionSettingsProfile,
     loadDetectionSettings,
+    loadLastDetectionProfileId,
     loadSavedDetectionSettingsProfiles,
     persistDetectionSettings,
+    persistLastDetectionProfileId,
     saveDetectionSettingsProfile,
 } from '@/services/detectionSettingsStorage';
 import type { BlobDetectorParams } from '@/services/opencvWorkerClient';
@@ -147,6 +149,7 @@ export const useDetectionSettingsController = (): DetectionSettingsController =>
     const selectProfileId = useCallback(
         (value: string) => {
             setSelectedProfileId(value);
+            persistLastDetectionProfileId(getLocalStorage(), value || null);
             if (!value) {
                 setProfileNameInput('');
                 return;
@@ -196,6 +199,26 @@ export const useDetectionSettingsController = (): DetectionSettingsController =>
         },
         [applyProfile, savedProfiles, selectProfileId],
     );
+
+    // Auto-load last used detection profile on mount
+    const hasAutoLoadedProfileRef = useRef(false);
+    useEffect(() => {
+        if (hasAutoLoadedProfileRef.current || savedProfiles.length === 0) {
+            return;
+        }
+        hasAutoLoadedProfileRef.current = true;
+        const storage = getLocalStorage();
+        const lastProfileId = loadLastDetectionProfileId(storage);
+        if (lastProfileId) {
+            const profile = savedProfiles.find((p) => p.id === lastProfileId);
+            if (profile) {
+                applyProfile(profile);
+                setSelectedProfileId(profile.id);
+                setProfileNameInput(profile.name);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [savedProfiles]);
 
     const saveProfile = useCallback(() => {
         const storage = getLocalStorage();

@@ -47,6 +47,7 @@ export interface CalibrationProfilesController {
     selectProfileId: (profileId: string) => void;
     resetProfileSelection: () => void;
     saveProfile: () => CalibrationProfile | null;
+    saveAsNewProfile: () => CalibrationProfile | null;
     deleteProfile: (profileId: string) => void;
     loadProfile: (profileId: string) => CalibrationProfile | null;
     importProfileFromJson: (payload: string) => CalibrationProfile | null;
@@ -184,6 +185,52 @@ export const useCalibrationProfilesController = ({
         selectedProfileId,
     ]);
 
+    const saveAsNewProfile = useCallback((): CalibrationProfile | null => {
+        if (!runnerState.summary) {
+            setSaveFeedback({ type: 'error', message: 'Run calibration before saving a profile.' });
+            return null;
+        }
+        const storage = getLocalStorage();
+        if (!storage) {
+            setSaveFeedback({
+                type: 'error',
+                message: 'Local storage is unavailable in this environment.',
+            });
+            return null;
+        }
+        const snapshot: GridStateSnapshot = {
+            gridSize,
+            mirrorConfig,
+        };
+        // Force creation of a new profile by passing id: undefined
+        const saved = saveCalibrationProfile(storage, {
+            id: undefined,
+            name: profileNameInput,
+            runnerState,
+            gridSnapshot: snapshot,
+            arrayRotation,
+        });
+        if (!saved) {
+            setSaveFeedback({ type: 'error', message: 'Unable to save calibration profile.' });
+            return null;
+        }
+        setSaveFeedback({ type: 'success', message: 'New calibration profile created.' });
+        setProfileNameInput(saved.name);
+        setSelectedProfileId(saved.id);
+        setActiveProfileId(saved.id);
+        persistLastSelection(saved.id);
+        refreshProfiles();
+        return saved;
+    }, [
+        arrayRotation,
+        gridSize,
+        mirrorConfig,
+        persistLastSelection,
+        profileNameInput,
+        refreshProfiles,
+        runnerState,
+    ]);
+
     const loadProfile = useCallback(
         (profileId: string) => {
             const profile = profiles.find((entry) => entry.id === profileId) ?? null;
@@ -284,6 +331,7 @@ export const useCalibrationProfilesController = ({
         selectProfileId,
         resetProfileSelection,
         saveProfile,
+        saveAsNewProfile,
         deleteProfile,
         loadProfile,
         importProfileFromJson,

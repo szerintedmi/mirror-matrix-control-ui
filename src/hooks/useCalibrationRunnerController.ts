@@ -30,6 +30,14 @@ interface UseCalibrationRunnerControllerParams {
      * Affects step test jog directions for rotated physical arrays.
      */
     arrayRotation: ArrayRotation;
+    /**
+     * Optional initial state to restore from session storage.
+     */
+    initialSessionState?: {
+        summary: CalibrationRunnerState['summary'];
+        tiles: CalibrationRunnerState['tiles'];
+        progress: CalibrationRunnerState['progress'];
+    } | null;
 }
 
 export interface CalibrationRunnerController {
@@ -55,13 +63,25 @@ export const useCalibrationRunnerController = ({
     captureMeasurement,
     detectionReady,
     arrayRotation,
+    initialSessionState,
 }: UseCalibrationRunnerControllerParams): CalibrationRunnerController => {
     const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
         DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     );
-    const [runnerState, setRunnerState] = useState<CalibrationRunnerState>(() =>
-        createBaselineRunnerState(gridSize, mirrorConfig),
-    );
+    const [runnerState, setRunnerState] = useState<CalibrationRunnerState>(() => {
+        const baseState = createBaselineRunnerState(gridSize, mirrorConfig);
+        // Restore from session state if available
+        if (initialSessionState) {
+            return {
+                ...baseState,
+                summary: initialSessionState.summary,
+                tiles: initialSessionState.tiles,
+                progress: initialSessionState.progress,
+                phase: initialSessionState.summary ? 'completed' : baseState.phase,
+            };
+        }
+        return baseState;
+    });
     const [commandLog, setCommandLog] = useState<CalibrationCommandLogEntry[]>([]);
     const runnerRef = useRef<CalibrationRunner | null>(null);
 

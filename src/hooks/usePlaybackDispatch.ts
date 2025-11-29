@@ -2,16 +2,30 @@ import { useCallback, useState } from 'react';
 
 import { useLogStore } from '@/context/LogContext';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
+import type { CommandFailure } from '@/services/pendingCommandTracker';
 import {
     planProfilePlayback,
     type ProfilePlaybackAxisTarget,
 } from '@/services/profilePlaybackPlanner';
-import type { CalibrationProfile, MirrorConfig, Pattern } from '@/types';
+import type { Axis, CalibrationProfile, MirrorConfig, Pattern } from '@/types';
+
+export interface PlaybackFailureDetail {
+    cmdId: string;
+    controller: string;
+    motorId: number;
+    row: number;
+    col: number;
+    axis: Axis;
+    reason: 'ack-timeout' | 'completion-timeout' | 'error';
+    errorCode?: string;
+    errorMessage?: string;
+}
 
 export interface PlaybackResult {
     success: boolean;
     message: string;
     axisCount?: number;
+    failures?: PlaybackFailureDetail[];
 }
 
 interface PlaybackConfig {
@@ -25,7 +39,10 @@ export function usePlaybackDispatch(config: PlaybackConfig) {
     const [isPlaying, setIsPlaying] = useState(false);
 
     const dispatchTargets = useCallback(
-        async (targets: ProfilePlaybackAxisTarget[], patternName: string): Promise<void> => {
+        async (
+            targets: ProfilePlaybackAxisTarget[],
+            patternName: string,
+        ): Promise<{ failures: PlaybackFailureDetail[] }> => {
             if (targets.length === 0) {
                 throw new Error('No playable motors found for this pattern.');
             }
@@ -38,15 +55,34 @@ export function usePlaybackDispatch(config: PlaybackConfig) {
                     }),
                 ),
             );
-            const failures = settled.filter(
-                (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
-            );
+
+            const failures: PlaybackFailureDetail[] = [];
+            settled.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    const target = targets[index];
+                    const failure = result.reason as CommandFailure;
+                    failures.push({
+                        cmdId: failure.command?.cmdId ?? 'unknown',
+                        controller: target.motor.nodeMac,
+                        motorId: target.motor.motorIndex,
+                        row: target.row,
+                        col: target.col,
+                        axis: target.axis,
+                        reason: failure.kind ?? 'error',
+                        errorCode: failure.errorCode,
+                        errorMessage: failure.message,
+                    });
+                }
+            });
+
             if (failures.length > 0) {
                 const message = `${failures.length}/${targets.length} motor commands failed for "${patternName}".`;
                 logError('Playback', message);
-                throw new Error(message);
+            } else {
+                logInfo('Playback', `Sent ${targets.length} axis moves for "${patternName}".`);
             }
-            logInfo('Playback', `Sent ${targets.length} axis moves for "${patternName}".`);
+
+            return { failures };
         },
         [logError, logInfo, moveMotor],
     );
@@ -67,7 +103,15 @@ export function usePlaybackDispatch(config: PlaybackConfig) {
 
             try {
                 setIsPlaying(true);
-                await dispatchTargets(plan.playableAxisTargets, pattern.name);
+                const { failures } = await dispatchTargets(plan.playableAxisTargets, pattern.name);
+                if (failures.length > 0) {
+                    return {
+                        success: false,
+                        message: `${failures.length}/${plan.playableAxisTargets.length} motor commands failed for "${pattern.name}".`,
+                        axisCount: plan.playableAxisTargets.length,
+                        failures,
+                    };
+                }
                 return {
                     success: true,
                     message: `Played "${pattern.name}"`,
@@ -108,7 +152,18 @@ export function usePlaybackDispatch(config: PlaybackConfig) {
                         throw new Error(`Pattern "${pattern.name}": ${plan.errors[0].message}`);
                     }
 
-                    await dispatchTargets(plan.playableAxisTargets, pattern.name);
+                    const { failures } = await dispatchTargets(
+                        plan.playableAxisTargets,
+                        pattern.name,
+                    );
+                    if (failures.length > 0) {
+                        return {
+                            success: false,
+                            message: `${failures.length}/${plan.playableAxisTargets.length} motor commands failed for "${pattern.name}".`,
+                            axisCount: plan.playableAxisTargets.length,
+                            failures,
+                        };
+                    }
 
                     if (i < patterns.length - 1) {
                         await new Promise((resolve) => setTimeout(resolve, delayMs));

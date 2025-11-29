@@ -1,18 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-import ArrayRotationSelector from '@/components/calibration/ArrayRotationSelector';
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
+import CalibrationSettingsPanel from '@/components/calibration/CalibrationSettingsPanel';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
 import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
 import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
+import { useCalibrationStateSession } from '@/hooks/useCalibrationStateSession';
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import { useStepwiseCalibrationController } from '@/hooks/useStepwiseCalibrationController';
+import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type { ArrayRotation, CalibrationCameraResolution, MirrorConfig } from '@/types';
 
 interface CalibrationPageProps {
@@ -173,6 +175,30 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const motorCommands = useMotorCommands();
 
+    // Grid fingerprint for session state validation
+    const gridFingerprint = useMemo(() => {
+        const snapshot: GridStateSnapshot = { gridSize, mirrorConfig };
+        return getGridStateFingerprint(snapshot).hash;
+    }, [gridSize, mirrorConfig]);
+
+    // Load initial session state for restoration
+    const initialSessionState = useMemo(() => {
+        const SESSION_KEY = 'mirror:calibration:session-state';
+        try {
+            const raw = sessionStorage.getItem(SESSION_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (parsed.fingerprint !== gridFingerprint) {
+                sessionStorage.removeItem(SESSION_KEY);
+                return null;
+            }
+            return parsed.data;
+        } catch {
+            return null;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Only load once on mount
+
     const {
         runnerState,
         runnerSettings,
@@ -189,7 +215,11 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         captureMeasurement: captureBlobMeasurement,
         detectionReady,
         arrayRotation,
+        initialSessionState,
     });
+
+    // Persist calibration state to sessionStorage
+    useCalibrationStateSession(runnerState, gridFingerprint);
 
     const stepRunnerController = useStepwiseCalibrationController({
         gridSize,
@@ -293,6 +323,13 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     const alignmentOverlayAvailable = Boolean(alignmentSourceSummary?.gridBlueprint);
     const displayedAlignmentOverlayEnabled = alignmentOverlayVisible && alignmentOverlayAvailable;
 
+    // Auto-enable calibration overlay when starting calibration
+    useEffect(() => {
+        if (isCalibrationActive && alignmentOverlayAvailable) {
+            setAlignmentOverlayVisible(true);
+        }
+    }, [isCalibrationActive, alignmentOverlayAvailable]);
+
     const activeGlobalBounds = activeProfile?.calibrationSpace.globalBounds ?? null;
 
     useEffect(() => {
@@ -345,11 +382,13 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             <CalibrationProfileManager
                 profiles={calibrationProfilesController.profiles}
                 activeProfileId={calibrationProfilesController.activeProfileId}
+                selectedProfileId={calibrationProfilesController.selectedProfileId}
                 onDeleteProfile={calibrationProfilesController.deleteProfile}
                 onLoadProfile={calibrationProfilesController.loadProfile}
                 profileName={calibrationProfilesController.profileNameInput}
                 onProfileNameChange={calibrationProfilesController.setProfileNameInput}
                 onSaveProfile={calibrationProfilesController.saveProfile}
+                onSaveAsNewProfile={calibrationProfilesController.saveAsNewProfile}
                 onImportProfile={calibrationProfilesController.importProfileFromJson}
                 canSave={calibrationProfilesController.canSaveProfile}
                 saveFeedback={calibrationProfilesController.saveFeedback}
@@ -367,20 +406,21 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     </p>
                 </div>
             )}
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-                <ArrayRotationSelector
-                    rotation={arrayRotation}
-                    onChange={setArrayRotation}
-                    disabled={isCalibrationActive}
-                />
-            </div>
+            <CalibrationSettingsPanel
+                arrayRotation={arrayRotation}
+                onArrayRotationChange={setArrayRotation}
+                deltaSteps={runnerSettings.deltaSteps}
+                onDeltaStepsChange={(v) => updateRunnerSetting('deltaSteps', v)}
+                gridGapNormalized={runnerSettings.gridGapNormalized}
+                onGridGapNormalizedChange={(v) => updateRunnerSetting('gridGapNormalized', v)}
+                disabled={isCalibrationActive}
+            />
             <CalibrationRunnerPanel
                 runMode={runnerMode}
                 onRunModeChange={setRunnerMode}
                 runnerSettings={runnerSettings}
                 detectionReady={detectionReady}
                 drivers={drivers}
-                onUpdateSetting={updateRunnerSetting}
                 autoControls={{
                     runnerState,
                     start: startRunner,
@@ -400,9 +440,20 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     abort: stepRunnerController.abort,
                     reset: stepRunnerController.reset,
                 }}
+                loadedProfileSummary={calibrationProfilesController.activeProfileSummary}
             />
             <div className="flex flex-col gap-6 lg:flex-row">
                 <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">
+                    <DetectionProfileManager
+                        savedProfiles={savedProfiles}
+                        profileName={profileNameInput}
+                        onProfileNameChange={setProfileNameInput}
+                        selectedProfileId={selectedProfileId}
+                        onSelectProfile={selectProfileId}
+                        onSaveProfile={saveProfile}
+                        onNewProfile={resetProfileSelection}
+                        onLoadProfile={applyProfileById}
+                    />
                     <DetectionSettingsPanel
                         devices={devices}
                         selectedDeviceId={selectedDeviceId}
@@ -435,16 +486,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                         useWasmDetector={useWasmDetector}
                         onToggleUseWasmDetector={setUseWasmDetector}
                         nativeBlobDetectorAvailable={nativeBlobDetectorAvailable}
-                    />
-                    <DetectionProfileManager
-                        savedProfiles={savedProfiles}
-                        profileName={profileNameInput}
-                        onProfileNameChange={setProfileNameInput}
-                        selectedProfileId={selectedProfileId}
-                        onSelectProfile={selectProfileId}
-                        onSaveProfile={saveProfile}
-                        onNewProfile={resetProfileSelection}
-                        onLoadProfile={applyProfileById}
                     />
                 </div>
                 <CalibrationPreview

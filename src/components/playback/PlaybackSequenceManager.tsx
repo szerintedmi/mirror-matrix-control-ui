@@ -23,6 +23,7 @@ import React, {
     useState,
 } from 'react';
 
+import { showPlaybackErrorToast } from '@/components/common/PlaybackErrorToast';
 import Modal from '@/components/Modal';
 import SequencePreview from '@/components/SequencePreview';
 import { useLogStore } from '@/context/LogContext';
@@ -344,6 +345,14 @@ const PlaybackSequenceManager = React.forwardRef<
             const result = await playPatternSequence(patternsToPlay, selectedProfile);
             setRunStatus(result.success ? 'success' : 'error');
             setRunMessage(result.message);
+
+            if (!result.success && result.failures && result.failures.length > 0) {
+                showPlaybackErrorToast(
+                    patternsToPlay[0]?.name ?? 'Unknown',
+                    result.axisCount ?? result.failures.length,
+                    result.failures,
+                );
+            }
         }, [canPlaySequence, patternLookup, playPatternSequence, selectedProfile, sequence]);
 
         const handlePlaySavedSequence = useCallback(
@@ -370,6 +379,14 @@ const PlaybackSequenceManager = React.forwardRef<
                 const result = await playPatternSequence(patternsToPlay, selectedProfile);
                 setRunStatus(result.success ? 'success' : 'error');
                 setRunMessage(result.message);
+
+                if (!result.success && result.failures && result.failures.length > 0) {
+                    showPlaybackErrorToast(
+                        patternsToPlay[0]?.name ?? 'Unknown',
+                        result.axisCount ?? result.failures.length,
+                        result.failures,
+                    );
+                }
             },
             [patternLookup, playPatternSequence, selectedProfile],
         );

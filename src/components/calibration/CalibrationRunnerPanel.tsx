@@ -8,10 +8,10 @@ import TileDebugModal from '@/components/calibration/TileDebugModal';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
 import { getTileStatusClasses, getTileErrorTextClass } from '@/constants/calibrationUiThemes';
 import type { DriverView } from '@/context/StatusContext';
-import { useEditableInput } from '@/hooks/useEditableInput';
 import type {
     CalibrationCommandLogEntry,
     CalibrationRunnerState,
+    CalibrationRunSummary,
     CalibrationStepState,
 } from '@/services/calibrationRunner';
 import type { Motor, MotorTelemetry } from '@/types';
@@ -24,10 +24,6 @@ interface CalibrationRunnerPanelProps {
     runnerSettings: CalibrationRunnerSettings;
     detectionReady: boolean;
     drivers: DriverView[];
-    onUpdateSetting: <K extends keyof CalibrationRunnerSettings>(
-        key: K,
-        value: CalibrationRunnerSettings[K],
-    ) => void;
     autoControls: {
         runnerState: CalibrationRunnerState;
         start: () => void;
@@ -47,13 +43,15 @@ interface CalibrationRunnerPanelProps {
         abort: () => void;
         reset: () => void;
     };
+    /**
+     * Summary from a loaded calibration profile. When present, shows calibration actions
+     * even if no calibration has been run in the current session.
+     */
+    loadedProfileSummary?: CalibrationRunSummary | null;
 }
 
 const SUMMARY_BUTTON_CLASS =
     'rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
-
-const INTEGER_PATTERN = /^\d*$/;
-const DECIMAL_PATTERN = /^\d*(?:\.\d*)?$/;
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     runMode,
@@ -61,9 +59,9 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     runnerSettings,
     detectionReady,
     drivers,
-    onUpdateSetting,
     autoControls,
     stepControls,
+    loadedProfileSummary,
 }) => {
     const activeRunnerState =
         runMode === 'step' ? stepControls.runnerState : autoControls.runnerState;
@@ -84,7 +82,12 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const canPauseRunner = runMode === 'step' ? false : isRunnerBusy;
     const canResumeRunner = runMode === 'step' ? false : isRunnerPaused;
     const canAbortRunner = runMode === 'step' ? isStepActive : isRunnerBusy || isRunnerPaused;
-    const blueprint = activeRunnerState.summary?.gridBlueprint;
+
+    // Use runner's blueprint if available, otherwise fall back to loaded profile's blueprint
+    const runnerBlueprint = activeRunnerState.summary?.gridBlueprint;
+    const loadedBlueprint = loadedProfileSummary?.gridBlueprint;
+    const blueprint = runnerBlueprint ?? loadedBlueprint;
+    const isUsingLoadedProfile = !runnerBlueprint && Boolean(loadedBlueprint);
     const handleStart = runMode === 'step' ? stepControls.start : autoControls.start;
     const handlePause = autoControls.pause;
     const handleResume = autoControls.resume;
@@ -92,37 +95,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
-    // Editable input for step delta
-    const stepDeltaInput = useEditableInput({
-        value: runnerSettings.deltaSteps,
-        onChange: (v) => onUpdateSetting('deltaSteps', v),
-        format: (v) => v.toString(),
-        parse: (s) => {
-            const n = Number(s);
-            return Number.isNaN(n) ? null : Math.round(n);
-        },
-        validateInput: (s) => INTEGER_PATTERN.test(s),
-    });
-
-    // Editable input for grid gap (percent)
-    const gridGapInput = useEditableInput({
-        value: runnerSettings.gridGapNormalized,
-        onChange: (v) => onUpdateSetting('gridGapNormalized', v),
-        format: (v) => {
-            const percent = Number((v * 100).toFixed(1));
-            return percent.toString();
-        },
-        parse: (s) => {
-            const percent = Number(s);
-            return Number.isNaN(percent) ? null : percent;
-        },
-        validateInput: (s) => DECIMAL_PATTERN.test(s),
-        transform: (percent) => {
-            const clamped = Math.min(Math.max(percent, 0), 5);
-            const normalized = Number((clamped / 100).toFixed(4));
-            return [normalized, clamped.toString()];
-        },
-    });
     const displayedTileEntries = useMemo(() => {
         return Object.values(activeRunnerState.tiles).sort((a, b) => {
             if (a.tile.row === b.tile.row) {
@@ -399,40 +371,19 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                     </div>
                 </div>
                 <CalibrationCommandLog entries={activeCommandLog} mode={runMode} />
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
-                            Step delta (steps)
-                        </span>
-                        <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={stepDeltaInput.displayValue}
-                            onFocus={stepDeltaInput.onFocus}
-                            onBlur={stepDeltaInput.onBlur}
-                            onChange={stepDeltaInput.onChange}
-                            className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
-                        />
-                    </label>
-                    <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
-                            Grid gap (%)
-                        </span>
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            pattern="\\d*(\\.\\d*)?"
-                            value={gridGapInput.displayValue}
-                            onFocus={gridGapInput.onFocus}
-                            onBlur={gridGapInput.onBlur}
-                            onChange={gridGapInput.onChange}
-                            className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none"
-                        />
-                    </label>
-                </div>
                 {blueprint && (
-                    <div className="mt-4 rounded-md border border-emerald-600/40 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                    <div
+                        className={`mt-4 rounded-md border p-3 text-sm ${
+                            isUsingLoadedProfile
+                                ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                                : 'border-emerald-600/40 bg-emerald-500/10 text-emerald-200'
+                        }`}
+                    >
+                        {isUsingLoadedProfile && (
+                            <p className="mb-2 text-xs text-sky-300/70">
+                                Using loaded profile. Run calibration to update.
+                            </p>
+                        )}
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <p>
@@ -444,9 +395,11 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                     Gap: X {(blueprint.tileGap.x * 100).toFixed(2)}% · Y{' '}
                                     {(blueprint.tileGap.y * 100).toFixed(2)}%
                                 </p>
-                                <p className="mt-2 text-xs text-emerald-300">
-                                    Use the “Calibration View” toggle in the preview to draw this
-                                    grid.
+                                <p
+                                    className={`mt-2 text-xs ${isUsingLoadedProfile ? 'text-sky-300' : 'text-emerald-300'}`}
+                                >
+                                    Use the &quot;Calibration View&quot; toggle in the preview to
+                                    draw this grid.
                                 </p>
                             </div>
                             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
@@ -458,7 +411,11 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setSummaryModalOpen(true)}
-                                    className={`${SUMMARY_BUTTON_CLASS} border-emerald-500/70 text-emerald-200 hover:bg-emerald-500/10`}
+                                    className={`${SUMMARY_BUTTON_CLASS} ${
+                                        isUsingLoadedProfile
+                                            ? 'border-sky-500/70 text-sky-200 hover:bg-sky-500/10'
+                                            : 'border-emerald-500/70 text-emerald-200 hover:bg-emerald-500/10'
+                                    }`}
                                 >
                                     Calibration math
                                 </button>
@@ -532,7 +489,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                                 telemetry={getTelemetryForMotor(entry.assignment.x)}
                                                 layout="inline"
                                                 className="flex-1 min-w-[120px]"
-                                                showLabel={false}
                                                 showHomeButton
                                             />
                                             <TileAxisAction
@@ -541,7 +497,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                                 telemetry={getTelemetryForMotor(entry.assignment.y)}
                                                 layout="inline"
                                                 className="flex-1 min-w-[120px]"
-                                                showLabel={false}
                                                 showHomeButton
                                             />
                                         </div>

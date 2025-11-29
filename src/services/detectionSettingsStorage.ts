@@ -7,6 +7,7 @@ const CURRENT_VERSION = 1;
 const SAVED_PROFILES_KEY = 'mirror:calibration:detection-settings-profiles';
 export const DETECTION_SETTINGS_PROFILES_STORAGE_KEY = SAVED_PROFILES_KEY;
 const SAVED_PROFILES_VERSION = 1;
+const LAST_DETECTION_PROFILE_KEY = 'mirror:calibration:detection-last-profile-id';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 const clampRange = (value: number, min: number, max: number): number =>
@@ -473,4 +474,40 @@ export const saveDetectionSettingsProfile = (
     }
     persistSavedProfiles(storage, entries);
     return updatedEntry;
+};
+
+/**
+ * Load the ID of the last selected detection profile from storage.
+ */
+export const loadLastDetectionProfileId = (storage: Storage | undefined): string | null => {
+    if (!storage) {
+        return null;
+    }
+    try {
+        const raw = storage.getItem(LAST_DETECTION_PROFILE_KEY);
+        return raw && typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Persist the last selected detection profile ID to storage.
+ */
+export const persistLastDetectionProfileId = (
+    storage: Storage | undefined,
+    profileId: string | null,
+): void => {
+    if (!storage) {
+        return;
+    }
+    try {
+        if (profileId && profileId.trim().length > 0) {
+            storage.setItem(LAST_DETECTION_PROFILE_KEY, profileId);
+        } else {
+            storage.removeItem(LAST_DETECTION_PROFILE_KEY);
+        }
+    } catch {
+        // Ignore storage errors
+    }
 };

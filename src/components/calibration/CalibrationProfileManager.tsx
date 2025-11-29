@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
+import DropdownMenu from '@/components/common/DropdownMenu';
 import Modal from '@/components/Modal';
 import { buildCalibrationProfileExportPayload } from '@/services/calibrationProfileStorage';
 import type { CalibrationProfile } from '@/types';
@@ -9,11 +10,13 @@ import { formatPercent } from './calibrationMetricsFormatters';
 interface CalibrationProfileManagerProps {
     profiles: CalibrationProfile[];
     activeProfileId: string;
+    selectedProfileId: string;
     onDeleteProfile: (profileId: string) => void;
     onLoadProfile: (profileId: string) => void;
     profileName: string;
     onProfileNameChange: (value: string) => void;
     onSaveProfile: () => void;
+    onSaveAsNewProfile: () => void;
     onImportProfile: (payload: string) => void;
     canSave: boolean;
     saveFeedback: { type: 'success' | 'error'; message: string } | null;
@@ -53,11 +56,13 @@ const buildExportFileName = (profile: CalibrationProfile): string => {
 const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
     profiles,
     activeProfileId,
+    selectedProfileId,
     onDeleteProfile,
     onLoadProfile,
     profileName,
     onProfileNameChange,
     onSaveProfile,
+    onSaveAsNewProfile,
     onImportProfile,
     canSave,
     saveFeedback,
@@ -66,6 +71,7 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
     lastRunSummary,
     currentGridFingerprint,
 }) => {
+    const isUpdatingExisting = Boolean(selectedProfileId);
     const sortedProfiles = useMemo(
         () => [...profiles].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
         [profiles],
@@ -174,18 +180,50 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                         />
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={onSaveProfile}
-                            disabled={!canSave}
-                            className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                                canSave
-                                    ? 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400'
-                                    : 'border border-gray-700 bg-gray-800 text-gray-500'
-                            }`}
-                        >
-                            Save profile
-                        </button>
+                        <div className="flex items-center">
+                            <button
+                                type="button"
+                                onClick={onSaveProfile}
+                                disabled={!canSave}
+                                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                                    canSave
+                                        ? 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400'
+                                        : 'border border-gray-700 bg-gray-800 text-gray-500'
+                                } ${isUpdatingExisting ? 'rounded-r-none border-r-0' : ''}`}
+                            >
+                                {isUpdatingExisting ? 'Update' : 'Save as new'}
+                            </button>
+                            {isUpdatingExisting && (
+                                <DropdownMenu
+                                    items={[
+                                        {
+                                            label: 'Save as new profile',
+                                            icon: (
+                                                <svg
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M12 4v16m8-8H4"
+                                                    />
+                                                </svg>
+                                            ),
+                                            onClick: onSaveAsNewProfile,
+                                            disabled: !canSave,
+                                        },
+                                    ]}
+                                    triggerClassName={`rounded-l-none border-l-0 h-[38px] ${
+                                        canSave
+                                            ? 'border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400'
+                                            : 'border-gray-700 bg-gray-800 text-gray-500'
+                                    }`}
+                                />
+                            )}
+                        </div>
                         <button
                             type="button"
                             onClick={handleImportClick}
@@ -372,35 +410,61 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                         )}
                     </div>
                 </div>
-                <div className="flex flex-col gap-2 text-xs">
+                <div className="flex items-center gap-2">
                     <button
                         type="button"
                         onClick={handleLoad}
-                        className="rounded-md border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-200"
+                        className="rounded-md border border-emerald-500/70 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
                     >
                         Load
                     </button>
-                    <button
-                        type="button"
-                        onClick={handleExport}
-                        className="rounded-md border border-sky-500/60 bg-sky-500/10 px-2 py-1 font-semibold text-sky-100"
-                    >
-                        Export
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleDelete}
-                        className="rounded-md border border-rose-600/60 px-2 py-1 font-semibold text-rose-200"
-                    >
-                        Delete
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onToggle}
-                        className="rounded-md border border-gray-700 px-2 py-1 font-semibold text-gray-200"
-                    >
-                        {expanded ? 'Hide details' : 'Show details'}
-                    </button>
+                    <DropdownMenu
+                        items={[
+                            {
+                                label: 'Export',
+                                icon: (
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                                        />
+                                    </svg>
+                                ),
+                                onClick: handleExport,
+                            },
+                            {
+                                label: expanded ? 'Hide details' : 'Show details',
+                                icon: (
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        />
+                                    </svg>
+                                ),
+                                onClick: onToggle,
+                            },
+                            {
+                                label: 'Delete',
+                                icon: (
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                        />
+                                    </svg>
+                                ),
+                                onClick: handleDelete,
+                                variant: 'danger',
+                            },
+                        ]}
+                    />
                 </div>
             </div>
             {expanded && (
