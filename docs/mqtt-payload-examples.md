@@ -1,5 +1,27 @@
 # MQTT Payload Examples
 
+This document provides real-world examples of MQTT payloads exchanged with the firmware. For schema definitions, see:
+
+- [mqtt-status-schema.md](./mqtt-status-schema.md) - Status topic structure
+- [mqtt-config-schema.md](./mqtt-config-schema.md) - Config topic structure
+- [mqtt-command-schema.md](./mqtt-command-schema.md) - Command/response protocol
+
+## Broadcasted config
+
+`devices/8857212316bc/config` (retained)
+
+```json
+{
+  "thermal_limiting": "ON",
+  "max_budget_s": 90,
+  "microstep": "FULL",
+  "microstep_mult": 1,
+  "speed": 4000,
+  "accel": 16000,
+  "decel": 16000
+}
+```
+
 ## Broadcasted status
 
 `devices/8857212316bc/status`
@@ -257,7 +279,7 @@
 }
 ```
 
-### 3. Thermal budget error when limiting is on (deafult)
+### 3. Thermal budget error when limiting is on (default)
 
 If a command would result exceeding thermal budget and `THERMAL_LIMITING == "ON"` the command is rejected with error and not executed.
 
@@ -292,7 +314,7 @@ If a command would result exceeding thermal budget and `THERMAL_LIMITING == "ON"
 }
 ```
 
-### 4. Thermal budet warning(s) when limiting is off
+### 4. Thermal budget warning(s) when limiting is off
 
 When `THERMAL_LIMITING == "OFF"` and the command execution will exceed thermal limits then commands executed and ack / done responses include warnings
 
@@ -331,5 +353,154 @@ When `THERMAL_LIMITING == "OFF"` and the command execution will exceed thermal l
     { "code": "THERMAL_NO_BUDGET", "budget_s": 0, "id": 1, "req_ms": 8019, "ttfc_s": 69 }
   ],
   "result": { "actual_ms": 8017, "started_ms": 1506008 }
+}
+```
+
+## GET ALL
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "GET",
+  "params": { "resource": "ALL" },
+  "cmd_id": "03f8a2b1-7c4d-4e5f-9a1b-2c3d4e5f6a7b"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "03f8a2b1-7c4d-4e5f-9a1b-2c3d4e5f6a7b",
+  "action": "GET",
+  "status": "done",
+  "result": {
+    "ACCEL": 16000,
+    "DECEL": 16000,
+    "SPEED": 4000,
+    "THERMAL_LIMITING": "ON",
+    "max_budget_s": 90,
+    "free_heap_bytes": 51264
+  }
+}
+```
+
+## SET SPEED
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "SET",
+  "params": { "speed_sps": 300 },
+  "cmd_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+  "action": "SET",
+  "status": "done",
+  "result": { "SPEED": 300 }
+}
+```
+
+## SET MICROSTEP
+
+Note: Requires all motors to be stopped and asleep.
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "SET",
+  "params": { "MICROSTEP": "1/16" },
+  "cmd_id": "5a9b8c7d-6e5f-4a3b-2c1d-0e9f8a7b6c5d"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "5a9b8c7d-6e5f-4a3b-2c1d-0e9f8a7b6c5d",
+  "action": "SET",
+  "status": "done",
+  "result": { "MICROSTEP": "1/16", "multiplier": 16 }
+}
+```
+
+After this command, the config topic is republished:
+
+`devices/8857212316bc/config` (retained)
+
+```json
+{
+  "thermal_limiting": "ON",
+  "max_budget_s": 90,
+  "microstep": "1/16",
+  "microstep_mult": 16,
+  "speed": 300,
+  "accel": 16000,
+  "decel": 16000
+}
+```
+
+## NET:STATUS
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "NET:STATUS",
+  "cmd_id": "7e6f5d4c-3b2a-1908-8796-a5b4c3d2e1f0"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "7e6f5d4c-3b2a-1908-8796-a5b4c3d2e1f0",
+  "action": "NET:STATUS",
+  "status": "done",
+  "result": {
+    "sub_action": "STATUS",
+    "state": "CONNECTED",
+    "rssi": -55,
+    "ssid": "\"HomeNetwork\"",
+    "ip": "192.168.1.8"
+  }
+}
+```
+
+## MQTT:GET_CONFIG
+
+`devices/8857212316bc/cmd`
+
+```json
+{
+  "action": "MQTT:GET_CONFIG",
+  "cmd_id": "d3c2b1a0-9f8e-7d6c-5b4a-3928170605f4"
+}
+```
+
+`devices/8857212316bc/cmd/resp`
+
+```json
+{
+  "cmd_id": "d3c2b1a0-9f8e-7d6c-5b4a-3928170605f4",
+  "action": "MQTT:GET_CONFIG",
+  "status": "done",
+  "result": {
+    "host": "\"192.168.1.25\"",
+    "port": "1883",
+    "user": "\"mirror\"",
+    "pass": "\"steelthread\""
+  }
 }
 ```

@@ -19,7 +19,8 @@ export interface NormalizedMotorStatus {
     accel: number;
     estMs: number;
     startedMs: number;
-    actualMs: number;
+    /** Duration of last completed move in ms. Null when motor is currently moving (field omitted by firmware). */
+    actualMs: number | null;
     raw: Record<string, unknown>;
 }
 
@@ -192,7 +193,7 @@ export const parseStatusMessage = (topic: string, payload: Uint8Array): StatusPa
             accel: toFiniteNumber(motor['accel']),
             estMs: toFiniteNumber(motor['est_ms']),
             startedMs: toFiniteNumber(motor['started_ms']),
-            actualMs: toFiniteNumber(motor['actual_ms']),
+            actualMs: motor['actual_ms'] !== undefined ? toFiniteNumber(motor['actual_ms']) : null,
             raw: motor,
         };
     }

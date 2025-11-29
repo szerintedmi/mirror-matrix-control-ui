@@ -280,7 +280,7 @@ describe('StatusProvider', () => {
         vi.useRealTimers();
     });
 
-    it('records schema errors and halts further processing', () => {
+    it('records schema errors but continues processing subsequent valid messages', () => {
         const client = new StatusStubClient();
         const { container, root } = createContainer();
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -295,14 +295,18 @@ describe('StatusProvider', () => {
             );
         });
 
+        // Send an invalid message (missing node_state)
         act(() => {
             client.emit('devices/AA/status', encode({ motors: {} }));
         });
 
         const stateNode = container.querySelector('[data-role="state"]') as HTMLElement;
+        // Error should be recorded
         expect(stateNode.dataset.error).toBe('error');
+        // No valid drivers yet
         expect(stateNode.dataset.drivers).toBe('0');
 
+        // Send a valid message - should be processed despite previous error
         act(() => {
             client.emit(
                 'devices/BB/status',
@@ -313,7 +317,8 @@ describe('StatusProvider', () => {
             );
         });
 
-        expect(stateNode.dataset.drivers).toBe('0');
+        // Valid message should now be processed (behavior changed from halting to continuing)
+        expect(stateNode.dataset.drivers).toBe('1');
 
         destroyContainer({ container, root });
         errorSpy.mockRestore();

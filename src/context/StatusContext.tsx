@@ -4,9 +4,11 @@ import React, {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type PropsWithChildren,
 } from 'react';
+import { toast } from 'sonner';
 
 import { STEPS_SINCE_HOME_CRITICAL, STEPS_SINCE_HOME_WARNING } from '../constants/control';
 import {
@@ -83,11 +85,21 @@ const defaultCounts: StatusCounts = {
 
 const StatusContext = createContext<StatusContextValue | undefined>(undefined);
 
+// Extract MAC from topic like "devices/abc123/status"
+const extractMacFromTopic = (topic: string): string => {
+    const match = /^devices\/([^/]+)\/status$/i.exec(topic);
+    return match?.[1]?.toUpperCase() ?? 'unknown';
+};
+
 export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
     const { subscribe, state: connectionState, settings } = useMqtt();
     const [records, setRecords] = useState<Map<string, TileDriverRecord>>(new Map());
     const [schemaError, setSchemaError] = useState<StatusParseError | null>(null);
     const [heartbeat, setHeartbeat] = useState(() => Date.now());
+
+    // Track recent error toasts to avoid spam (keyed by MAC)
+    const recentErrorToastsRef = useRef<Map<string, number>>(new Map());
+    const ERROR_TOAST_DEBOUNCE_MS = 10_000; // Don't repeat toast for same device within 10s
 
     const activeSource = settings.scheme;
     const brokerConnected = connectionState.status === 'connected';
@@ -105,14 +117,26 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleStatusMessage = useCallback(
         (topic: string, payload: Uint8Array) => {
-            if (schemaError) {
-                return;
-            }
             const result = parseStatusMessage(topic, payload);
             if (!result.ok) {
-                console.error('Failed to parse MQTT status payload', result.error);
+                const topicMac = extractMacFromTopic(topic);
+                console.error('Failed to parse MQTT status payload', topic, result.error);
+
+                // Update schema error for debugging (but don't block)
                 setSchemaError(result.error);
-                return;
+
+                // Show toast with debouncing per device
+                const now = Date.now();
+                const lastToastTime = recentErrorToastsRef.current.get(topicMac) ?? 0;
+                if (now - lastToastTime > ERROR_TOAST_DEBOUNCE_MS) {
+                    recentErrorToastsRef.current.set(topicMac, now);
+                    toast.error(`Status parse error from ${topicMac}`, {
+                        description: result.error.message,
+                        duration: 5000,
+                        id: `parse-error-${topicMac}`,
+                    });
+                }
+                return; // Skip this message, but continue processing future messages
             }
 
             const { value } = result;
@@ -145,18 +169,15 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
                 return next;
             });
         },
-        [activeSource, schemaError],
+        [activeSource],
     );
 
     useEffect(() => {
-        if (schemaError) {
-            return;
-        }
         const unsubscribe = subscribe('devices/+/status', handleStatusMessage, { qos: 0 });
         return () => {
             unsubscribe();
         };
-    }, [handleStatusMessage, schemaError, subscribe]);
+    }, [handleStatusMessage, subscribe]);
 
     const acknowledgeDriver = useCallback(
         (mac: string) => {

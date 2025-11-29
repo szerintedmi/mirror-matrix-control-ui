@@ -87,4 +87,64 @@ describe('parseStatusMessage', () => {
         expect(result.error.reason).toBe('schema');
         expect(result.error.message).toContain('node_state');
     });
+
+    it('handles motor with missing actual_ms (motor currently moving)', () => {
+        const payload = {
+            node_state: 'ready',
+            motors: {
+                '0': {
+                    id: 0,
+                    position: 100,
+                    moving: true,
+                    awake: true,
+                    homed: true,
+                    steps_since_home: 50,
+                    budget_s: 90,
+                    ttfc_s: 0,
+                    speed: 4000,
+                    accel: 16000,
+                    est_ms: 500,
+                    started_ms: 12345,
+                    // actual_ms intentionally omitted - firmware omits this when motor is moving
+                },
+            },
+        };
+        const result = parseStatusMessage('devices/abc123/status', encode(payload));
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+        expect(result.value.motors['0'].moving).toBe(true);
+        expect(result.value.motors['0'].actualMs).toBeNull();
+    });
+
+    it('parses actual_ms as number when present', () => {
+        const payload = {
+            node_state: 'ready',
+            motors: {
+                '0': {
+                    id: 0,
+                    position: 100,
+                    moving: false,
+                    awake: false,
+                    homed: true,
+                    steps_since_home: 100,
+                    budget_s: 90,
+                    ttfc_s: 0,
+                    speed: 4000,
+                    accel: 16000,
+                    est_ms: 500,
+                    started_ms: 12345,
+                    actual_ms: 487,
+                },
+            },
+        };
+        const result = parseStatusMessage('devices/abc123/status', encode(payload));
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+        expect(result.value.motors['0'].moving).toBe(false);
+        expect(result.value.motors['0'].actualMs).toBe(487);
+    });
 });

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Toaster } from 'sonner';
 
 import AppTopBar, { type AppTopBarBreadcrumb } from './components/AppTopBar';
 import ConnectionSettingsContent from './components/ConnectionSettingsContent';
@@ -380,6 +381,7 @@ const App: React.FC = () => {
                                     >
                                         <ConnectionSettingsContent />
                                     </Modal>
+                                    <Toaster position="bottom-right" richColors />
                                 </div>
                             </AnimationProvider>
                         </PatternProvider>
