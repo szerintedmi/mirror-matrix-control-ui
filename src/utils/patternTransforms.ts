@@ -1,15 +1,13 @@
 import type { Pattern, PatternPoint } from '@/types';
 
+import { rotateCoordinates, scaleCoordinates, shiftCoordinates } from './coordinateTransforms';
+
 /**
  * Shift all pattern points by the given delta.
  * Points may go out of bounds [-1, 1] - validation is handled by the UI.
  */
 export function shiftPoints(points: PatternPoint[], dx: number, dy: number): PatternPoint[] {
-    return points.map((point) => ({
-        ...point,
-        x: point.x + dx,
-        y: point.y + dy,
-    }));
+    return shiftCoordinates(points, dx, dy);
 }
 
 /**
@@ -26,11 +24,7 @@ export function scalePoints(
     centerX: number = 0,
     centerY: number = 0,
 ): PatternPoint[] {
-    return points.map((point) => ({
-        ...point,
-        x: centerX + (point.x - centerX) * scaleX,
-        y: centerY + (point.y - centerY) * scaleY,
-    }));
+    return scaleCoordinates(points, scaleX, scaleY, centerX, centerY);
 }
 
 /**
@@ -45,20 +39,7 @@ export function rotatePoints(
     centerX: number = 0,
     centerY: number = 0,
 ): PatternPoint[] {
-    const angleRad = (angleDeg * Math.PI) / 180;
-    const cos = Math.cos(angleRad);
-    const sin = Math.sin(angleRad);
-
-    return points.map((point) => {
-        const dx = point.x - centerX;
-        const dy = point.y - centerY;
-
-        return {
-            ...point,
-            x: centerX + dx * cos - dy * sin,
-            y: centerY + dx * sin + dy * cos,
-        };
-    });
+    return rotateCoordinates(points, angleDeg, centerX, centerY);
 }
 
 /**

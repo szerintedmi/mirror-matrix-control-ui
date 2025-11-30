@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 
 import {
     AnimationMirrorAssignments,
@@ -24,6 +24,20 @@ import type {
     IndependentModeConfig,
     SequentialModeConfig,
 } from '@/types/animation';
+import {
+    transformPathRotate,
+    transformPathScale,
+    transformPathShift,
+} from '@/utils/animationTransforms';
+import {
+    createHistoryStacks,
+    pushHistorySnapshot,
+    redoHistorySnapshot,
+    undoHistorySnapshot,
+    type HistoryStacks,
+} from '@/utils/history';
+
+const PATH_HISTORY_LIMIT = 50;
 
 interface AnimationPageProps {
     gridSize?: { rows: number; cols: number };
@@ -97,7 +111,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
 
     // Local state
     const [selectedPathId, setSelectedPathId] = useState<string | null>(null);
-    const [showBounds, setShowBounds] = useState(false);
+    const [showBounds, setShowBounds] = useState(() => Boolean(selectedCalibrationProfile));
     const [playbackResultMessage, setPlaybackResultMessage] = useState<string | null>(null);
     const [createModalState, setCreateModalState] = useState<CreateAnimationModalState>({
         open: false,
@@ -109,6 +123,50 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
         animationId: '',
         name: '',
     });
+
+    // Undo/Redo history - one stack per path
+    const pathHistoryRef = useRef<Map<string, HistoryStacks<AnimationPath>>>(new Map());
+    const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+
+    // Sync history state when path changes - compute canUndo/canRedo directly
+    // (avoiding setState in effect by computing derived state inline)
+    const { canUndo, canRedo } = useMemo(() => {
+        if (!selectedPathId) {
+            return { canUndo: false, canRedo: false };
+        }
+        const history = pathHistoryRef.current.get(selectedPathId);
+        return {
+            canUndo: history ? history.past.length > 0 : false,
+            canRedo: history ? history.future.length > 0 : false,
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedPathId, historyState]);
+
+    const syncHistoryState = useCallback(() => {
+        // Trigger re-render to update canUndo/canRedo by incrementing a counter
+        setHistoryState((prev) => ({ ...prev }));
+    }, []);
+
+    const getOrCreateHistory = useCallback((pathId: string): HistoryStacks<AnimationPath> => {
+        let history = pathHistoryRef.current.get(pathId);
+        if (!history) {
+            history = createHistoryStacks<AnimationPath>();
+            pathHistoryRef.current.set(pathId, history);
+        }
+        return history;
+    }, []);
+
+    const recordPathSnapshot = useCallback(
+        (path: AnimationPath) => {
+            const history = getOrCreateHistory(path.id);
+            pathHistoryRef.current.set(
+                path.id,
+                pushHistorySnapshot(history, path, PATH_HISTORY_LIMIT),
+            );
+            syncHistoryState();
+        },
+        [getOrCreateHistory, syncHistoryState],
+    );
 
     // Derived
     const selectedPath = useMemo(
@@ -224,13 +282,115 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
         }
     };
 
-    const handleUpdatePath = useCallback(
+    // Wrap updatePath to record history for direct edits (add/move/delete waypoints)
+    const handleUpdatePathWithHistory = useCallback(
         (path: AnimationPath) => {
             if (!selectedAnimationId) return;
+            // Record current state before update
+            const currentPath = selectedAnimation?.paths.find((p) => p.id === path.id);
+            if (currentPath) {
+                recordPathSnapshot(currentPath);
+            }
             updatePath(selectedAnimationId, path);
         },
-        [selectedAnimationId, updatePath],
+        [selectedAnimationId, selectedAnimation, updatePath, recordPathSnapshot],
     );
+
+    // Undo/Redo handlers
+    const handleUndo = useCallback(() => {
+        if (!selectedPath || !selectedAnimationId) return;
+
+        const history = pathHistoryRef.current.get(selectedPath.id);
+        if (!history || history.past.length === 0) return;
+
+        const result = undoHistorySnapshot(history, selectedPath);
+        if (result.value === selectedPath) return;
+
+        pathHistoryRef.current.set(selectedPath.id, result.history);
+        syncHistoryState();
+        updatePath(selectedAnimationId, result.value);
+    }, [selectedPath, selectedAnimationId, updatePath, syncHistoryState]);
+
+    const handleRedo = useCallback(() => {
+        if (!selectedPath || !selectedAnimationId) return;
+
+        const history = pathHistoryRef.current.get(selectedPath.id);
+        if (!history || history.future.length === 0) return;
+
+        const result = redoHistorySnapshot(history, selectedPath);
+        if (result.value === selectedPath) return;
+
+        pathHistoryRef.current.set(selectedPath.id, result.history);
+        syncHistoryState();
+        updatePath(selectedAnimationId, result.value);
+    }, [selectedPath, selectedAnimationId, updatePath, syncHistoryState]);
+
+    // Transform handlers
+    const handleShift = useCallback(
+        (dx: number, dy: number) => {
+            if (!selectedPath || !selectedAnimationId) return;
+            recordPathSnapshot(selectedPath);
+            const transformed = transformPathShift(selectedPath, dx, dy);
+            updatePath(selectedAnimationId, transformed);
+        },
+        [selectedPath, selectedAnimationId, updatePath, recordPathSnapshot],
+    );
+
+    const handleScale = useCallback(
+        (scaleX: number, scaleY: number) => {
+            if (!selectedPath || !selectedAnimationId) return;
+            recordPathSnapshot(selectedPath);
+            const transformed = transformPathScale(selectedPath, scaleX, scaleY);
+            updatePath(selectedAnimationId, transformed);
+        },
+        [selectedPath, selectedAnimationId, updatePath, recordPathSnapshot],
+    );
+
+    const handleRotate = useCallback(
+        (angleDeg: number) => {
+            if (!selectedPath || !selectedAnimationId) return;
+            recordPathSnapshot(selectedPath);
+            const transformed = transformPathRotate(selectedPath, angleDeg);
+            updatePath(selectedAnimationId, transformed);
+        },
+        [selectedPath, selectedAnimationId, updatePath, recordPathSnapshot],
+    );
+
+    // Keyboard shortcuts for undo/redo
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.target instanceof HTMLElement) {
+                const tagName = event.target.tagName.toLowerCase();
+                if (
+                    tagName === 'input' ||
+                    tagName === 'textarea' ||
+                    event.target.isContentEditable
+                ) {
+                    return;
+                }
+            }
+
+            // Undo: Cmd+Z (Mac) or Ctrl+Z (Windows)
+            if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
+                event.preventDefault();
+                handleUndo();
+                return;
+            }
+
+            // Redo: Cmd+Shift+Z (Mac) or Ctrl+Shift+Z (Windows) or Ctrl+Y
+            if (
+                ((event.metaKey || event.ctrlKey) && event.key === 'z' && event.shiftKey) ||
+                ((event.metaKey || event.ctrlKey) && event.key === 'y')
+            ) {
+                event.preventDefault();
+                handleRedo();
+                return;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleUndo, handleRedo]);
 
     const handleIndependentConfigChange = (config: IndependentModeConfig) => {
         if (!selectedAnimation) return;
@@ -405,12 +565,19 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                     path={selectedPath}
                                     allPaths={selectedAnimation.paths}
                                     selectedPathId={selectedPathId}
-                                    onUpdatePath={handleUpdatePath}
+                                    onUpdatePath={handleUpdatePathWithHistory}
                                     disabled={isPlaying}
                                     tileBounds={calibrationTileBounds}
                                     showBounds={showBounds}
                                     onShowBoundsChange={setShowBounds}
                                     canShowBounds={canShowBounds}
+                                    onShift={handleShift}
+                                    onScale={handleScale}
+                                    onRotate={handleRotate}
+                                    canUndo={canUndo}
+                                    canRedo={canRedo}
+                                    onUndo={handleUndo}
+                                    onRedo={handleRedo}
                                 />
                             </div>
 

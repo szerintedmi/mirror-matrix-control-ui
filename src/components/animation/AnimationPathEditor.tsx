@@ -1,6 +1,7 @@
 /* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
 import React, { useCallback, useRef, useState } from 'react';
 
+import TransformToolbar from '@/components/common/TransformToolbar';
 import { createWaypointId } from '@/services/animationStorage';
 import type { AnimationPath, AnimationWaypoint } from '@/types/animation';
 import { centeredToView, viewToCentered, centeredDeltaToView } from '@/utils/centeredCoordinates';
@@ -28,6 +29,20 @@ interface AnimationPathEditorProps {
     onShowBoundsChange?: (show: boolean) => void;
     /** Whether bounds can be shown (calibration profile selected) */
     canShowBounds?: boolean;
+    /** Transform callback: shift path waypoints */
+    onShift?: (dx: number, dy: number) => void;
+    /** Transform callback: scale path waypoints */
+    onScale?: (scaleX: number, scaleY: number) => void;
+    /** Transform callback: rotate path waypoints */
+    onRotate?: (angleDeg: number) => void;
+    /** Whether undo is available */
+    canUndo?: boolean;
+    /** Whether redo is available */
+    canRedo?: boolean;
+    /** Undo callback */
+    onUndo?: () => void;
+    /** Redo callback */
+    onRedo?: () => void;
 }
 
 type EditMode = 'add' | 'move' | 'delete';
@@ -45,6 +60,13 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
     showBounds = false,
     onShowBoundsChange,
     canShowBounds = false,
+    onShift,
+    onScale,
+    onRotate,
+    canUndo = false,
+    canRedo = false,
+    onUndo,
+    onRedo,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [editMode, setEditMode] = useState<EditMode>('add');
@@ -192,12 +214,50 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
                         Show Bounds
                     </button>
                 )}
-                {path && (
+                {/* Undo/Redo */}
+                {(onUndo || onRedo) && (
+                    <div className="ml-auto flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={onUndo}
+                            disabled={!canUndo || disabled}
+                            className="rounded px-3 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Undo (Cmd+Z)"
+                        >
+                            Undo
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onRedo}
+                            disabled={!canRedo || disabled}
+                            className="rounded px-3 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Redo (Cmd+Shift+Z)"
+                        >
+                            Redo
+                        </button>
+                    </div>
+                )}
+                {path && !(onUndo || onRedo) && (
                     <span className="ml-auto text-xs text-gray-500">
                         {path.waypoints.length} waypoint(s)
                     </span>
                 )}
+                {path && (onUndo || onRedo) && (
+                    <span className="text-xs text-gray-500">
+                        {path.waypoints.length} waypoint(s)
+                    </span>
+                )}
             </div>
+
+            {/* Transform Toolbar */}
+            {onShift && onScale && onRotate && (
+                <TransformToolbar
+                    onShift={onShift}
+                    onScale={onScale}
+                    onRotate={onRotate}
+                    disabled={disabled || !path}
+                />
+            )}
 
             {/*
               Canvas for interactive path editing. Uses role="application" to indicate
