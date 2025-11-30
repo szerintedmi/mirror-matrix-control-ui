@@ -15,8 +15,8 @@ test.describe('Pattern Designer transforms', () => {
         // Click the New button to create a pattern
         await page.getByRole('button', { name: 'New' }).click();
 
-        // Wait for the main editor canvas to appear (the one with bg-gray-900 class)
-        const canvasContainer = page.locator('.relative.flex.aspect-square');
+        // Wait for the main editor canvas to appear (the one with role="presentation")
+        const canvasContainer = page.locator('div[role="presentation"]');
         await expect(canvasContainer).toBeVisible();
 
         // Click on the canvas to place a spot
@@ -63,7 +63,7 @@ test.describe('Pattern Designer transforms', () => {
         await page.getByRole('button', { name: 'New' }).click();
 
         // Place a spot on the canvas
-        const canvasContainer = page.locator('.relative.flex.aspect-square');
+        const canvasContainer = page.locator('div[role="presentation"]');
         await canvasContainer.click({ position: { x: 150, y: 150 } });
 
         // Click shift buttons (just verifying they don't error)
@@ -81,7 +81,7 @@ test.describe('Pattern Designer transforms', () => {
         await page.getByRole('button', { name: 'New' }).click();
 
         // Place a spot on the canvas
-        const canvasContainer = page.locator('.relative.flex.aspect-square');
+        const canvasContainer = page.locator('div[role="presentation"]');
         await canvasContainer.click({ position: { x: 150, y: 150 } });
 
         // Click scale buttons
@@ -97,7 +97,7 @@ test.describe('Pattern Designer transforms', () => {
         await page.getByRole('button', { name: 'New' }).click();
 
         // Place a spot on the canvas
-        const canvasContainer = page.locator('.relative.flex.aspect-square');
+        const canvasContainer = page.locator('div[role="presentation"]');
         await canvasContainer.click({ position: { x: 150, y: 150 } });
 
         // Click rotate buttons
@@ -113,7 +113,7 @@ test.describe('Pattern Designer transforms', () => {
         await page.getByRole('button', { name: 'New' }).click();
 
         // Place a spot on the canvas
-        const canvasContainer = page.locator('.relative.flex.aspect-square');
+        const canvasContainer = page.locator('div[role="presentation"]');
         await canvasContainer.click({ position: { x: 150, y: 150 } });
 
         // Shift the pattern
@@ -141,7 +141,7 @@ test.describe('Pattern Designer transforms', () => {
         await expect(redoButton).toBeDisabled();
 
         // Place a spot on the canvas
-        const canvasContainer = page.locator('.relative.flex.aspect-square');
+        const canvasContainer = page.locator('div[role="presentation"]');
         await canvasContainer.click({ position: { x: 150, y: 150 } });
 
         // Shift the pattern to create history
