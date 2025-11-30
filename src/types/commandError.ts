@@ -4,7 +4,8 @@ export interface CommandErrorDetail {
     // Required fields
     cmdId: string;
     controller: string; // MAC address
-    reason: 'ack-timeout' | 'completion-timeout' | 'error' | 'unknown';
+    /** Failure kind or firmware-provided reason (e.g., "BUSY", "INVALID_PARAM") */
+    reason: string;
 
     // Optional fields (available for motor-specific commands)
     motorId?: number;

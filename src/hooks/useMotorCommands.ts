@@ -76,8 +76,9 @@ export const useMotorCommands = (): MotorCommandApi => {
     const publishCommand = useCallback(
         async ({ mac, action, params, cmdId, expectAck = true }: PublishCommandParams) => {
             const resolvedCmdId = cmdId ?? createCommandId();
-            const completionPromise = register(resolvedCmdId, { expectAck });
-            const topic = `devices/${normalizeMacForTopic(mac)}/cmd`;
+            const normalizedMac = normalizeMacForTopic(mac);
+            const completionPromise = register(resolvedCmdId, { expectAck, mac: normalizedMac });
+            const topic = `devices/${normalizedMac}/cmd`;
 
             try {
                 await publish(

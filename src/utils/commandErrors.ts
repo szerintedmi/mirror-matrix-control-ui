@@ -57,9 +57,14 @@ export function extractCommandErrorDetail(
         const failure = error as CommandFailure;
         if (typeof failure.kind === 'string' && typeof failure.command === 'object') {
             detail.cmdId = failure.command.cmdId ?? 'unknown';
-            detail.reason = failure.kind;
+            // Prefer firmware-provided reason (e.g., "BUSY") over generic failure kind
+            detail.reason = failure.errorReason ?? failure.kind;
             detail.errorCode = failure.errorCode;
             detail.errorMessage = failure.message;
+            // Use MAC from failure if available and not overridden by context
+            if (failure.mac && detail.controller === 'unknown') {
+                detail.controller = failure.mac;
+            }
         }
     }
 

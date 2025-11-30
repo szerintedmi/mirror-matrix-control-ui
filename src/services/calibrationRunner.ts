@@ -4,6 +4,7 @@ import {
 } from '@/constants/calibration';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
+import { type CommandFailure } from '@/services/pendingCommandTracker';
 import type {
     ArrayRotation,
     BlobMeasurement,
@@ -13,7 +14,9 @@ import type {
     MirrorConfig,
     Motor,
 } from '@/types';
+import type { CommandErrorContext } from '@/types/commandError';
 import { getStepTestJogDirection } from '@/utils/arrayRotation';
+import { extractCommandErrorDetail } from '@/utils/commandErrors';
 
 type Axis = 'x' | 'y';
 
@@ -158,6 +161,8 @@ export interface CalibrationRunnerParams {
     mode?: CalibrationRunnerMode;
     onStepStateChange?: (state: CalibrationStepState) => void;
     onCommandLog?: (entry: CalibrationCommandLogEntry) => void;
+    /** Callback for motor command errors with structured error details for toast display */
+    onCommandError?: (context: CommandErrorContext) => void;
 }
 
 const clampSteps = (value: number): number =>
@@ -188,6 +193,13 @@ class RunnerAbortError extends Error {
         this.name = 'RunnerAbortError';
     }
 }
+
+const isCommandFailure = (error: unknown): error is CommandFailure =>
+    error !== null &&
+    typeof error === 'object' &&
+    'kind' in error &&
+    'command' in error &&
+    typeof (error as CommandFailure).kind === 'string';
 
 const waitWithSignal = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -300,6 +312,8 @@ export class CalibrationRunner {
 
     private readonly onCommandLog?: (entry: CalibrationCommandLogEntry) => void;
 
+    private readonly onCommandError?: (context: CommandErrorContext) => void;
+
     private state: CalibrationRunnerState;
 
     private runPromise: Promise<void> | null = null;
@@ -336,6 +350,7 @@ export class CalibrationRunner {
         this.mode = params.mode ?? 'auto';
         this.onStepStateChange = params.onStepStateChange;
         this.onCommandLog = params.onCommandLog;
+        this.onCommandError = params.onCommandError;
 
         this.descriptors = buildTileDescriptors(params.gridSize, params.mirrorConfig);
         this.calibratableTiles = this.descriptors.filter((descriptor) => descriptor.calibratable);
@@ -450,6 +465,16 @@ export class CalibrationRunner {
                 activeTile: null,
                 error: errorMessage,
             });
+
+            // Emit structured error for toast display if it's a motor command failure
+            if (this.onCommandError && isCommandFailure(error)) {
+                const detail = extractCommandErrorDetail(error);
+                this.onCommandError({
+                    title: 'Calibration',
+                    totalCount: 1,
+                    errors: [detail],
+                });
+            }
         }
     }
 

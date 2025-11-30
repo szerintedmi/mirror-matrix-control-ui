@@ -38,12 +38,14 @@ const normalizeResponse = (payload: unknown): CommandResponsePayload | null => {
     const errors = Array.isArray(payload['errors'])
         ? payload['errors'].filter(isRecord).map((entry) => ({
               code: typeof entry['code'] === 'string' ? entry['code'] : undefined,
+              reason: typeof entry['reason'] === 'string' ? entry['reason'] : undefined,
               message: typeof entry['message'] === 'string' ? entry['message'] : undefined,
           }))
         : undefined;
     const warnings = Array.isArray(payload['warnings'])
         ? payload['warnings'].filter(isRecord).map((entry) => ({
               code: typeof entry['code'] === 'string' ? entry['code'] : undefined,
+              reason: typeof entry['reason'] === 'string' ? entry['reason'] : undefined,
               message: typeof entry['message'] === 'string' ? entry['message'] : undefined,
           }))
         : undefined;
@@ -72,7 +74,7 @@ const parseResponsePayload = (payload: Uint8Array): CommandResponsePayload | nul
 export interface CommandTrackerContextValue {
     register: (
         cmdId: string,
-        options?: { expectAck?: boolean },
+        options?: { expectAck?: boolean; mac?: string },
     ) => Promise<CommandCompletionResult>;
     cancel: (cmdId: string, reason?: CommandFailureReason) => void;
 }
@@ -122,7 +124,7 @@ export const CommandTrackerProvider: React.FC<ProviderProps> = ({ children }) =>
     }, [getTracker, subscribe]);
 
     const register = useCallback(
-        (cmdId: string, options?: { expectAck?: boolean }) => {
+        (cmdId: string, options?: { expectAck?: boolean; mac?: string }) => {
             return getTracker().register(cmdId, options);
         },
         [getTracker],

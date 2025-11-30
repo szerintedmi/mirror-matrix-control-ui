@@ -317,7 +317,9 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                     </div>
                 )}
                 {activeRunnerState.error && (
-                    <p className="mt-3 text-sm text-rose-300">{activeRunnerState.error}</p>
+                    <div className="mt-3 rounded-md border border-rose-500/60 bg-rose-900/30 px-3 py-2 text-sm font-semibold text-rose-100">
+                        {activeRunnerState.error}
+                    </div>
                 )}
                 {/* Progress Bar */}
                 {activeRunnerState.progress.total > 0 && (

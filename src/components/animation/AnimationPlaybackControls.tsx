@@ -12,6 +12,8 @@ interface AnimationPlaybackControlsProps {
     hasAnimation: boolean;
     hasCalibration: boolean;
     canPlay: boolean;
+    /** Optional message to display (error or success) */
+    resultMessage?: string | null;
 }
 
 const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
@@ -24,6 +26,7 @@ const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
     hasAnimation,
     hasCalibration,
     canPlay,
+    resultMessage,
 }) => {
     const isPlaying = playbackState === 'playing';
     const isCompleted = playbackState === 'completed';
@@ -65,6 +68,21 @@ const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
                 </div>
                 <p className={`text-xs ${getStatusColor()}`}>{getStatusText()}</p>
             </div>
+
+            {/* Result Message */}
+            {resultMessage && (
+                <div
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                        isError
+                            ? 'border-rose-500/60 bg-rose-900/30 text-rose-100'
+                            : isCompleted
+                              ? 'border-emerald-500/50 bg-emerald-900/30 text-emerald-100'
+                              : 'border-amber-500/50 bg-amber-900/30 text-amber-100'
+                    }`}
+                >
+                    {resultMessage}
+                </div>
+            )}
 
             {/* Controls */}
             <div className="flex gap-2">

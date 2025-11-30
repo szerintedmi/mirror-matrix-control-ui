@@ -472,7 +472,10 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
 
     // Auto-enable when a profile is selected that we haven't seen before
     useEffect(() => {
-        if (selectedCalibrationProfile && !autoEnabledBoundsForRef.current.has(selectedCalibrationProfile.id)) {
+        if (
+            selectedCalibrationProfile &&
+            !autoEnabledBoundsForRef.current.has(selectedCalibrationProfile.id)
+        ) {
             autoEnabledBoundsForRef.current.add(selectedCalibrationProfile.id);
             // Use requestAnimationFrame to avoid synchronous setState in effect
             requestAnimationFrame(() => setShowBounds(true));

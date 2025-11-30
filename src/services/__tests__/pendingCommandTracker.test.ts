@@ -50,6 +50,34 @@ describe('PendingCommandTracker', () => {
         } as CommandFailure);
     });
 
+    test('extracts firmware error details from response', async () => {
+        const tracker = new PendingCommandTracker({
+            ackTimeoutMs: 10_000,
+            completionTimeoutMs: 10_000,
+        });
+        const promise = tracker.register('cmd-err');
+
+        tracker.handleResponse({
+            cmdId: 'cmd-err',
+            action: 'HOME',
+            status: 'error',
+            errors: [
+                {
+                    code: 'E04',
+                    reason: 'BUSY',
+                    message: 'Controller is busy executing another command.',
+                },
+            ],
+        });
+
+        await expect(promise).rejects.toMatchObject({
+            kind: 'error',
+            errorCode: 'E04',
+            errorReason: 'BUSY',
+            message: 'Controller is busy executing another command.',
+        } as CommandFailure);
+    });
+
     test('rejects on ack timeout when expected', async () => {
         vi.useFakeTimers();
         const tracker = new PendingCommandTracker({ ackTimeoutMs: 5, completionTimeoutMs: 20 });

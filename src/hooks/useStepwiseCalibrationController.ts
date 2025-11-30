@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import {
@@ -93,6 +94,7 @@ export const useStepwiseCalibrationController = ({
             onCommandLog: (entry) => {
                 setCommandLog((prev) => [entry, ...prev].slice(0, MAX_LOG_ENTRIES));
             },
+            onCommandError: showCommandErrorToast,
         });
         runnerRef.current = runner;
         setCommandLog([]);

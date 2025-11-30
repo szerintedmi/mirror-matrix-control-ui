@@ -7,8 +7,8 @@ export interface CommandResponsePayload {
     action: string;
     status: CommandResponseStatus;
     result?: Record<string, unknown>;
-    errors?: Array<{ code?: string; message?: string }>;
-    warnings?: Array<{ code?: string; message?: string }>;
+    errors?: Array<{ code?: string; reason?: string; message?: string }>;
+    warnings?: Array<{ code?: string; reason?: string; message?: string }>;
 }
 
 export type CommandFailureReason = 'ack-timeout' | 'completion-timeout' | 'error';
@@ -22,6 +22,10 @@ export interface CommandFailure extends Error {
     kind: CommandFailureReason;
     command: CommandCompletionResult;
     errorCode?: string;
+    /** Firmware-provided error reason (e.g., "BUSY", "INVALID_PARAM") */
+    errorReason?: string;
+    /** MAC address of the device that failed (if tracked) */
+    mac?: string;
 }
 
 interface PendingCommand {
@@ -32,6 +36,7 @@ interface PendingCommand {
     ackTimer: ReturnType<typeof setTimeout> | null;
     completionTimer: ReturnType<typeof setTimeout>;
     settled: boolean;
+    mac?: string;
 }
 
 interface TrackerOptions {
@@ -73,7 +78,7 @@ export class PendingCommandTracker {
 
     public register(
         cmdId: string,
-        options: { expectAck?: boolean } = {},
+        options: { expectAck?: boolean; mac?: string } = {},
     ): Promise<CommandCompletionResult> {
         if (this.disposed) {
             return Promise.reject(new Error('Tracker has been disposed'));
@@ -104,6 +109,7 @@ export class PendingCommandTracker {
                 ackTimer,
                 completionTimer,
                 settled: false,
+                mac: options.mac,
             };
 
             this.pending.set(cmdId, pending);
@@ -156,7 +162,7 @@ export class PendingCommandTracker {
         record.settled = true;
         this.clearTimers(record);
         this.pending.delete(cmdId);
-        const failure = this.createFailure(kind, cmdId, record.responses);
+        const failure = this.createFailure(kind, cmdId, record.responses, record.mac);
         record.reject(failure);
     }
 
@@ -180,6 +186,7 @@ export class PendingCommandTracker {
         kind: CommandFailureReason,
         cmdId: string,
         responses: CommandResponsePayload[],
+        mac?: string,
     ): CommandFailure {
         const failure = new Error(`Command ${cmdId} failed: ${kind}`) as CommandFailure;
         failure.kind = kind;
@@ -187,11 +194,14 @@ export class PendingCommandTracker {
             cmdId,
             responses: responses.slice(),
         };
+        failure.mac = mac;
 
         const errorPayload = responses.find((entry) => entry.status === 'error');
         if (errorPayload?.errors && errorPayload.errors.length > 0) {
-            failure.errorCode = errorPayload.errors[0]?.code;
-            failure.message = errorPayload.errors[0]?.message ?? failure.message;
+            const firstError = errorPayload.errors[0];
+            failure.errorCode = firstError?.code;
+            failure.errorReason = firstError?.reason;
+            failure.message = firstError?.message ?? failure.message;
         }
 
         return failure;

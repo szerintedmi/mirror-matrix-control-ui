@@ -98,6 +98,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
     // Local state
     const [selectedPathId, setSelectedPathId] = useState<string | null>(null);
     const [showBounds, setShowBounds] = useState(false);
+    const [playbackResultMessage, setPlaybackResultMessage] = useState<string | null>(null);
     const [createModalState, setCreateModalState] = useState<CreateAnimationModalState>({
         open: false,
         name: '',
@@ -243,7 +244,9 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
 
     const handlePlay = async () => {
         if (!selectedAnimation || !selectedCalibrationProfile) return;
-        await playAnimation(selectedAnimation, selectedCalibrationProfile);
+        setPlaybackResultMessage(null);
+        const result = await playAnimation(selectedAnimation, selectedCalibrationProfile);
+        setPlaybackResultMessage(result.message);
     };
 
     const handleSpeedChange = (speedSps: number) => {
@@ -478,6 +481,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                 hasAnimation={Boolean(selectedAnimation)}
                                 hasCalibration={Boolean(selectedCalibrationProfile)}
                                 canPlay={canPlay}
+                                resultMessage={playbackResultMessage}
                             />
 
                             <AnimationTimeline

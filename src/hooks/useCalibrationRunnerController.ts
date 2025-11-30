@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
 import {
     DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     type CalibrationRunnerSettings,
@@ -143,6 +144,7 @@ export const useCalibrationRunnerController = ({
                 setRunnerState(next);
             },
             onCommandLog: appendLogEntry,
+            onCommandError: showCommandErrorToast,
         });
         runnerRef.current = runner;
         setCommandLog([]);
