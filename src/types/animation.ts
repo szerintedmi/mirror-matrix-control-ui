@@ -186,6 +186,12 @@ export interface AnimationPlaybackPlan {
     errors: AnimationPlanError[];
     /** Non-fatal warnings */
     warnings: AnimationPlanError[];
+    /** Animation mode for playback logic */
+    mode: AnimationMode;
+    /** Ordered mirror IDs for sequential mode staggering (e.g., ["0-0", "0-1", "1-0"]) */
+    mirrorOrder?: string[];
+    /** Time offset between successive mirrors in sequential mode (ms) */
+    offsetMs?: number;
 }
 
 // ============================================================================

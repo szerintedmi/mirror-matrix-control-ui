@@ -501,17 +501,38 @@ export const planAnimation = (params: PlanAnimationParams): AnimationPlaybackPla
     // Validate inputs
     if (!animation) {
         errors.push(createError('missing_animation', 'No animation provided.'));
-        return { animationId: '', segments: [], totalDurationMs: 0, errors, warnings };
+        return {
+            animationId: '',
+            segments: [],
+            totalDurationMs: 0,
+            errors,
+            warnings,
+            mode: 'independent',
+        };
     }
 
     if (!profile) {
         errors.push(createError('missing_profile', 'No calibration profile selected.'));
-        return { animationId: animation.id, segments: [], totalDurationMs: 0, errors, warnings };
+        return {
+            animationId: animation.id,
+            segments: [],
+            totalDurationMs: 0,
+            errors,
+            warnings,
+            mode: animation.mode,
+        };
     }
 
     if (animation.paths.length === 0) {
         errors.push(createError('path_empty', 'Animation has no paths defined.'));
-        return { animationId: animation.id, segments: [], totalDurationMs: 0, errors, warnings };
+        return {
+            animationId: animation.id,
+            segments: [],
+            totalDurationMs: 0,
+            errors,
+            warnings,
+            mode: animation.mode,
+        };
     }
 
     // Resolve bindings based on mode
@@ -523,7 +544,14 @@ export const planAnimation = (params: PlanAnimationParams): AnimationPlaybackPla
     errors.push(...bindingErrors);
 
     if (bindings.length === 0) {
-        return { animationId: animation.id, segments: [], totalDurationMs: 0, errors, warnings };
+        return {
+            animationId: animation.id,
+            segments: [],
+            totalDurationMs: 0,
+            errors,
+            warnings,
+            mode: animation.mode,
+        };
     }
 
     // Determine segment count (based on the path with most waypoints)
@@ -532,7 +560,14 @@ export const planAnimation = (params: PlanAnimationParams): AnimationPlaybackPla
 
     if (segmentCount < 1) {
         errors.push(createError('insufficient_waypoints', 'Paths need at least 2 waypoints.'));
-        return { animationId: animation.id, segments: [], totalDurationMs: 0, errors, warnings };
+        return {
+            animationId: animation.id,
+            segments: [],
+            totalDurationMs: 0,
+            errors,
+            warnings,
+            mode: animation.mode,
+        };
     }
 
     // Plan segments
@@ -565,12 +600,28 @@ export const planAnimation = (params: PlanAnimationParams): AnimationPlaybackPla
 
     const totalDurationMs = segments.reduce((sum, s) => sum + s.durationMs, 0);
 
+    // Compute mirror order for sequential mode
+    const mirrorOrder =
+        animation.mode === 'sequential' && animation.sequentialConfig
+            ? generateMirrorOrder(
+                  gridSize,
+                  animation.sequentialConfig.orderBy,
+                  animation.sequentialConfig.customOrder,
+              )
+            : undefined;
+
+    const offsetMs =
+        animation.mode === 'sequential' ? animation.sequentialConfig?.offsetMs : undefined;
+
     return {
         animationId: animation.id,
         segments,
         totalDurationMs,
         errors,
         warnings,
+        mode: animation.mode,
+        mirrorOrder,
+        offsetMs,
     };
 };
 
