@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 
+import { STAGING_POSITIONS, STAGING_POSITION_LABELS } from '@/constants/calibration';
 import { useEditableInput } from '@/hooks/useEditableInput';
-import type { ArrayRotation } from '@/types';
+import type { ArrayRotation, StagingPosition } from '@/types';
 import { ARRAY_ROTATIONS, getRotationLabel } from '@/utils/arrayRotation';
 
 interface CalibrationSettingsPanelProps {
     arrayRotation: ArrayRotation;
     onArrayRotationChange: (rotation: ArrayRotation) => void;
+    stagingPosition: StagingPosition;
+    onStagingPositionChange: (position: StagingPosition) => void;
     deltaSteps: number;
     onDeltaStepsChange: (value: number) => void;
     gridGapNormalized: number;
@@ -20,6 +23,8 @@ const DECIMAL_PATTERN = /^\d*(?:\.\d*)?$/;
 const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
     arrayRotation,
     onArrayRotationChange,
+    stagingPosition,
+    onStagingPositionChange,
     deltaSteps,
     onDeltaStepsChange,
     gridGapNormalized,
@@ -59,6 +64,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
     });
 
     const rotationLabel = arrayRotation === 0 ? 'Normal' : `${arrayRotation}°`;
+    const stagingLabel = STAGING_POSITION_LABELS[stagingPosition];
     const gapPercent = (gridGapNormalized * 100).toFixed(1);
 
     return (
@@ -93,7 +99,8 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                 <div className="flex items-center gap-3">
                     {!isExpanded && (
                         <span className="text-xs text-gray-500">
-                            {rotationLabel} · {deltaSteps} steps · {gapPercent}% gap
+                            {rotationLabel} · {stagingLabel} · {deltaSteps} steps · {gapPercent}%
+                            gap
                         </span>
                     )}
                     <svg
@@ -149,6 +156,41 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                         </div>
                         <p className="text-[10px] text-gray-500">
                             Physical rotation of mirror array (clockwise from camera view)
+                        </p>
+                    </fieldset>
+
+                    {/* Staging Position */}
+                    <fieldset className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <legend className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Staging Position
+                            </legend>
+                            <span className="text-xs text-gray-500">{stagingLabel}</span>
+                        </div>
+                        <div
+                            className="flex gap-1.5"
+                            role="radiogroup"
+                            aria-label="Staging position selection"
+                        >
+                            {STAGING_POSITIONS.map((pos) => (
+                                <button
+                                    key={pos}
+                                    type="button"
+                                    className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition ${
+                                        stagingPosition === pos
+                                            ? 'border-blue-500 bg-blue-500/30 text-blue-100'
+                                            : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
+                                    } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                                    onClick={() => !disabled && onStagingPositionChange(pos)}
+                                    disabled={disabled}
+                                    aria-pressed={stagingPosition === pos}
+                                >
+                                    {STAGING_POSITION_LABELS[pos]}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-gray-500">
+                            Where tiles move during calibration staging
                         </p>
                     </fieldset>
 

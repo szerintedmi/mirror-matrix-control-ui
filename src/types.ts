@@ -390,6 +390,14 @@ export interface CalibrationProfileCalibrationSpace {
  */
 export type ArrayRotation = 0 | 90 | 180 | 270;
 
+/**
+ * Position where tiles are moved during calibration staging phase.
+ * - 'corner': All tiles move to bottom-left corner (same position)
+ * - 'bottom': Tiles distributed horizontally along bottom edge
+ * - 'left': Tiles distributed vertically along left edge
+ */
+export type StagingPosition = 'corner' | 'bottom' | 'left';
+
 export interface CalibrationProfile {
     id: string;
     schemaVersion: number;

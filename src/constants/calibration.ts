@@ -1,4 +1,4 @@
-import type { NormalizedRoi } from '@/types';
+import type { NormalizedRoi, StagingPosition } from '@/types';
 
 export interface ResolutionOption {
     id: string;
@@ -47,6 +47,15 @@ export const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
         width,
         height,
     };
+};
+
+export const STAGING_POSITIONS: StagingPosition[] = ['corner', 'bottom', 'left'];
+export const DEFAULT_STAGING_POSITION: StagingPosition = 'corner';
+
+export const STAGING_POSITION_LABELS: Record<StagingPosition, string> = {
+    corner: 'Corner',
+    bottom: 'Bottom',
+    left: 'Left',
 };
 
 export interface CalibrationRunnerSettings {

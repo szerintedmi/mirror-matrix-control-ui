@@ -13,6 +13,7 @@ import type {
     MirrorAssignment,
     MirrorConfig,
     Motor,
+    StagingPosition,
 } from '@/types';
 import type { CommandErrorContext } from '@/types/commandError';
 import { getStepTestJogDirection } from '@/utils/arrayRotation';
@@ -157,6 +158,13 @@ export interface CalibrationRunnerParams {
      * Affects step test jog directions to match expected visual movement.
      */
     arrayRotation?: ArrayRotation;
+    /**
+     * Position where tiles are moved during staging phase.
+     * - 'corner': All tiles to bottom-left corner (default)
+     * - 'bottom': Tiles distributed horizontally along bottom edge
+     * - 'left': Tiles distributed vertically along left edge
+     */
+    stagingPosition?: StagingPosition;
     onStateChange?: (state: CalibrationRunnerState) => void;
     mode?: CalibrationRunnerMode;
     onStepStateChange?: (state: CalibrationStepState) => void;
@@ -298,6 +306,8 @@ export class CalibrationRunner {
 
     private readonly arrayRotation: ArrayRotation;
 
+    private readonly stagingPosition: StagingPosition;
+
     private readonly descriptors: TileDescriptor[];
 
     private readonly calibratableTiles: TileDescriptor[];
@@ -346,6 +356,7 @@ export class CalibrationRunner {
         this.captureMeasurement = params.captureMeasurement;
         this.settings = { ...DEFAULT_CALIBRATION_RUNNER_SETTINGS, ...params.settings };
         this.arrayRotation = params.arrayRotation ?? 0;
+        this.stagingPosition = params.stagingPosition ?? 'corner';
         this.onStateChange = params.onStateChange;
         this.mode = params.mode ?? 'auto';
         this.onStepStateChange = params.onStepStateChange;
@@ -884,20 +895,33 @@ export class CalibrationRunner {
             return { x: 0, y: 0 };
         }
         // Compute aside position accounting for array rotation.
-        // Goal: move tiles to a consistent visual position (left side from camera view).
-        // Baseline: +X = LEFT, so MAX (+1200) = LEFT.
-        // At 0° and 90°: X_MAX moves left, at 180° and 270°: X_MIN moves left (inverted).
+        // Goal: move tiles to a consistent visual position from camera view.
+        // Baseline: +X = LEFT, +Y = DOWN, so MAX = LEFT/DOWN.
+        // At 0° and 90°: MAX moves left/down, at 180° and 270°: MIN moves left/down (inverted).
         const asideX =
             this.arrayRotation === 0 || this.arrayRotation === 90
                 ? MOTOR_MAX_POSITION_STEPS
                 : MOTOR_MIN_POSITION_STEPS;
-        return {
-            x: asideX,
-            y: this.computeAsideYTarget(tile.col),
-        };
+        const asideY =
+            this.arrayRotation === 0 || this.arrayRotation === 90
+                ? MOTOR_MIN_POSITION_STEPS
+                : MOTOR_MAX_POSITION_STEPS;
+
+        switch (this.stagingPosition) {
+            case 'corner':
+                // All tiles to the same bottom-left corner position
+                return { x: asideX, y: asideY };
+            case 'bottom':
+                // Y at bottom extreme, X distributed horizontally by column
+                return { x: this.computeDistributedAxisTarget(tile.col), y: asideY };
+            case 'left':
+            default:
+                // X at left extreme, Y distributed vertically by column
+                return { x: asideX, y: this.computeDistributedAxisTarget(tile.col) };
+        }
     }
 
-    private computeAsideYTarget(column: number): number {
+    private computeDistributedAxisTarget(column: number): number {
         const totalCols = Math.max(1, this.gridSize.cols);
         if (totalCols === 1) {
             return clampSteps((MOTOR_MAX_POSITION_STEPS + MOTOR_MIN_POSITION_STEPS) / 2);

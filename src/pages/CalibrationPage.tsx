@@ -6,6 +6,7 @@ import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPa
 import CalibrationSettingsPanel from '@/components/calibration/CalibrationSettingsPanel';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
+import { DEFAULT_STAGING_POSITION } from '@/constants/calibration';
 import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
 import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
@@ -15,7 +16,12 @@ import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsCont
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import { useStepwiseCalibrationController } from '@/hooks/useStepwiseCalibrationController';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
-import type { ArrayRotation, CalibrationCameraResolution, MirrorConfig } from '@/types';
+import type {
+    ArrayRotation,
+    CalibrationCameraResolution,
+    MirrorConfig,
+    StagingPosition,
+} from '@/types';
 
 interface CalibrationPageProps {
     gridSize: { rows: number; cols: number };
@@ -128,6 +134,10 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     // Array rotation setting for calibration (physical orientation of mirror array)
     const [arrayRotation, setArrayRotation] = useState<ArrayRotation>(0);
 
+    // Staging position setting for where tiles move during staging phase
+    const [stagingPosition, setStagingPosition] =
+        useState<StagingPosition>(DEFAULT_STAGING_POSITION);
+
     const cameraPipeline = useCameraPipeline({
         detectionSettingsLoaded,
         selectedDeviceId,
@@ -215,6 +225,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         captureMeasurement: captureBlobMeasurement,
         detectionReady,
         arrayRotation,
+        stagingPosition,
         initialSessionState,
     });
 
@@ -409,6 +420,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             <CalibrationSettingsPanel
                 arrayRotation={arrayRotation}
                 onArrayRotationChange={setArrayRotation}
+                stagingPosition={stagingPosition}
+                onStagingPositionChange={setStagingPosition}
                 deltaSteps={runnerSettings.deltaSteps}
                 onDeltaStepsChange={(v) => updateRunnerSetting('deltaSteps', v)}
                 gridGapNormalized={runnerSettings.gridGapNormalized}

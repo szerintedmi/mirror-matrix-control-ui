@@ -15,7 +15,7 @@ import {
     type CaptureBlobMeasurement,
     createBaselineRunnerState,
 } from '@/services/calibrationRunner';
-import type { ArrayRotation, MirrorConfig } from '@/types';
+import type { ArrayRotation, MirrorConfig, StagingPosition } from '@/types';
 
 const clampSetting = (value: number, min: number, max: number): number =>
     Math.max(min, Math.min(max, value));
@@ -31,6 +31,10 @@ interface UseCalibrationRunnerControllerParams {
      * Affects step test jog directions for rotated physical arrays.
      */
     arrayRotation: ArrayRotation;
+    /**
+     * Position where tiles are moved during staging phase.
+     */
+    stagingPosition: StagingPosition;
     /**
      * Optional initial state to restore from session storage.
      */
@@ -64,6 +68,7 @@ export const useCalibrationRunnerController = ({
     captureMeasurement,
     detectionReady,
     arrayRotation,
+    stagingPosition,
     initialSessionState,
 }: UseCalibrationRunnerControllerParams): CalibrationRunnerController => {
     const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
@@ -140,6 +145,7 @@ export const useCalibrationRunnerController = ({
             captureMeasurement,
             settings: runnerSettings,
             arrayRotation,
+            stagingPosition,
             onStateChange: (next) => {
                 setRunnerState(next);
             },
@@ -158,6 +164,7 @@ export const useCalibrationRunnerController = ({
         mirrorConfig,
         motorApi,
         runnerSettings,
+        stagingPosition,
     ]);
 
     const pauseRunner = useCallback(() => {
