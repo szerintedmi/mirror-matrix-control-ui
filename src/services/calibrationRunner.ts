@@ -79,6 +79,8 @@ export interface TileRunState {
     tile: TileAddress;
     status: 'pending' | 'staged' | 'measuring' | 'completed' | 'failed' | 'skipped';
     error?: string;
+    /** Non-fatal warnings (e.g., step test failures) */
+    warnings?: string[];
     metrics?: TileCalibrationMetrics;
     assignment: MirrorAssignment;
 }
@@ -87,6 +89,8 @@ export interface TileCalibrationResult {
     tile: TileAddress;
     status: 'measuring' | 'completed' | 'failed' | 'skipped';
     error?: string;
+    /** Non-fatal warnings (e.g., step test failures) */
+    warnings?: string[];
     homeMeasurement?: BlobMeasurement;
     homeOffset?: { dx: number; dy: number };
     adjustedHome?: { x: number; y: number };
@@ -171,6 +175,8 @@ export interface CalibrationRunnerParams {
     onCommandLog?: (entry: CalibrationCommandLogEntry) => void;
     /** Callback for motor command errors with structured error details for toast display */
     onCommandError?: (context: CommandErrorContext) => void;
+    /** Callback for tile-level errors (detection failures, calibration errors) */
+    onTileError?: (row: number, col: number, message: string) => void;
 }
 
 const clampSteps = (value: number): number =>
@@ -324,6 +330,8 @@ export class CalibrationRunner {
 
     private readonly onCommandError?: (context: CommandErrorContext) => void;
 
+    private readonly onTileError?: (row: number, col: number, message: string) => void;
+
     private state: CalibrationRunnerState;
 
     private runPromise: Promise<void> | null = null;
@@ -362,6 +370,7 @@ export class CalibrationRunner {
         this.onStepStateChange = params.onStepStateChange;
         this.onCommandLog = params.onCommandLog;
         this.onCommandError = params.onCommandError;
+        this.onTileError = params.onTileError;
 
         this.descriptors = buildTileDescriptors(params.gridSize, params.mirrorConfig);
         this.calibratableTiles = this.descriptors.filter((descriptor) => descriptor.calibratable);
@@ -635,13 +644,14 @@ export class CalibrationRunner {
 
         await this.moveTileToPose(tile, 'home', measureGroup);
 
-        const homeMeasurement = await this.captureMeasurementWithRetries();
-        if (!homeMeasurement) {
-            const errorMessage = 'Unable to detect blob at home position';
+        const homeResult = await this.captureMeasurementWithRetries();
+        if (!homeResult.measurement) {
+            const errorMessage = homeResult.error ?? 'Unable to detect blob at home position';
             this.markTileFailed(tile, errorMessage);
             await this.moveTileToPose(tile, 'aside', measureGroup);
             return;
         }
+        const homeMeasurement = homeResult.measurement;
 
         this.logCommand(
             'Captured home measurement',
@@ -686,6 +696,7 @@ export class CalibrationRunner {
             x: null,
             y: null,
         };
+        const stepTestWarnings: string[] = [];
         let positionedForYMeasurementInParallel = false;
 
         if (xMotor && xDelta !== null) {
@@ -696,8 +707,9 @@ export class CalibrationRunner {
                 measureGroup,
             );
             await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
-            const measurement = await this.captureMeasurementWithRetries();
-            if (measurement) {
+            const xResult = await this.captureMeasurementWithRetries();
+            if (xResult.measurement) {
+                const measurement = xResult.measurement;
                 const displacement = measurement.x - homeMeasurement.x;
                 const perStep = displacement / xDelta;
                 if (Number.isFinite(perStep)) {
@@ -717,6 +729,11 @@ export class CalibrationRunner {
                     tileAddress,
                     measureGroup,
                 );
+            } else if (xResult.error) {
+                // Track warning and emit to toast - step test is optional
+                const warning = `X step test: ${xResult.error}`;
+                stepTestWarnings.push(warning);
+                this.onTileError?.(tile.row, tile.col, warning);
             }
             if (yMotor && yDelta !== null) {
                 await this.moveTileAxesToPositions(tile, { x: 0, y: yDelta }, measureGroup);
@@ -736,8 +753,9 @@ export class CalibrationRunner {
                 );
                 await this.moveAxisToPosition(yMotor, yDelta, measureGroup);
             }
-            const measurement = await this.captureMeasurementWithRetries();
-            if (measurement) {
+            const yResult = await this.captureMeasurementWithRetries();
+            if (yResult.measurement) {
+                const measurement = yResult.measurement;
                 const displacement = measurement.y - homeMeasurement.y;
                 const perStep = displacement / yDelta;
                 if (Number.isFinite(perStep)) {
@@ -757,6 +775,11 @@ export class CalibrationRunner {
                     tileAddress,
                     measureGroup,
                 );
+            } else if (yResult.error) {
+                // Track warning and emit to toast - step test is optional
+                const warning = `Y step test: ${yResult.error}`;
+                stepTestWarnings.push(warning);
+                this.onTileError?.(tile.row, tile.col, warning);
             }
         }
 
@@ -776,6 +799,7 @@ export class CalibrationRunner {
             status: 'completed',
             metrics,
             error: undefined,
+            warnings: stepTestWarnings.length > 0 ? stepTestWarnings : undefined,
         });
         const previousResult = this.tileResults.get(tile.key);
         this.tileResults.set(tile.key, {
@@ -786,6 +810,7 @@ export class CalibrationRunner {
             sizeDeltaAtStepTest,
             homeOffset: previousResult?.homeOffset,
             adjustedHome: previousResult?.adjustedHome ?? undefined,
+            warnings: stepTestWarnings.length > 0 ? stepTestWarnings : undefined,
         });
         this.publishSummarySnapshot();
         this.bumpProgress('completed');
@@ -967,19 +992,36 @@ export class CalibrationRunner {
         this.axisPositions.set(axisKey, clamped);
     }
 
-    private async captureMeasurementWithRetries(): Promise<BlobMeasurement | null> {
+    private async captureMeasurementWithRetries(): Promise<{
+        measurement: BlobMeasurement | null;
+        error?: string;
+    }> {
+        let lastError: string | undefined;
         for (let attempt = 0; attempt < this.settings.maxDetectionRetries; attempt += 1) {
             await this.checkContinue();
-            const measurement = await this.captureMeasurement({
-                timeoutMs: this.settings.sampleTimeoutMs,
-                signal: this.abortController.signal,
-            });
-            if (measurement) {
-                return measurement;
+            try {
+                const measurement = await this.captureMeasurement({
+                    timeoutMs: this.settings.sampleTimeoutMs,
+                    signal: this.abortController.signal,
+                });
+                if (measurement) {
+                    return { measurement };
+                }
+                lastError = 'No blob detected';
+            } catch (error) {
+                // Capture error message (e.g., "Blob measurement unstable: ...")
+                lastError = error instanceof Error ? error.message : String(error);
+                // Re-throw abort errors
+                if (error instanceof RunnerAbortError) {
+                    throw error;
+                }
+                if (error instanceof Error && error.message.includes('aborted')) {
+                    throw error;
+                }
             }
             await waitWithSignal(this.settings.retryDelayMs, this.abortController.signal);
         }
-        return null;
+        return { measurement: null, error: lastError };
     }
 
     private applySummaryMetrics(summary: CalibrationRunSummary): void {
@@ -1118,6 +1160,9 @@ export class CalibrationRunner {
         this.publishSummarySnapshot();
         this.bumpProgress('failed');
         this.logCommand('Tile calibration failed', { message }, tileAddress);
+
+        // Emit tile error for toast display
+        this.onTileError?.(tile.row, tile.col, message);
     }
 
     private bumpProgress(kind: 'completed' | 'failed'): void {

@@ -6,7 +6,11 @@ import CalibrationSummaryModal from '@/components/calibration/CalibrationSummary
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
-import { getTileStatusClasses, getTileErrorTextClass } from '@/constants/calibrationUiThemes';
+import {
+    getTileStatusClasses,
+    getTileErrorTextClass,
+    TILE_WARNING_TEXT_CLASS,
+} from '@/constants/calibrationUiThemes';
 import type { DriverView } from '@/context/StatusContext';
 import type {
     CalibrationCommandLogEntry,
@@ -481,6 +485,15 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                         className={`mt-1 text-[10px] leading-tight ${getTileErrorTextClass(entry.status)}`}
                                     >
                                         {entry.error}
+                                    </div>
+                                )}
+                                {entry.warnings && entry.warnings.length > 0 && (
+                                    <div
+                                        className={`mt-1 text-[10px] leading-tight ${TILE_WARNING_TEXT_CLASS}`}
+                                    >
+                                        {entry.warnings.map((warning, idx) => (
+                                            <div key={idx}>{warning}</div>
+                                        ))}
                                     </div>
                                 )}
                                 {(entry.assignment.x || entry.assignment.y) && (

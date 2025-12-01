@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
+import {
+    createAccumulatingErrorToast,
+    showCommandErrorToast,
+} from '@/components/common/CommandErrorToast';
 import type { CalibrationRunnerSettings } from '@/constants/calibration';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import {
@@ -73,6 +76,9 @@ export const useStepwiseCalibrationController = ({
         resetState();
     }, [gridSize, mirrorConfig, resetState]);
 
+    // Create accumulating error toast for tile errors
+    const errorToastRef = useRef(createAccumulatingErrorToast('Calibration'));
+
     const start = useCallback(() => {
         if (!detectionReady) {
             setRunnerState((prev) => ({
@@ -82,6 +88,11 @@ export const useStepwiseCalibrationController = ({
             return;
         }
         runnerRef.current?.dispose();
+
+        // Clear any previous errors and create fresh toast manager
+        errorToastRef.current.clear();
+        errorToastRef.current = createAccumulatingErrorToast('Calibration');
+
         const runner = new CalibrationRunner({
             gridSize,
             mirrorConfig,
@@ -95,6 +106,9 @@ export const useStepwiseCalibrationController = ({
                 setCommandLog((prev) => [entry, ...prev].slice(0, MAX_LOG_ENTRIES));
             },
             onCommandError: showCommandErrorToast,
+            onTileError: (row, col, message) => {
+                errorToastRef.current.addError({ row, col, message });
+            },
         });
         runnerRef.current = runner;
         setCommandLog([]);

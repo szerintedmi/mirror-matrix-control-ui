@@ -38,6 +38,11 @@ export const getTileErrorTextClass = (status: TileRunState['status']): string =>
 };
 
 /**
+ * CSS class for tile warning text (non-fatal issues like step test failures).
+ */
+export const TILE_WARNING_TEXT_CLASS = 'text-amber-300';
+
+/**
  * Generic tone classes for status indicators (tags, badges, etc.)
  */
 export const TONE_CLASSES = {

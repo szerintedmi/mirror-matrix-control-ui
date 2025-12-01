@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
+import {
+    createAccumulatingErrorToast,
+    showCommandErrorToast,
+} from '@/components/common/CommandErrorToast';
 import {
     DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     type CalibrationRunnerSettings,
@@ -128,6 +131,9 @@ export const useCalibrationRunnerController = ({
         setCommandLog((prev) => [entry, ...prev].slice(0, 120));
     }, []);
 
+    // Create accumulating error toast for tile errors
+    const errorToastRef = useRef(createAccumulatingErrorToast('Calibration'));
+
     const startRunner = useCallback(() => {
         if (!detectionReady) {
             setRunnerState((prev) => ({
@@ -138,6 +144,11 @@ export const useCalibrationRunnerController = ({
         }
         runnerRef.current?.dispose();
         runnerRef.current = null;
+
+        // Clear any previous errors and create fresh toast manager
+        errorToastRef.current.clear();
+        errorToastRef.current = createAccumulatingErrorToast('Calibration');
+
         const runner = new CalibrationRunner({
             gridSize,
             mirrorConfig,
@@ -151,6 +162,9 @@ export const useCalibrationRunnerController = ({
             },
             onCommandLog: appendLogEntry,
             onCommandError: showCommandErrorToast,
+            onTileError: (row, col, message) => {
+                errorToastRef.current.addError({ row, col, message });
+            },
         });
         runnerRef.current = runner;
         setCommandLog([]);
