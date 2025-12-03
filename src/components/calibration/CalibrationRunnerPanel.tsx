@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
 import CalibrationCommandLog from '@/components/calibration/CalibrationCommandLog';
-import CalibrationHomeControls from '@/components/calibration/CalibrationHomeControls';
 import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
+import MoveActionsDropdown from '@/components/calibration/MoveActionsDropdown';
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
 import CollapsibleSection from '@/components/common/CollapsibleSection';
@@ -14,7 +14,7 @@ import {
 import type { DriverView } from '@/context/StatusContext';
 import type { CalibrationController, CalibrationMode } from '@/hooks/useCalibrationController';
 import type { CalibrationRunSummary } from '@/services/calibrationRunner';
-import type { Motor, MotorTelemetry } from '@/types';
+import type { ArrayRotation, Motor, MotorTelemetry, StagingPosition } from '@/types';
 
 interface CalibrationRunnerPanelProps {
     controller: CalibrationController;
@@ -24,15 +24,18 @@ interface CalibrationRunnerPanelProps {
      * even if no calibration has been run in the current session.
      */
     loadedProfileSummary?: CalibrationRunSummary | null;
+    gridSize: { rows: number; cols: number };
+    arrayRotation: ArrayRotation;
+    stagingPosition: StagingPosition;
 }
-
-const SUMMARY_BUTTON_CLASS =
-    'rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     controller,
     drivers,
     loadedProfileSummary,
+    gridSize,
+    arrayRotation,
+    stagingPosition,
 }) => {
     const {
         runnerState,
@@ -71,7 +74,6 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const runnerBlueprint = runnerState.summary?.gridBlueprint;
     const loadedBlueprint = loadedProfileSummary?.gridBlueprint;
     const blueprint = runnerBlueprint ?? loadedBlueprint;
-    const isUsingLoadedProfile = !runnerBlueprint && Boolean(loadedBlueprint);
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
@@ -333,60 +335,27 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         </p>
                     </div>
                 </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <MoveActionsDropdown
+                        runnerState={runnerState}
+                        tileEntries={tileEntries}
+                        isRunnerBusy={isRunnerBusy}
+                        loadedProfileSummary={loadedProfileSummary}
+                        gridSize={gridSize}
+                        arrayRotation={arrayRotation}
+                        stagingPosition={stagingPosition}
+                    />
+                    {blueprint && (
+                        <button
+                            type="button"
+                            onClick={() => setSummaryModalOpen(true)}
+                            className="text-xs text-gray-500 hover:text-gray-300 hover:underline"
+                        >
+                            View calibration math
+                        </button>
+                    )}
+                </div>
                 <CalibrationCommandLog entries={commandLog} mode={mode} />
-                {blueprint && (
-                    <div
-                        className={`mt-4 rounded-md border p-3 text-sm ${
-                            isUsingLoadedProfile
-                                ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
-                                : 'border-emerald-600/40 bg-emerald-500/10 text-emerald-200'
-                        }`}
-                    >
-                        {isUsingLoadedProfile && (
-                            <p className="mb-2 text-xs text-sky-300/70">
-                                Using loaded profile. Run calibration to update.
-                            </p>
-                        )}
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <p>
-                                    Adjusted footprint:{' '}
-                                    {(blueprint.adjustedTileFootprint.width * 100).toFixed(2)}% ×{' '}
-                                    {(blueprint.adjustedTileFootprint.height * 100).toFixed(2)}%
-                                </p>
-                                <p>
-                                    Gap: X {(blueprint.tileGap.x * 100).toFixed(2)}% · Y{' '}
-                                    {(blueprint.tileGap.y * 100).toFixed(2)}%
-                                </p>
-                                <p
-                                    className={`mt-2 text-xs ${isUsingLoadedProfile ? 'text-sky-300' : 'text-emerald-300'}`}
-                                >
-                                    Use the &quot;Calibration View&quot; toggle in the preview to
-                                    draw this grid.
-                                </p>
-                            </div>
-                            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                                <CalibrationHomeControls
-                                    runnerState={runnerState}
-                                    tileEntries={tileEntries}
-                                    isRunnerBusy={isRunnerBusy}
-                                    loadedProfileSummary={loadedProfileSummary}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setSummaryModalOpen(true)}
-                                    className={`${SUMMARY_BUTTON_CLASS} ${
-                                        isUsingLoadedProfile
-                                            ? 'border-sky-500/70 text-sky-200 hover:bg-sky-500/10'
-                                            : 'border-emerald-500/70 text-emerald-200 hover:bg-emerald-500/10'
-                                    }`}
-                                >
-                                    Calibration math
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
                 <CollapsibleSection
                     title="Tile Statuses"
                     defaultExpanded

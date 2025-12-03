@@ -441,6 +441,9 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 controller={calibrationController}
                 drivers={drivers}
                 loadedProfileSummary={calibrationProfilesController.activeProfileSummary}
+                gridSize={gridSize}
+                arrayRotation={arrayRotation}
+                stagingPosition={stagingPosition}
             />
             <div className="flex flex-col gap-6 lg:flex-row">
                 <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">

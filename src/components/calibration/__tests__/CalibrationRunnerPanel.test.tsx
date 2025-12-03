@@ -152,7 +152,15 @@ const renderPanel = async (
     const driverList = options.drivers ?? drivers;
     const controller = createMockController(state);
     await act(async () => {
-        const element = <CalibrationRunnerPanel controller={controller} drivers={driverList} />;
+        const element = (
+            <CalibrationRunnerPanel
+                controller={controller}
+                drivers={driverList}
+                gridSize={{ rows: 2, cols: 2 }}
+                arrayRotation={0}
+                stagingPosition="nearest-corner"
+            />
+        );
         const root = createRoot(container);
         root.render(element);
     });
@@ -193,17 +201,34 @@ describe('CalibrationRunnerPanel homing actions', () => {
         const container = await renderPanel({
             runnerState: { ...runnerState, summary: undefined },
         });
-        const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Move to calibrated home'),
+        // Open the Move dropdown first
+        const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Move'),
         );
-        expect(calibratedButton).toBeUndefined();
+        expect(moveDropdownButton).toBeTruthy();
+        await act(async () => {
+            moveDropdownButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        // The calibrated home button should be disabled (shown with indicator dot)
+        const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('To calibrated home'),
+        );
+        expect(calibratedButton?.hasAttribute('disabled')).toBe(true);
     });
 
     it('homes all motors to physical zero', async () => {
         const driverList = [createDriverView('aa:bb'), createDriverView('cc:dd')];
         const container = await renderPanel({ drivers: driverList });
+        // Open the Move dropdown first
+        const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Move'),
+        );
+        expect(moveDropdownButton).toBeTruthy();
+        await act(async () => {
+            moveDropdownButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
         const physicalButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Move to physical home'),
+            button.textContent?.includes('To physical home'),
         );
         expect(physicalButton).toBeTruthy();
         expect(physicalButton?.hasAttribute('disabled')).toBe(false);
@@ -235,8 +260,16 @@ describe('CalibrationRunnerPanel homing actions', () => {
 
     it('applies calibrated home offsets via move commands', async () => {
         const container = await renderPanel();
+        // Open the Move dropdown first
+        const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Move'),
+        );
+        expect(moveDropdownButton).toBeTruthy();
+        await act(async () => {
+            moveDropdownButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
         const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Move to calibrated home'),
+            button.textContent?.includes('To calibrated home'),
         );
         expect(calibratedButton).toBeTruthy();
         expect(calibratedButton?.hasAttribute('disabled')).toBe(false);
