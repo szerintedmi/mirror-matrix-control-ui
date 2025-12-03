@@ -23,6 +23,8 @@ interface UseStepwiseCalibrationControllerParams {
     captureMeasurement: CaptureBlobMeasurement;
     detectionReady: boolean;
     settings: CalibrationRunnerSettings;
+    /** Camera aspect ratio (width / height) for expected blob position calculation. */
+    cameraAspectRatio?: number;
 }
 
 export interface StepwiseCalibrationController {
@@ -46,6 +48,7 @@ export const useStepwiseCalibrationController = ({
     captureMeasurement,
     detectionReady,
     settings,
+    cameraAspectRatio,
 }: UseStepwiseCalibrationControllerParams): StepwiseCalibrationController => {
     const initialState = useMemo(
         () => createBaselineRunnerState(gridSize, mirrorConfig),
@@ -99,6 +102,7 @@ export const useStepwiseCalibrationController = ({
             motorApi,
             captureMeasurement,
             settings,
+            cameraAspectRatio,
             mode: 'step',
             onStateChange: setRunnerState,
             onStepStateChange: setStepState,
@@ -114,7 +118,15 @@ export const useStepwiseCalibrationController = ({
         setCommandLog([]);
         setStepState(null);
         runner.start();
-    }, [captureMeasurement, detectionReady, gridSize, mirrorConfig, motorApi, settings]);
+    }, [
+        cameraAspectRatio,
+        captureMeasurement,
+        detectionReady,
+        gridSize,
+        mirrorConfig,
+        motorApi,
+        settings,
+    ]);
 
     const advance = useCallback(() => {
         runnerRef.current?.advanceStep();

@@ -49,11 +49,12 @@ export const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
     };
 };
 
-export const STAGING_POSITIONS: StagingPosition[] = ['corner', 'bottom', 'left'];
-export const DEFAULT_STAGING_POSITION: StagingPosition = 'corner';
+export const STAGING_POSITIONS: StagingPosition[] = ['nearest-corner', 'corner', 'bottom', 'left'];
+export const DEFAULT_STAGING_POSITION: StagingPosition = 'nearest-corner';
 
 export const STAGING_POSITION_LABELS: Record<StagingPosition, string> = {
-    corner: 'Corner',
+    'nearest-corner': 'Nearest Corner',
+    corner: 'Corner (all same)',
     bottom: 'Bottom',
     left: 'Left',
 };
@@ -64,7 +65,17 @@ export interface CalibrationRunnerSettings {
     sampleTimeoutMs: number;
     maxDetectionRetries: number;
     retryDelayMs: number;
+    /** Maximum distance (normalized 0-1) from expected position to accept a blob. */
+    maxBlobDistanceThreshold: number;
+    /** Tolerance radius (normalized 0-1) for first tile detection when no prior measurements exist. */
+    firstTileTolerance: number;
 }
+
+/** Default max blob distance threshold (25% of frame dimension). */
+export const DEFAULT_MAX_BLOB_DISTANCE_THRESHOLD = 0.25;
+
+/** Default first tile tolerance - larger radius for initial detection (20% of frame dimension). */
+export const DEFAULT_FIRST_TILE_TOLERANCE = 0.2;
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 1200,
@@ -72,4 +83,6 @@ export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     sampleTimeoutMs: 1_500,
     maxDetectionRetries: 5,
     retryDelayMs: 150,
+    maxBlobDistanceThreshold: DEFAULT_MAX_BLOB_DISTANCE_THRESHOLD,
+    firstTileTolerance: DEFAULT_FIRST_TILE_TOLERANCE,
 };

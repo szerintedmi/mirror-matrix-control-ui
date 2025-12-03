@@ -10,6 +10,14 @@ import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
 import { viewDeltaToCentered, viewToCentered } from '@/utils/centeredCoordinates';
 
+/** Parameters for blob selection when reading a sample. */
+export interface BlobSelectionParams {
+    /** Expected blob position in view coordinates (0 to 1). If provided, selects closest blob. */
+    expectedPosition?: { x: number; y: number };
+    /** Maximum distance from expected position to accept a blob (view coords). */
+    maxDistance?: number;
+}
+
 const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
         if (signal?.aborted) {
@@ -228,17 +236,38 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
     };
 };
 
+/** Expected position info for debug overlay display */
+export interface ExpectedBlobPositionInfo {
+    /** Position in view coords (0 to 1) */
+    position: { x: number; y: number };
+    /** Max distance threshold for accepting a blob (view coords) */
+    maxDistance?: number;
+}
+
 interface UseStableBlobMeasurementParams {
-    readSample: () => BlobSample | null;
+    readSample: (params?: BlobSelectionParams) => BlobSample | null;
     detectionSequenceRef: MutableRefObject<number>;
+    /** Optional callback to set the expected position for debug overlay display */
+    onExpectedPositionChange?: (info: ExpectedBlobPositionInfo | null) => void;
 }
 
 export const useStableBlobMeasurement = ({
     readSample,
     detectionSequenceRef,
+    onExpectedPositionChange,
 }: UseStableBlobMeasurementParams): CaptureBlobMeasurement => {
     return useCallback<CaptureBlobMeasurement>(
-        async ({ timeoutMs, signal }) => {
+        async ({ timeoutMs, signal, expectedPosition, maxDistance }) => {
+            // Update debug overlay with expected position and tolerance (in view coords 0-1)
+            onExpectedPositionChange?.(
+                expectedPosition ? { position: expectedPosition, maxDistance } : null,
+            );
+
+            // Expected position and max distance are already in view coords (0 to 1)
+            const selectionParams: BlobSelectionParams | undefined =
+                expectedPosition || maxDistance !== undefined
+                    ? { expectedPosition, maxDistance }
+                    : undefined;
             if (DETECTION_BLOB_CAPTURE_DELAY_MS > 0) {
                 await waitFor(DETECTION_BLOB_CAPTURE_DELAY_MS, signal);
             }
@@ -252,7 +281,7 @@ export const useStableBlobMeasurement = ({
                 const sequenceChanged = detectionSequenceRef.current !== baselineSequence;
                 if (sequenceChanged) {
                     baselineSequence = detectionSequenceRef.current;
-                    const sample = readSample();
+                    const sample = readSample(selectionParams);
                     if (sample) {
                         if (!isSampleWithinIgnoreThreshold(sample, samples)) {
                             continue;
@@ -292,6 +321,6 @@ export const useStableBlobMeasurement = ({
             }
             return null;
         },
-        [detectionSequenceRef, readSample],
+        [detectionSequenceRef, onExpectedPositionChange, readSample],
     );
 };

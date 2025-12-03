@@ -1,9 +1,25 @@
 import {
     DEFAULT_CALIBRATION_RUNNER_SETTINGS,
+    DEFAULT_ROI,
     type CalibrationRunnerSettings,
 } from '@/constants/calibration';
-import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
+import {
+    computeExpectedBlobPosition as computeExpectedBlobPositionFn,
+    computePoseTargets,
+    computeCalibrationSummary,
+    clampSteps,
+    roundSteps,
+    getAxisStepDelta,
+    computeAxisStepTestResult,
+    combineStepTestResults,
+    computeAlignmentTargetSteps,
+    type Axis,
+    type TileMeasurement,
+    type StagingConfig,
+    type TileCalibrationResult as TileCalibrationResultFromModule,
+    type AxisStepTestResult,
+} from '@/services/calibration';
 import { type CommandFailure } from '@/services/pendingCommandTracker';
 import type {
     ArrayRotation,
@@ -13,13 +29,13 @@ import type {
     MirrorAssignment,
     MirrorConfig,
     Motor,
+    NormalizedRoi,
     StagingPosition,
 } from '@/types';
 import type { CommandErrorContext } from '@/types/commandError';
-import { getStepTestJogDirection } from '@/utils/arrayRotation';
+import { centeredToView } from '@/utils/centeredCoordinates';
 import { extractCommandErrorDetail } from '@/utils/commandErrors';
-
-type Axis = 'x' | 'y';
+import { asCentered, rawCoords } from '@/utils/coordinates';
 
 export interface TileAddress {
     row: number;
@@ -48,10 +64,18 @@ const formatMacSuffix = (mac: string): string => {
     return compact.slice(-6) || compact;
 };
 
-export type CaptureBlobMeasurement = (params: {
+export interface CaptureBlobMeasurementParams {
     timeoutMs: number;
     signal?: AbortSignal;
-}) => Promise<BlobMeasurement | null>;
+    /** Expected blob position in viewport coordinates (0 to 1). If provided, selects closest blob. */
+    expectedPosition?: { x: number; y: number };
+    /** Maximum distance from expected position to accept a blob (viewport units). */
+    maxDistance?: number;
+}
+
+export type CaptureBlobMeasurement = (
+    params: CaptureBlobMeasurementParams,
+) => Promise<BlobMeasurement | null>;
 
 export type CalibrationRunnerPhase =
     | 'idle'
@@ -169,6 +193,17 @@ export interface CalibrationRunnerParams {
      * - 'left': Tiles distributed vertically along left edge
      */
     stagingPosition?: StagingPosition;
+    /**
+     * Camera aspect ratio (width / height). Used to compute expected blob positions
+     * that account for isotropic coordinate space limitations.
+     * Defaults to 16/9 (1.778) if not specified.
+     */
+    cameraAspectRatio?: number;
+    /**
+     * ROI (Region of Interest) settings. Used to compute expected blob position
+     * for the first tile when no prior measurements exist.
+     */
+    roi?: NormalizedRoi;
     onStateChange?: (state: CalibrationRunnerState) => void;
     mode?: CalibrationRunnerMode;
     onStepStateChange?: (state: CalibrationStepState) => void;
@@ -178,28 +213,6 @@ export interface CalibrationRunnerParams {
     /** Callback for tile-level errors (detection failures, calibration errors) */
     onTileError?: (row: number, col: number, message: string) => void;
 }
-
-const clampSteps = (value: number): number =>
-    Math.min(MOTOR_MAX_POSITION_STEPS, Math.max(MOTOR_MIN_POSITION_STEPS, value));
-
-const roundSteps = (value: number): number => {
-    if (!Number.isFinite(value)) {
-        return 0;
-    }
-    return Math.round(value);
-};
-
-const getAxisStepDelta = (
-    axis: Axis,
-    deltaSteps: number,
-    arrayRotation: ArrayRotation,
-): number | null => {
-    if (deltaSteps <= 0) {
-        return null;
-    }
-    const jogDirection = getStepTestJogDirection(axis, arrayRotation);
-    return clampSteps(deltaSteps * jogDirection);
-};
 
 class RunnerAbortError extends Error {
     constructor(message = 'Calibration run aborted') {
@@ -314,6 +327,10 @@ export class CalibrationRunner {
 
     private readonly stagingPosition: StagingPosition;
 
+    private readonly cameraAspectRatio: number;
+
+    private readonly roi: NormalizedRoi;
+
     private readonly descriptors: TileDescriptor[];
 
     private readonly calibratableTiles: TileDescriptor[];
@@ -365,6 +382,8 @@ export class CalibrationRunner {
         this.settings = { ...DEFAULT_CALIBRATION_RUNNER_SETTINGS, ...params.settings };
         this.arrayRotation = params.arrayRotation ?? 0;
         this.stagingPosition = params.stagingPosition ?? 'corner';
+        this.cameraAspectRatio = params.cameraAspectRatio ?? 16 / 9;
+        this.roi = params.roi ?? DEFAULT_ROI;
         this.onStateChange = params.onStateChange;
         this.mode = params.mode ?? 'auto';
         this.onStepStateChange = params.onStepStateChange;
@@ -644,7 +663,28 @@ export class CalibrationRunner {
 
         await this.moveTileToPose(tile, 'home', measureGroup);
 
-        const homeResult = await this.captureMeasurementWithRetries();
+        const completedMeasurements = this.getCompletedTileMeasurements();
+        const isFirstTile = completedMeasurements.length === 0;
+        const expectedPositionCoord = computeExpectedBlobPositionFn(
+            tile.row,
+            tile.col,
+            completedMeasurements,
+            {
+                gridSize: this.gridSize,
+                arrayRotation: this.arrayRotation,
+                roi: this.roi,
+            },
+        );
+        const expectedPosition = rawCoords(expectedPositionCoord);
+        // Use larger tolerance for first tile (no prior measurements to estimate grid from)
+        const homeTolerance = isFirstTile
+            ? this.settings.firstTileTolerance
+            : this.settings.maxBlobDistanceThreshold;
+        console.log('[CalibrationRunner] Home expected position (view 0-1):', expectedPosition);
+        const homeResult = await this.captureMeasurementWithRetries(
+            expectedPosition,
+            homeTolerance,
+        );
         if (!homeResult.measurement) {
             const errorMessage = homeResult.error ?? 'Unable to detect blob at home position';
             this.markTileFailed(tile, errorMessage);
@@ -691,12 +731,9 @@ export class CalibrationRunner {
         const yDelta = yMotor
             ? getAxisStepDelta('y', this.settings.deltaSteps, this.arrayRotation)
             : null;
-        const sizeDeltas: number[] = [];
-        const stepToDisplacement: { x: number | null; y: number | null } = {
-            x: null,
-            y: null,
-        };
         const stepTestWarnings: string[] = [];
+        let xStepResult: AxisStepTestResult | null = null;
+        let yStepResult: AxisStepTestResult | null = null;
         let positionedForYMeasurementInParallel = false;
 
         if (xMotor && xDelta !== null) {
@@ -707,31 +744,39 @@ export class CalibrationRunner {
                 measureGroup,
             );
             await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
-            const xResult = await this.captureMeasurementWithRetries();
-            if (xResult.measurement) {
-                const measurement = xResult.measurement;
-                const displacement = measurement.x - homeMeasurement.x;
-                const perStep = displacement / xDelta;
-                if (Number.isFinite(perStep)) {
-                    stepToDisplacement.x = perStep;
-                }
-                const sizeDelta = measurement.size - homeMeasurement.size;
-                if (Number.isFinite(sizeDelta)) {
-                    sizeDeltas.push(sizeDelta);
-                }
+            // Use home measurement position as expected (step test moves slightly from home)
+            // Convert from centered coords (-1 to 1) to view coords (0 to 1) for blob selection
+            const xExpected = {
+                x: centeredToView(homeMeasurement.x),
+                y: centeredToView(homeMeasurement.y),
+            };
+            console.log(
+                '[CalibrationRunner] X step test expected (view 0-1):',
+                xExpected,
+                'from home (centered):',
+                { x: homeMeasurement.x, y: homeMeasurement.y },
+            );
+            const xCaptureResult = await this.captureMeasurementWithRetries(xExpected);
+            if (xCaptureResult.measurement) {
+                xStepResult = computeAxisStepTestResult(
+                    homeMeasurement,
+                    xCaptureResult.measurement,
+                    'x',
+                    xDelta,
+                );
                 this.logCommand(
                     'Captured X step test measurement',
                     {
-                        displacement,
-                        perStep,
-                        size: measurement.size,
+                        displacement: xStepResult.displacement,
+                        perStep: xStepResult.perStep,
+                        size: xCaptureResult.measurement.size,
                     },
                     tileAddress,
                     measureGroup,
                 );
-            } else if (xResult.error) {
+            } else if (xCaptureResult.error) {
                 // Track warning and emit to toast - step test is optional
-                const warning = `X step test: ${xResult.error}`;
+                const warning = `X step test: ${xCaptureResult.error}`;
                 stepTestWarnings.push(warning);
                 this.onTileError?.(tile.row, tile.col, warning);
             }
@@ -753,40 +798,43 @@ export class CalibrationRunner {
                 );
                 await this.moveAxisToPosition(yMotor, yDelta, measureGroup);
             }
-            const yResult = await this.captureMeasurementWithRetries();
-            if (yResult.measurement) {
-                const measurement = yResult.measurement;
-                const displacement = measurement.y - homeMeasurement.y;
-                const perStep = displacement / yDelta;
-                if (Number.isFinite(perStep)) {
-                    stepToDisplacement.y = perStep;
-                }
-                const sizeDelta = measurement.size - homeMeasurement.size;
-                if (Number.isFinite(sizeDelta)) {
-                    sizeDeltas.push(sizeDelta);
-                }
+            // Use home measurement position as expected (step test moves slightly from home)
+            // Convert from centered coords (-1 to 1) to view coords (0 to 1) for blob selection
+            const yExpected = {
+                x: centeredToView(homeMeasurement.x),
+                y: centeredToView(homeMeasurement.y),
+            };
+            console.log('[CalibrationRunner] Y step test expected (view 0-1):', yExpected);
+            const yCaptureResult = await this.captureMeasurementWithRetries(yExpected);
+            if (yCaptureResult.measurement) {
+                yStepResult = computeAxisStepTestResult(
+                    homeMeasurement,
+                    yCaptureResult.measurement,
+                    'y',
+                    yDelta,
+                );
                 this.logCommand(
                     'Captured Y step test measurement',
                     {
-                        displacement,
-                        perStep,
-                        size: measurement.size,
+                        displacement: yStepResult.displacement,
+                        perStep: yStepResult.perStep,
+                        size: yCaptureResult.measurement.size,
                     },
                     tileAddress,
                     measureGroup,
                 );
-            } else if (yResult.error) {
+            } else if (yCaptureResult.error) {
                 // Track warning and emit to toast - step test is optional
-                const warning = `Y step test: ${yResult.error}`;
+                const warning = `Y step test: ${yCaptureResult.error}`;
                 stepTestWarnings.push(warning);
                 this.onTileError?.(tile.row, tile.col, warning);
             }
         }
 
-        const sizeDeltaAtStepTest =
-            sizeDeltas.length > 0
-                ? sizeDeltas.reduce((sum, value) => sum + value, 0) / sizeDeltas.length
-                : null;
+        const { stepToDisplacement, sizeDeltaAtStepTest } = combineStepTestResults(
+            xStepResult,
+            yStepResult,
+        );
 
         const metrics: TileCalibrationMetrics = {
             home: homeMeasurement,
@@ -870,7 +918,12 @@ export class CalibrationRunner {
         pose: 'home' | 'aside',
         group?: string,
     ): Promise<void> {
-        const targets = this.computePoseTargets(tile, pose);
+        const stagingConfig: StagingConfig = {
+            gridSize: this.gridSize,
+            arrayRotation: this.arrayRotation,
+            stagingPosition: this.stagingPosition,
+        };
+        const targets = computePoseTargets(tile, pose, stagingConfig);
         const tileAddress: TileAddress = { row: tile.row, col: tile.col, key: tile.key };
         this.logCommand(
             pose === 'home' ? 'Moving tile to home' : 'Moving tile aside',
@@ -909,54 +962,6 @@ export class CalibrationRunner {
         }
     }
 
-    private computePoseTargets(
-        tile: TileDescriptor,
-        pose: 'home' | 'aside',
-    ): {
-        x: number;
-        y: number;
-    } {
-        if (pose === 'home') {
-            return { x: 0, y: 0 };
-        }
-        // Compute aside position accounting for array rotation.
-        // Goal: move tiles to a consistent visual position from camera view.
-        // Baseline: +X = LEFT, +Y = DOWN, so MAX = LEFT/DOWN.
-        // At 0° and 90°: MAX moves left/down, at 180° and 270°: MIN moves left/down (inverted).
-        const asideX =
-            this.arrayRotation === 0 || this.arrayRotation === 90
-                ? MOTOR_MAX_POSITION_STEPS
-                : MOTOR_MIN_POSITION_STEPS;
-        const asideY =
-            this.arrayRotation === 0 || this.arrayRotation === 90
-                ? MOTOR_MIN_POSITION_STEPS
-                : MOTOR_MAX_POSITION_STEPS;
-
-        switch (this.stagingPosition) {
-            case 'corner':
-                // All tiles to the same bottom-left corner position
-                return { x: asideX, y: asideY };
-            case 'bottom':
-                // Y at bottom extreme, X distributed horizontally by column
-                return { x: this.computeDistributedAxisTarget(tile.col), y: asideY };
-            case 'left':
-            default:
-                // X at left extreme, Y distributed vertically by column
-                return { x: asideX, y: this.computeDistributedAxisTarget(tile.col) };
-        }
-    }
-
-    private computeDistributedAxisTarget(column: number): number {
-        const totalCols = Math.max(1, this.gridSize.cols);
-        if (totalCols === 1) {
-            return clampSteps((MOTOR_MAX_POSITION_STEPS + MOTOR_MIN_POSITION_STEPS) / 2);
-        }
-        const normalizedColumn = column / (totalCols - 1);
-        const span = MOTOR_MAX_POSITION_STEPS - MOTOR_MIN_POSITION_STEPS;
-        const rawTarget = MOTOR_MIN_POSITION_STEPS + normalizedColumn * span;
-        return clampSteps(rawTarget);
-    }
-
     private async moveAxisToPosition(
         motor: Motor | null,
         target: number,
@@ -992,10 +997,14 @@ export class CalibrationRunner {
         this.axisPositions.set(axisKey, clamped);
     }
 
-    private async captureMeasurementWithRetries(): Promise<{
+    private async captureMeasurementWithRetries(
+        expectedPosition?: { x: number; y: number },
+        maxDistanceOverride?: number,
+    ): Promise<{
         measurement: BlobMeasurement | null;
         error?: string;
     }> {
+        const maxDistance = maxDistanceOverride ?? this.settings.maxBlobDistanceThreshold;
         let lastError: string | undefined;
         for (let attempt = 0; attempt < this.settings.maxDetectionRetries; attempt += 1) {
             await this.checkContinue();
@@ -1003,11 +1012,15 @@ export class CalibrationRunner {
                 const measurement = await this.captureMeasurement({
                     timeoutMs: this.settings.sampleTimeoutMs,
                     signal: this.abortController.signal,
+                    expectedPosition,
+                    maxDistance,
                 });
                 if (measurement) {
                     return { measurement };
                 }
-                lastError = 'No blob detected';
+                lastError = expectedPosition
+                    ? `No blob detected within ${maxDistance.toFixed(2)} of expected position`
+                    : 'No blob detected';
             } catch (error) {
                 // Capture error message (e.g., "Blob measurement unstable: ...")
                 lastError = error instanceof Error ? error.message : String(error);
@@ -1022,6 +1035,28 @@ export class CalibrationRunner {
             await waitWithSignal(this.settings.retryDelayMs, this.abortController.signal);
         }
         return { measurement: null, error: lastError };
+    }
+
+    /**
+     * Get all tiles that have completed home measurements.
+     * Returns measurements in centered coordinates as required by expectedPosition module.
+     */
+    private getCompletedTileMeasurements(): TileMeasurement[] {
+        const measurements: TileMeasurement[] = [];
+
+        for (const [key, tileState] of Object.entries(this.state.tiles)) {
+            if (tileState.status === 'completed' && tileState.metrics?.home) {
+                const [rowStr, colStr] = key.split('-');
+                measurements.push({
+                    row: parseInt(rowStr, 10),
+                    col: parseInt(colStr, 10),
+                    // Home measurements are already in centered coords (-1 to 1)
+                    position: asCentered(tileState.metrics.home.x, tileState.metrics.home.y),
+                });
+            }
+        }
+
+        return measurements;
     }
 
     private applySummaryMetrics(summary: CalibrationRunSummary): void {
@@ -1067,11 +1102,11 @@ export class CalibrationRunner {
                 continue;
             }
             const tileAddress: TileAddress = { row: tile.row, col: tile.col, key: tile.key };
-            const targetX = this.computeAlignmentTargetSteps(
+            const targetX = computeAlignmentTargetSteps(
                 -result.homeOffset.dx,
                 result.stepToDisplacement?.x ?? null,
             );
-            const targetY = this.computeAlignmentTargetSteps(
+            const targetY = computeAlignmentTargetSteps(
                 -result.homeOffset.dy,
                 result.stepToDisplacement?.y ?? null,
             );
@@ -1097,25 +1132,6 @@ export class CalibrationRunner {
         if (moveTasks.length > 0) {
             await Promise.all(moveTasks);
         }
-    }
-
-    private computeAlignmentTargetSteps(
-        displacement: number,
-        perStep: number | null,
-    ): number | null {
-        if (
-            perStep === null ||
-            perStep === 0 ||
-            !Number.isFinite(perStep) ||
-            Math.abs(perStep) < 1e-6
-        ) {
-            return null;
-        }
-        const rawSteps = displacement / perStep;
-        if (!Number.isFinite(rawSteps) || Math.abs(rawSteps) > MOTOR_MAX_POSITION_STEPS) {
-            return null;
-        }
-        return clampSteps(Math.round(rawSteps));
     }
 
     private async checkContinue(): Promise<void> {
@@ -1213,138 +1229,19 @@ export class CalibrationRunner {
     }
 
     private computeSummary(): CalibrationRunSummary {
-        const measuredTiles = Array.from(this.tileResults.values()).filter(
-            (entry) =>
-                (entry.status === 'completed' || entry.status === 'measuring') &&
-                entry.homeMeasurement,
-        );
-        let gridBlueprint: CalibrationGridBlueprint | null = null;
-        if (measuredTiles.length > 0) {
-            const largestSize = measuredTiles.reduce((max, entry) => {
-                const size = entry.homeMeasurement?.size ?? 0;
-                return size > max ? size : max;
-            }, 0);
-            const tileWidth = largestSize;
-            const tileHeight = largestSize;
-            const normalizedGap = Math.max(0, Math.min(1, this.settings.gridGapNormalized)) * 2;
-            const gapX = normalizedGap;
-            const gapY = normalizedGap;
-            let spacingX = tileWidth + gapX;
-            let spacingY = tileHeight + gapY;
-            let totalWidth = this.gridSize.cols * tileWidth + (this.gridSize.cols - 1) * gapX;
-            let totalHeight = this.gridSize.rows * tileHeight + (this.gridSize.rows - 1) * gapY;
-            if (totalWidth > 2 || totalHeight > 2) {
-                // Scaling logic removed to preserve isotropic aspect ratio.
-                // If the grid is too large, it will simply extend beyond the [-1, 1] bounds,
-                // which is acceptable for the coordinate system (it just means it's larger than the view).
-            }
-            let originX = 0;
-            let originY = 0;
-            let minOriginX = Number.POSITIVE_INFINITY;
-            let minOriginY = Number.POSITIVE_INFINITY;
-            measuredTiles.forEach((entry) => {
-                const measurement = entry.homeMeasurement;
-                if (!measurement) {
-                    return;
-                }
-                const candidateX = measurement.x - (entry.tile.col * spacingX + tileWidth / 2);
-                const candidateY = measurement.y - (entry.tile.row * spacingY + tileHeight / 2);
-                if (candidateX < minOriginX) {
-                    minOriginX = candidateX;
-                }
-                if (candidateY < minOriginY) {
-                    minOriginY = candidateY;
-                }
-            });
-            if (Number.isFinite(minOriginX)) {
-                originX = minOriginX;
-            }
-            if (Number.isFinite(minOriginY)) {
-                originY = minOriginY;
-            }
-            const cameraOriginOffset = {
-                x: originX + totalWidth / 2,
-                y: originY + totalHeight / 2,
-            };
-            originX -= cameraOriginOffset.x;
-            originY -= cameraOriginOffset.y;
-            gridBlueprint = {
-                adjustedTileFootprint: {
-                    width: tileWidth,
-                    height: tileHeight,
-                },
-                tileGap: { x: gapX, y: gapY },
-                gridOrigin: { x: originX, y: originY },
-                cameraOriginOffset,
-            };
-        }
-
-        const spacingX = gridBlueprint
-            ? gridBlueprint.adjustedTileFootprint.width + gridBlueprint.tileGap.x
-            : 0;
-        const spacingY = gridBlueprint
-            ? gridBlueprint.adjustedTileFootprint.height + gridBlueprint.tileGap.y
-            : 0;
-
-        const recenterMeasurement = gridBlueprint
-            ? (measurement: BlobMeasurement): BlobMeasurement => {
-                  const recenteredStats = measurement.stats
-                      ? {
-                            ...measurement.stats,
-                            median: {
-                                ...measurement.stats.median,
-                                x: measurement.stats.median.x - gridBlueprint.cameraOriginOffset.x,
-                                y: measurement.stats.median.y - gridBlueprint.cameraOriginOffset.y,
-                            },
-                        }
-                      : undefined;
-                  return {
-                      ...measurement,
-                      x: measurement.x - gridBlueprint.cameraOriginOffset.x,
-                      y: measurement.y - gridBlueprint.cameraOriginOffset.y,
-                      stats: recenteredStats,
-                  };
-              }
-            : null;
-
-        const summaryTiles: Record<string, TileCalibrationResult> = {};
+        // Convert local TileCalibrationResult to module type
+        const moduleResults = new Map<string, TileCalibrationResultFromModule>();
         for (const [key, result] of this.tileResults.entries()) {
-            const normalizedMeasurement =
-                recenterMeasurement && result.homeMeasurement
-                    ? recenterMeasurement(result.homeMeasurement)
-                    : (result.homeMeasurement ?? null);
-            let tileSummary: TileCalibrationResult = normalizedMeasurement
-                ? { ...result, homeMeasurement: normalizedMeasurement }
-                : result;
-            if (result.status !== 'completed' || !normalizedMeasurement || !gridBlueprint) {
-                summaryTiles[key] = tileSummary;
-                continue;
-            }
-            const tile = result.tile;
-            const adjustedCenterX =
-                gridBlueprint.gridOrigin.x +
-                tile.col * spacingX +
-                gridBlueprint.adjustedTileFootprint.width / 2;
-            const adjustedCenterY =
-                gridBlueprint.gridOrigin.y +
-                tile.row * spacingY +
-                gridBlueprint.adjustedTileFootprint.height / 2;
-            const dx = normalizedMeasurement.x - adjustedCenterX;
-            const dy = normalizedMeasurement.y - adjustedCenterY;
-            tileSummary = {
-                ...tileSummary,
-                homeOffset: { dx, dy },
-                adjustedHome: { x: adjustedCenterX, y: adjustedCenterY },
-            };
-            summaryTiles[key] = tileSummary;
+            moduleResults.set(key, result as TileCalibrationResultFromModule);
         }
-        return {
-            gridBlueprint,
-            stepTestSettings: {
-                deltaSteps: this.settings.deltaSteps,
-            },
-            tiles: summaryTiles,
+
+        const summaryConfig = {
+            gridSize: this.gridSize,
+            gridGapNormalized: this.settings.gridGapNormalized,
+            deltaSteps: this.settings.deltaSteps,
         };
+
+        return computeCalibrationSummary(moduleResults, summaryConfig);
     }
 
     private publishSummarySnapshot(): void {

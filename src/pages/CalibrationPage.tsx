@@ -209,6 +209,14 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Only load once on mount
 
+    // Compute camera aspect ratio for expected blob position calculation
+    const calibrationCameraAspectRatio = useMemo(() => {
+        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
+            return videoDimensions.width / videoDimensions.height;
+        }
+        return undefined; // Will default to 16:9 in calibration runner
+    }, [videoDimensions.width, videoDimensions.height]);
+
     const {
         runnerState,
         runnerSettings,
@@ -226,6 +234,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         detectionReady,
         arrayRotation,
         stagingPosition,
+        cameraAspectRatio: calibrationCameraAspectRatio,
+        roi,
         initialSessionState,
     });
 
@@ -239,6 +249,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         captureMeasurement: captureBlobMeasurement,
         detectionReady,
         settings: runnerSettings,
+        cameraAspectRatio: calibrationCameraAspectRatio,
     });
 
     const [runnerMode, setRunnerMode] = useState<'auto' | 'step'>('auto');
@@ -426,6 +437,12 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 onDeltaStepsChange={(v) => updateRunnerSetting('deltaSteps', v)}
                 gridGapNormalized={runnerSettings.gridGapNormalized}
                 onGridGapNormalizedChange={(v) => updateRunnerSetting('gridGapNormalized', v)}
+                maxBlobDistanceThreshold={runnerSettings.maxBlobDistanceThreshold}
+                onMaxBlobDistanceThresholdChange={(v) =>
+                    updateRunnerSetting('maxBlobDistanceThreshold', v)
+                }
+                firstTileTolerance={runnerSettings.firstTileTolerance}
+                onFirstTileToleranceChange={(v) => updateRunnerSetting('firstTileTolerance', v)}
                 disabled={isCalibrationActive}
             />
             <CalibrationRunnerPanel

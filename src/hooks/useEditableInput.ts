@@ -30,6 +30,11 @@ export interface UseEditableInputOptions<T> {
      * Returns [transformedValue, transformedDisplayString].
      */
     transform?: (value: T) => [T, string];
+    /**
+     * If true, transform is only applied on blur, not during typing.
+     * Allows typing multi-digit values like "10" without immediate clamping when "1" is typed.
+     */
+    transformOnBlur?: boolean;
 }
 
 /**
@@ -90,7 +95,7 @@ export interface UseEditableInputResult {
  * ```
  */
 export function useEditableInput<T>(options: UseEditableInputOptions<T>): UseEditableInputResult {
-    const { value, onChange, format, parse, validateInput, transform } = options;
+    const { value, onChange, format, parse, validateInput, transform, transformOnBlur } = options;
 
     const [draft, setDraft] = useState('');
     const [isEditing, setIsEditing] = useState(false);
@@ -105,9 +110,19 @@ export function useEditableInput<T>(options: UseEditableInputOptions<T>): UseEdi
     }, [canonicalDisplay]);
 
     const handleBlur = useCallback(() => {
+        // Apply transform on blur if transformOnBlur is set
+        if (transformOnBlur && transform && draft !== '' && !draft.endsWith('.')) {
+            const parsed = parse(draft);
+            if (parsed !== null) {
+                const [transformed] = transform(parsed);
+                if (transformed !== value) {
+                    onChange(transformed);
+                }
+            }
+        }
         setIsEditing(false);
         setDraft('');
-    }, []);
+    }, [transformOnBlur, transform, draft, parse, value, onChange]);
 
     const handleChange = useCallback(
         (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,8 +146,8 @@ export function useEditableInput<T>(options: UseEditableInputOptions<T>): UseEdi
                 return;
             }
 
-            // Apply transform if provided
-            if (transform) {
+            // Apply transform if provided (unless deferred to blur)
+            if (transform && !transformOnBlur) {
                 const [transformed, displayStr] = transform(parsed);
                 if (displayStr !== inputValue) {
                     setDraft(displayStr);
@@ -148,7 +163,7 @@ export function useEditableInput<T>(options: UseEditableInputOptions<T>): UseEdi
                 }
             }
         },
-        [validateInput, parse, transform, value, onChange],
+        [validateInput, parse, transform, transformOnBlur, value, onChange],
     );
 
     return {

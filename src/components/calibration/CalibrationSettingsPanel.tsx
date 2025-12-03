@@ -14,6 +14,10 @@ interface CalibrationSettingsPanelProps {
     onDeltaStepsChange: (value: number) => void;
     gridGapNormalized: number;
     onGridGapNormalizedChange: (value: number) => void;
+    maxBlobDistanceThreshold: number;
+    onMaxBlobDistanceThresholdChange: (value: number) => void;
+    firstTileTolerance: number;
+    onFirstTileToleranceChange: (value: number) => void;
     disabled?: boolean;
 }
 
@@ -29,6 +33,10 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
     onDeltaStepsChange,
     gridGapNormalized,
     onGridGapNormalizedChange,
+    maxBlobDistanceThreshold,
+    onMaxBlobDistanceThresholdChange,
+    firstTileTolerance,
+    onFirstTileToleranceChange,
     disabled = false,
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -59,6 +67,48 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
         transform: (percent) => {
             const clamped = Math.min(Math.max(percent, 0), 5);
             const normalized = Number((clamped / 100).toFixed(4));
+            return [normalized, clamped.toString()];
+        },
+    });
+
+    const maxBlobDistanceInput = useEditableInput({
+        value: maxBlobDistanceThreshold,
+        onChange: onMaxBlobDistanceThresholdChange,
+        format: (v) => {
+            const percent = Number((v * 100).toFixed(0));
+            return percent.toString();
+        },
+        parse: (s) => {
+            const percent = Number(s);
+            return Number.isNaN(percent) ? null : percent;
+        },
+        validateInput: (s) => DECIMAL_PATTERN.test(s),
+        // Defer clamping to blur to allow typing multi-digit values like "25" without immediate clamp when "2" is typed
+        transformOnBlur: true,
+        transform: (percent) => {
+            const clamped = Math.min(Math.max(percent, 1), 100);
+            const normalized = Number((clamped / 100).toFixed(2));
+            return [normalized, clamped.toString()];
+        },
+    });
+
+    const firstTileToleranceInput = useEditableInput({
+        value: firstTileTolerance,
+        onChange: onFirstTileToleranceChange,
+        format: (v) => {
+            const percent = Number((v * 100).toFixed(0));
+            return percent.toString();
+        },
+        parse: (s) => {
+            const percent = Number(s);
+            return Number.isNaN(percent) ? null : percent;
+        },
+        validateInput: (s) => DECIMAL_PATTERN.test(s),
+        // Defer clamping to blur to allow typing multi-digit values like "10" without immediate clamp when "1" is typed
+        transformOnBlur: true,
+        transform: (percent) => {
+            const clamped = Math.min(Math.max(percent, 5), 50);
+            const normalized = Number((clamped / 100).toFixed(2));
             return [normalized, clamped.toString()];
         },
     });
@@ -194,8 +244,8 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                         </p>
                     </fieldset>
 
-                    {/* Step Delta & Grid Gap */}
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Step Delta, Grid Gap, 1st Tile Tolerance & Tile Tolerance */}
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <label className="text-sm text-gray-300">
                             <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
                                 Step delta (steps)
@@ -226,6 +276,40 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                                 onChange={gridGapInput.onChange}
                                 disabled={disabled}
                                 className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                        </label>
+                        <label className="text-sm text-gray-300">
+                            <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                                1st Tile tolerance (%)
+                            </span>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={firstTileToleranceInput.displayValue}
+                                onFocus={firstTileToleranceInput.onFocus}
+                                onBlur={firstTileToleranceInput.onBlur}
+                                onChange={firstTileToleranceInput.onChange}
+                                disabled={disabled}
+                                className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                title="Larger tolerance for first tile detection when no prior measurements exist"
+                            />
+                        </label>
+                        <label className="text-sm text-gray-300">
+                            <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                                Tile tolerance (%)
+                            </span>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={maxBlobDistanceInput.displayValue}
+                                onFocus={maxBlobDistanceInput.onFocus}
+                                onBlur={maxBlobDistanceInput.onBlur}
+                                onChange={maxBlobDistanceInput.onChange}
+                                disabled={disabled}
+                                className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                title="Maximum distance from expected position to accept a detected blob (shown as green circle)"
                             />
                         </label>
                     </div>

@@ -18,7 +18,7 @@ import {
     type CaptureBlobMeasurement,
     createBaselineRunnerState,
 } from '@/services/calibrationRunner';
-import type { ArrayRotation, MirrorConfig, StagingPosition } from '@/types';
+import type { ArrayRotation, MirrorConfig, NormalizedRoi, StagingPosition } from '@/types';
 
 const clampSetting = (value: number, min: number, max: number): number =>
     Math.max(min, Math.min(max, value));
@@ -38,6 +38,14 @@ interface UseCalibrationRunnerControllerParams {
      * Position where tiles are moved during staging phase.
      */
     stagingPosition: StagingPosition;
+    /**
+     * Camera aspect ratio (width / height) for expected blob position calculation.
+     */
+    cameraAspectRatio?: number;
+    /**
+     * ROI (Region of Interest) settings for expected blob position calculation.
+     */
+    roi: NormalizedRoi;
     /**
      * Optional initial state to restore from session storage.
      */
@@ -72,6 +80,8 @@ export const useCalibrationRunnerController = ({
     detectionReady,
     arrayRotation,
     stagingPosition,
+    cameraAspectRatio,
+    roi,
     initialSessionState,
 }: UseCalibrationRunnerControllerParams): CalibrationRunnerController => {
     const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
@@ -157,6 +167,8 @@ export const useCalibrationRunnerController = ({
             settings: runnerSettings,
             arrayRotation,
             stagingPosition,
+            cameraAspectRatio,
+            roi,
             onStateChange: (next) => {
                 setRunnerState(next);
             },
@@ -172,11 +184,13 @@ export const useCalibrationRunnerController = ({
     }, [
         appendLogEntry,
         arrayRotation,
+        cameraAspectRatio,
         captureMeasurement,
         detectionReady,
         gridSize,
         mirrorConfig,
         motorApi,
+        roi,
         runnerSettings,
         stagingPosition,
     ]);

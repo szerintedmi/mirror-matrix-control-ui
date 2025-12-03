@@ -6,7 +6,12 @@ import {
     useRoiOverlayInteractions,
     type RoiEditingMode,
 } from '@/hooks/useRoiOverlayInteractions';
-import { useStableBlobMeasurement, type BlobSample } from '@/hooks/useStableBlobMeasurement';
+import {
+    useStableBlobMeasurement,
+    type BlobSample,
+    type BlobSelectionParams,
+    type ExpectedBlobPositionInfo,
+} from '@/hooks/useStableBlobMeasurement';
 import type { CalibrationRunSummary, CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type {
     BlobDetectorParams,
@@ -27,6 +32,8 @@ import {
     denormalizeIsotropic,
     denormalizeIsotropicDelta,
     normalizeIsotropic,
+    viewportToIsotropic,
+    viewportToPixels,
 } from '@/utils/normalization';
 
 import type React from 'react';
@@ -182,6 +189,8 @@ export interface CameraPipelineController {
     setTileBoundsOverlayEntries: (payload: TileBoundsOverlayPayload | null) => void;
     blobsOverlayEnabled: boolean;
     setBlobsOverlayEnabled: (enabled: boolean) => void;
+    /** Set the expected blob position and tolerance for debug overlay (centered coords -1 to 1, or null to hide) */
+    setExpectedBlobPosition: (info: ExpectedBlobPositionInfo | null) => void;
 }
 
 export const useCameraPipeline = ({
@@ -243,6 +252,8 @@ export const useCameraPipeline = ({
     const overlayCvRef = useRef<CvRuntime | null>(null);
     const globalBoundsRef = useRef<GlobalBoundsOverlayPayload | null>(null);
     const tileBoundsOverlayRef = useRef<TileBoundsOverlayPayload | null>(null);
+    /** Expected blob position info for debug overlay (centered coords -1 to 1), or null if not set */
+    const expectedBlobPositionRef = useRef<ExpectedBlobPositionInfo | null>(null);
 
     const reportVideoDimensions = useCallback(
         (width: number, height: number) => {
@@ -301,6 +312,11 @@ export const useCameraPipeline = ({
         tileBoundsOverlayRef.current = payload;
     }, []);
 
+    const setExpectedBlobPosition = useCallback((info: ExpectedBlobPositionInfo | null) => {
+        console.log('[CameraPipeline] setExpectedBlobPosition:', info);
+        expectedBlobPositionRef.current = info;
+    }, []);
+
     useEffect(() => {
         blobsOverlayVisibleRef.current = blobsOverlayEnabled;
     }, [blobsOverlayEnabled]);
@@ -344,62 +360,112 @@ export const useCameraPipeline = ({
         };
     }, []);
 
-    const readBestBlobMeasurement = useCallback<() => BlobSample | null>(() => {
-        const meta = processedFrameMetaRef.current;
-        const blobs = detectionResultsRef.current;
-        if (!meta || !meta.sourceWidth || !meta.sourceHeight || blobs.length === 0) {
-            return null;
-        }
-        const normalized = blobs.map((blob) => {
-            const { x: normalizedX, y: normalizedY } = normalizeIsotropic(
-                blob.x,
-                blob.y,
-                meta.sourceWidth,
-                meta.sourceHeight,
-            );
-            const normalizedSize = blob.size / Math.max(meta.sourceWidth, meta.sourceHeight);
+    const readBestBlobMeasurement = useCallback(
+        (params?: BlobSelectionParams): BlobSample | null => {
+            const meta = processedFrameMetaRef.current;
+            const blobs = detectionResultsRef.current;
+            if (!meta || !meta.sourceWidth || !meta.sourceHeight || blobs.length === 0) {
+                return null;
+            }
+            const normalized = blobs.map((blob) => {
+                const { x: normalizedX, y: normalizedY } = normalizeIsotropic(
+                    blob.x,
+                    blob.y,
+                    meta.sourceWidth,
+                    meta.sourceHeight,
+                );
+                const normalizedSize = blob.size / Math.max(meta.sourceWidth, meta.sourceHeight);
+                return {
+                    blob,
+                    normalizedX,
+                    normalizedY,
+                    normalizedSize: Math.max(0, normalizedSize),
+                };
+            });
+
+            let bestEntry: (typeof normalized)[number] | null = null;
+
+            if (params?.expectedPosition) {
+                // Distance-based selection: find blob closest to expected position
+                const { expectedPosition, maxDistance } = params;
+
+                // Convert expected position from viewport coords to isotropic coords
+                // to match the blob normalized coordinates
+                const expectedIso = viewportToIsotropic(
+                    expectedPosition.x,
+                    expectedPosition.y,
+                    meta.sourceWidth,
+                    meta.sourceHeight,
+                );
+
+                // Convert maxDistance from viewport to isotropic if provided
+                // Use average of width/height for a reasonable approximation
+                let maxDistanceIso: number | undefined;
+                if (maxDistance !== undefined) {
+                    const maxDim = Math.max(meta.sourceWidth, meta.sourceHeight);
+                    // viewport delta maps to pixels, then to isotropic
+                    // Using average dimension for a circular threshold approximation
+                    const avgDimension = (meta.sourceWidth + meta.sourceHeight) / 2;
+                    maxDistanceIso = (maxDistance * avgDimension) / maxDim;
+                }
+
+                let bestDistance = Infinity;
+
+                for (const candidate of normalized) {
+                    const dx = candidate.normalizedX - expectedIso.x;
+                    const dy = candidate.normalizedY - expectedIso.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestEntry = candidate;
+                    }
+                }
+
+                // Reject if closest blob exceeds max distance threshold
+                if (maxDistanceIso !== undefined && bestDistance > maxDistanceIso) {
+                    return null;
+                }
+            } else {
+                // Legacy behavior: select rightmost blob by X coordinate
+                const EPS = 1e-4;
+                bestEntry = normalized.reduce<(typeof normalized)[number] | null>(
+                    (top, candidate) => {
+                        if (!top) {
+                            return candidate;
+                        }
+                        if (candidate.normalizedX > top.normalizedX + EPS) {
+                            return candidate;
+                        }
+                        if (Math.abs(candidate.normalizedX - top.normalizedX) <= EPS) {
+                            return candidate.blob.response > top.blob.response ? candidate : top;
+                        }
+                        return top;
+                    },
+                    null,
+                );
+            }
+
+            if (!bestEntry) {
+                return null;
+            }
             return {
-                blob,
-                normalizedX,
-                normalizedY,
-                normalizedSize: Math.max(0, normalizedSize),
+                x: bestEntry.normalizedX,
+                y: bestEntry.normalizedY,
+                size: bestEntry.normalizedSize,
+                response: bestEntry.blob.response,
+                capturedAt: detectionUpdatedAtRef.current || performance.now(),
+                sourceWidth: meta.sourceWidth,
+                sourceHeight: meta.sourceHeight,
             };
-        });
-
-        const EPS = 1e-4;
-        const bestEntry = normalized.reduce<(typeof normalized)[number] | null>(
-            (top, candidate) => {
-                if (!top) {
-                    return candidate;
-                }
-                if (candidate.normalizedX > top.normalizedX + EPS) {
-                    return candidate;
-                }
-                if (Math.abs(candidate.normalizedX - top.normalizedX) <= EPS) {
-                    return candidate.blob.response > top.blob.response ? candidate : top;
-                }
-                return top;
-            },
-            null,
-        );
-
-        if (!bestEntry) {
-            return null;
-        }
-        return {
-            x: bestEntry.normalizedX,
-            y: bestEntry.normalizedY,
-            size: bestEntry.normalizedSize,
-            response: bestEntry.blob.response,
-            capturedAt: detectionUpdatedAtRef.current || performance.now(),
-            sourceWidth: meta.sourceWidth,
-            sourceHeight: meta.sourceHeight,
-        };
-    }, []);
+        },
+        [],
+    );
 
     const captureBlobMeasurement = useStableBlobMeasurement({
         readSample: readBestBlobMeasurement,
         detectionSequenceRef,
+        onExpectedPositionChange: setExpectedBlobPosition,
     });
 
     useEffect(() => {
@@ -693,6 +759,70 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
+            const drawExpectedBlobPositionCanvas = () => {
+                const expectedInfo = expectedBlobPositionRef.current;
+                if (!expectedInfo) {
+                    return;
+                }
+                const expectedPos = expectedInfo.position;
+                // expectedPos is in viewport coords (0-1), convert directly to pixels
+                // Viewport coords map directly to frame: (0,0) = top-left, (1,1) = bottom-right
+                const pixelCoords = viewportToPixels(
+                    expectedPos.x,
+                    expectedPos.y,
+                    captureWidth,
+                    captureHeight,
+                );
+                // Project to canvas viewport
+                const projectedX = projectCameraValue(pixelCoords.x, 'x');
+                const projectedY = projectCameraValue(pixelCoords.y, 'y');
+                if (projectedX == null || projectedY == null) {
+                    return;
+                }
+                // Calculate radius from maxDistance threshold if provided, otherwise use default
+                // maxDistance is in viewport coords (0-1 range)
+                let radius: number;
+                if (expectedInfo.maxDistance !== undefined) {
+                    // For radius, use the average of X and Y dimensions
+                    // since viewport coords scale differently in each direction
+                    const radiusPxX = expectedInfo.maxDistance * captureWidth;
+                    const radiusPxY = expectedInfo.maxDistance * captureHeight;
+                    const radiusX = projectCameraDelta(radiusPxX, 'x');
+                    const radiusY = projectCameraDelta(radiusPxY, 'y');
+                    radius = Math.max(10, (radiusX + radiusY) / 2);
+                } else {
+                    radius = Math.max(20, Math.min(width, height) * 0.05);
+                }
+                ctx.save();
+                ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)'; // Green
+                ctx.lineWidth = Math.max(2, Math.min(width, height) * 0.004);
+                ctx.setLineDash([8, 4]);
+                ctx.beginPath();
+                ctx.arc(projectedX, projectedY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+                // Draw crosshair
+                ctx.beginPath();
+                ctx.moveTo(projectedX - radius * 0.3, projectedY);
+                ctx.lineTo(projectedX + radius * 0.3, projectedY);
+                ctx.moveTo(projectedX, projectedY - radius * 0.3);
+                ctx.lineTo(projectedX, projectedY + radius * 0.3);
+                ctx.stroke();
+                // Draw label with tolerance percentage
+                ctx.setLineDash([]);
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.9)';
+                ctx.font = '12px monospace';
+                const toleranceLabel =
+                    expectedInfo.maxDistance !== undefined
+                        ? ` tol:${(expectedInfo.maxDistance * 100).toFixed(0)}%`
+                        : '';
+                ctx.fillText(
+                    `exp: (${expectedPos.x.toFixed(2)}, ${expectedPos.y.toFixed(2)})${toleranceLabel}`,
+                    projectedX + radius + 5,
+                    projectedY + 4,
+                );
+                ctx.restore();
+            };
+
             const drawGlobalBoundsCanvas = () => {
                 const payload = globalBoundsRef.current;
                 if (!payload) {
@@ -912,6 +1042,7 @@ export const useCameraPipeline = ({
                 );
             if (!cvRuntimeReady || !cvImpl) {
                 drawBlobsCanvas();
+                drawExpectedBlobPositionCanvas();
                 drawAlignmentCanvas();
                 drawGlobalBoundsCanvas();
                 drawTileBoundsCanvas();
@@ -1183,6 +1314,8 @@ export const useCameraPipeline = ({
             } finally {
                 overlayMat.delete();
             }
+            // Always draw expected position on top (using canvas API for simplicity)
+            drawExpectedBlobPositionCanvas();
         },
         [],
     );
@@ -1665,5 +1798,6 @@ export const useCameraPipeline = ({
         setTileBoundsOverlayEntries,
         blobsOverlayEnabled,
         setBlobsOverlayEnabled,
+        setExpectedBlobPosition,
     };
 };

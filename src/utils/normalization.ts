@@ -64,3 +64,66 @@ export const denormalizeIsotropicDelta = (
     const maxDim = Math.max(sourceWidth, sourceHeight);
     return normalizedSize * maxDim;
 };
+
+/**
+ * Converts viewport coordinates [0,1] to isotropic coordinates.
+ * Viewport coords cover the full frame, isotropic coords account for aspect ratio.
+ *
+ * For 16:9 (1920x1080):
+ * - Viewport (0.5, 0.5) → Isotropic (0.5, 0.5) (center stays center)
+ * - Viewport (0, 0) → Isotropic (0, ~0.22) (top-left adjusts for letterbox)
+ */
+export const viewportToIsotropic = (
+    viewportX: number,
+    viewportY: number,
+    sourceWidth: number,
+    sourceHeight: number,
+): { x: number; y: number } => {
+    const maxDim = Math.max(sourceWidth, sourceHeight);
+    const offsetX = (maxDim - sourceWidth) / 2;
+    const offsetY = (maxDim - sourceHeight) / 2;
+
+    // viewport [0,1] → pixel → isotropic
+    const pixelX = viewportX * sourceWidth;
+    const pixelY = viewportY * sourceHeight;
+
+    return {
+        x: clamp01((pixelX + offsetX) / maxDim),
+        y: clamp01((pixelY + offsetY) / maxDim),
+    };
+};
+
+/**
+ * Converts viewport delta to isotropic delta.
+ * Since viewport and isotropic use different scales, deltas must be converted.
+ */
+export const viewportDeltaToIsotropic = (
+    viewportDelta: number,
+    sourceDimension: number,
+    sourceWidth: number,
+    sourceHeight: number,
+): number => {
+    const maxDim = Math.max(sourceWidth, sourceHeight);
+    // viewport delta → pixel delta → isotropic delta
+    return (viewportDelta * sourceDimension) / maxDim;
+};
+
+/**
+ * Converts viewport coordinates directly to pixel coordinates.
+ * This is a simple linear mapping without aspect ratio adjustment.
+ */
+export const viewportToPixels = (
+    viewportX: number,
+    viewportY: number,
+    sourceWidth: number,
+    sourceHeight: number,
+): { x: number; y: number } => ({
+    x: viewportX * sourceWidth,
+    y: viewportY * sourceHeight,
+});
+
+/**
+ * Converts viewport delta directly to pixel delta.
+ */
+export const viewportDeltaToPixels = (viewportDelta: number, sourceDimension: number): number =>
+    viewportDelta * sourceDimension;
