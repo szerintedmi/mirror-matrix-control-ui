@@ -127,3 +127,45 @@ export const viewportToPixels = (
  */
 export const viewportDeltaToPixels = (viewportDelta: number, sourceDimension: number): number =>
     viewportDelta * sourceDimension;
+
+/**
+ * Converts isotropic coordinates [0,1] to viewport coordinates [0,1].
+ * Reverses the aspect ratio adjustment done by normalizeIsotropic.
+ *
+ * For 16:9 (1920x1080):
+ * - Isotropic (0.5, 0.5) → Viewport (0.5, 0.5) (center stays center)
+ * - Isotropic (0, ~0.22) → Viewport (0, 0) (top-left adjusts for letterbox removal)
+ */
+export const isotropicToViewport = (
+    isoX: number,
+    isoY: number,
+    sourceWidth: number,
+    sourceHeight: number,
+): { x: number; y: number } => {
+    const maxDim = Math.max(sourceWidth, sourceHeight);
+    const offsetX = (maxDim - sourceWidth) / 2;
+    const offsetY = (maxDim - sourceHeight) / 2;
+
+    // isotropic → pixel → viewport
+    const pixelX = isoX * maxDim - offsetX;
+    const pixelY = isoY * maxDim - offsetY;
+
+    return {
+        x: pixelX / sourceWidth,
+        y: pixelY / sourceHeight,
+    };
+};
+
+/**
+ * Converts isotropic delta to viewport delta.
+ * Uses average dimension for approximation since viewport X/Y have different scales.
+ */
+export const isotropicDeltaToViewport = (
+    isoDelta: number,
+    sourceWidth: number,
+    sourceHeight: number,
+): number => {
+    const maxDim = Math.max(sourceWidth, sourceHeight);
+    const avgDim = (sourceWidth + sourceHeight) / 2;
+    return (isoDelta * maxDim) / avgDim;
+};

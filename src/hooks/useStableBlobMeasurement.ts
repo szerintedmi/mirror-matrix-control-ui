@@ -9,6 +9,7 @@ import {
 import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
 import { viewDeltaToCentered, viewToCentered } from '@/utils/centeredCoordinates';
+import { isotropicToViewport, isotropicDeltaToViewport } from '@/utils/normalization';
 
 /** Parameters for blob selection when reading a sample. */
 export interface BlobSelectionParams {
@@ -207,6 +208,22 @@ const buildUnstableErrorMessage = ({
 };
 
 const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasurement => {
+    // Source dimensions are always present when this function is called
+    // (measurements come from BlobSample which has required sourceWidth/sourceHeight)
+    const sourceWidth = measurement.sourceWidth!;
+    const sourceHeight = measurement.sourceHeight!;
+
+    // Convert isotropic [0,1] → viewport [0,1] first, then viewport → centered [-1,1]
+    // This fixes the coordinate system mismatch where blob measurements are captured
+    // in isotropic coords but were incorrectly treated as viewport coords.
+    const { x: viewX, y: viewY } = isotropicToViewport(
+        measurement.x,
+        measurement.y,
+        sourceWidth,
+        sourceHeight,
+    );
+    const viewSize = isotropicDeltaToViewport(measurement.size, sourceWidth, sourceHeight);
+
     const convertStats = measurement.stats
         ? {
               ...measurement.stats,
@@ -214,24 +231,48 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
                   ...measurement.stats.thresholds,
                   maxMedianDeviationPt: measurement.stats.thresholds.maxMedianDeviationPt * 2,
               },
-              median: {
-                  x: viewToCentered(measurement.stats.median.x),
-                  y: viewToCentered(measurement.stats.median.y),
-                  size: viewDeltaToCentered(measurement.stats.median.size),
-              },
+              median: (() => {
+                  const { x, y } = isotropicToViewport(
+                      measurement.stats.median.x,
+                      measurement.stats.median.y,
+                      sourceWidth,
+                      sourceHeight,
+                  );
+                  return {
+                      x: viewToCentered(x),
+                      y: viewToCentered(y),
+                      size: viewDeltaToCentered(
+                          isotropicDeltaToViewport(
+                              measurement.stats.median.size,
+                              sourceWidth,
+                              sourceHeight,
+                          ),
+                      ),
+                  };
+              })(),
               nMad: {
-                  x: viewDeltaToCentered(measurement.stats.nMad.x),
-                  y: viewDeltaToCentered(measurement.stats.nMad.y),
-                  size: viewDeltaToCentered(measurement.stats.nMad.size),
+                  x: viewDeltaToCentered(
+                      isotropicDeltaToViewport(measurement.stats.nMad.x, sourceWidth, sourceHeight),
+                  ),
+                  y: viewDeltaToCentered(
+                      isotropicDeltaToViewport(measurement.stats.nMad.y, sourceWidth, sourceHeight),
+                  ),
+                  size: viewDeltaToCentered(
+                      isotropicDeltaToViewport(
+                          measurement.stats.nMad.size,
+                          sourceWidth,
+                          sourceHeight,
+                      ),
+                  ),
               },
           }
         : undefined;
 
     return {
         ...measurement,
-        x: viewToCentered(measurement.x),
-        y: viewToCentered(measurement.y),
-        size: viewDeltaToCentered(measurement.size),
+        x: viewToCentered(viewX),
+        y: viewToCentered(viewY),
+        size: viewDeltaToCentered(viewSize),
         stats: convertStats,
     };
 };

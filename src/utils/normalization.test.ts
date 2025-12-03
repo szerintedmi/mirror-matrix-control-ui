@@ -8,6 +8,8 @@ import {
     denormalizeIsotropicDelta,
     viewportToIsotropic,
     viewportToPixels,
+    isotropicToViewport,
+    isotropicDeltaToViewport,
 } from './normalization';
 
 describe('normalization', () => {
@@ -126,6 +128,96 @@ describe('normalization', () => {
         it('should handle corners correctly', () => {
             expect(viewportToPixels(0, 0, 1920, 1080)).toEqual({ x: 0, y: 0 });
             expect(viewportToPixels(1, 1, 1920, 1080)).toEqual({ x: 1920, y: 1080 });
+        });
+    });
+
+    describe('isotropicToViewport', () => {
+        it('should convert center correctly for any aspect ratio', () => {
+            // Center should always map to center
+            const result1 = isotropicToViewport(0.5, 0.5, 1920, 1080);
+            expect(result1.x).toBeCloseTo(0.5);
+            expect(result1.y).toBeCloseTo(0.5);
+
+            const result2 = isotropicToViewport(0.5, 0.5, 100, 100);
+            expect(result2.x).toBeCloseTo(0.5);
+            expect(result2.y).toBeCloseTo(0.5);
+        });
+
+        it('should convert top-left for 16:9 aspect ratio', () => {
+            // 1920x1080: maxDim=1920, offsetY=(1920-1080)/2=420
+            // Isotropic (0, 420/1920) -> viewport (0, 0)
+            const isoY = 420 / 1920; // ~0.21875
+            const result = isotropicToViewport(0, isoY, 1920, 1080);
+            expect(result.x).toBeCloseTo(0);
+            expect(result.y).toBeCloseTo(0);
+        });
+
+        it('should convert bottom-right for 16:9 aspect ratio', () => {
+            // Isotropic (1, (1080+420)/1920) -> viewport (1, 1)
+            const isoY = (1080 + 420) / 1920; // ~0.78125
+            const result = isotropicToViewport(1, isoY, 1920, 1080);
+            expect(result.x).toBeCloseTo(1);
+            expect(result.y).toBeCloseTo(1);
+        });
+
+        it('should be the inverse of viewportToIsotropic', () => {
+            const width = 1920;
+            const height = 1080;
+            const viewportX = 0.25;
+            const viewportY = 0.75;
+
+            // viewport -> isotropic -> viewport should give original
+            const iso = viewportToIsotropic(viewportX, viewportY, width, height);
+            const back = isotropicToViewport(iso.x, iso.y, width, height);
+
+            expect(back.x).toBeCloseTo(viewportX);
+            expect(back.y).toBeCloseTo(viewportY);
+        });
+
+        it('should correctly map frame edges for wide aspect ratio', () => {
+            // 200x100 (2:1 aspect ratio)
+            // maxDim=200, offsetY=50
+            // Isotropic Y range for frame: [50/200, 150/200] = [0.25, 0.75]
+
+            // Top-left of frame: isotropic (0, 0.25) -> viewport (0, 0)
+            const topLeft = isotropicToViewport(0, 0.25, 200, 100);
+            expect(topLeft.x).toBeCloseTo(0);
+            expect(topLeft.y).toBeCloseTo(0);
+
+            // Bottom-right of frame: isotropic (1, 0.75) -> viewport (1, 1)
+            const bottomRight = isotropicToViewport(1, 0.75, 200, 100);
+            expect(bottomRight.x).toBeCloseTo(1);
+            expect(bottomRight.y).toBeCloseTo(1);
+        });
+
+        it('should handle 1:1 aspect ratio without transformation', () => {
+            // For square aspect ratio, isotropic = viewport
+            const result = isotropicToViewport(0.3, 0.7, 100, 100);
+            expect(result.x).toBeCloseTo(0.3);
+            expect(result.y).toBeCloseTo(0.7);
+        });
+    });
+
+    describe('isotropicDeltaToViewport', () => {
+        it('should convert delta for 1:1 aspect ratio', () => {
+            // For square, delta should be unchanged
+            expect(isotropicDeltaToViewport(0.1, 100, 100)).toBeCloseTo(0.1);
+        });
+
+        it('should scale delta for wide aspect ratio', () => {
+            // 200x100: maxDim=200, avgDim=150
+            // isotropic delta of 0.1 = 20 pixels
+            // viewport delta = 20 / 150 = 0.133...
+            const delta = isotropicDeltaToViewport(0.1, 200, 100);
+            expect(delta).toBeCloseTo((0.1 * 200) / 150);
+        });
+
+        it('should scale delta for 16:9 aspect ratio', () => {
+            // 1920x1080: maxDim=1920, avgDim=1500
+            // isotropic delta of 0.05 = 96 pixels
+            // viewport delta = 96 / 1500 = 0.064
+            const delta = isotropicDeltaToViewport(0.05, 1920, 1080);
+            expect(delta).toBeCloseTo((0.05 * 1920) / 1500);
         });
     });
 });

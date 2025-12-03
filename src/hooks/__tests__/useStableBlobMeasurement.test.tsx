@@ -347,9 +347,12 @@ describe('useStableBlobMeasurement', () => {
         });
 
         it('returns measurement converted to centered coordinates', async () => {
+            // Input is in isotropic coords (what readBestBlobMeasurement returns)
+            // For 1920x1080: maxDim=1920, offsetY=420
+            // These isotropic coords will be converted to viewport, then to centered
             const readSample = vi.fn(() =>
                 createMockSample({
-                    x: 0.6, // view coords (0 to 1)
+                    x: 0.6, // isotropic coords (0 to 1)
                     y: 0.4,
                     size: 0.02,
                 }),
@@ -388,12 +391,19 @@ describe('useStableBlobMeasurement', () => {
                 measurement = await measurePromise;
             });
 
-            // Result should be converted to centered coords (-1 to 1)
-            // 0.6 in view coords -> 0.2 in centered coords: (0.6 - 0.5) * 2 = 0.2
-            // 0.4 in view coords -> -0.2 in centered coords: (0.4 - 0.5) * 2 = -0.2
+            // Conversion flow: isotropic -> viewport -> centered
+            // For 1920x1080 (16:9): maxDim=1920, offsetY=(1920-1080)/2=420
+            //
+            // isotropic (0.6, 0.4) -> viewport:
+            //   viewportX = (0.6 * 1920 - 0) / 1920 = 0.6
+            //   viewportY = (0.4 * 1920 - 420) / 1080 = 348 / 1080 ≈ 0.3222
+            //
+            // viewport -> centered:
+            //   centeredX = 0.6 * 2 - 1 = 0.2
+            //   centeredY = 0.3222 * 2 - 1 ≈ -0.3556
             expect(measurement).not.toBeNull();
             expect(measurement!.x).toBeCloseTo(0.2);
-            expect(measurement!.y).toBeCloseTo(-0.2);
+            expect(measurement!.y).toBeCloseTo(-0.3556, 3);
         });
     });
 });
