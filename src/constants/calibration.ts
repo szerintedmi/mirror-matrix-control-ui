@@ -71,11 +71,11 @@ export interface CalibrationRunnerSettings {
     firstTileTolerance: number;
 }
 
-/** Default max blob distance threshold (25% of frame dimension). */
-export const DEFAULT_MAX_BLOB_DISTANCE_THRESHOLD = 0.25;
+/** Default max blob distance threshold (15% of frame dimension). */
+export const DEFAULT_MAX_BLOB_DISTANCE_THRESHOLD = 0.15;
 
-/** Default first tile tolerance - larger radius for initial detection (20% of frame dimension). */
-export const DEFAULT_FIRST_TILE_TOLERANCE = 0.2;
+/** Default first tile tolerance - larger radius for initial detection (25% of frame dimension). */
+export const DEFAULT_FIRST_TILE_TOLERANCE = 0.25;
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 1200,

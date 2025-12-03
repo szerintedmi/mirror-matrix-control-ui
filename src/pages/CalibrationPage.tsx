@@ -180,6 +180,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         setTileBoundsOverlayEntries,
         blobsOverlayEnabled,
         setBlobsOverlayEnabled,
+        setExpectedBlobPosition,
     } = cameraPipeline;
 
     const motorCommands = useMotorCommands();
@@ -237,6 +238,13 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     // Persist calibration state to sessionStorage
     useCalibrationStateSession(runnerState, gridFingerprint);
+
+    // Clear expected position overlay when calibration starts
+    useEffect(() => {
+        if (runnerState.phase === 'staging') {
+            setExpectedBlobPosition(null);
+        }
+    }, [runnerState.phase, setExpectedBlobPosition]);
 
     const calibrationProfilesController = useCalibrationProfilesController({
         runnerState,

@@ -148,7 +148,13 @@ export interface CalibrationRunnerState {
 
 export type CalibrationRunnerMode = 'auto' | 'step';
 
-export type CalibrationStepKind = 'home-all' | 'stage-all' | 'measure-tile' | 'align-grid';
+export type CalibrationStepKind =
+    | 'home-all'
+    | 'stage-all'
+    | 'measure-home'
+    | 'step-test-x'
+    | 'step-test-y'
+    | 'align-grid';
 
 export interface CalibrationStepDescriptor {
     kind: CalibrationStepKind;
@@ -498,7 +504,7 @@ export class CalibrationRunner {
                 return;
             }
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.completeStep('error', errorMessage);
+            await this.completeStep('error', errorMessage);
             this.updateState({
                 phase: 'error',
                 activeTile: null,
@@ -517,16 +523,9 @@ export class CalibrationRunner {
         }
     }
 
-    private async beginStep(step: CalibrationStepDescriptor): Promise<void> {
-        const waiting: CalibrationStepState = {
-            step,
-            status: 'waiting',
-        };
-        this.activeStep = waiting;
-        this.emitStepState(waiting);
-        if (this.mode === 'step') {
-            await this.waitForNextStep();
-        }
+    private beginStep(step: CalibrationStepDescriptor): void {
+        // Just emit "running" state - no waiting here
+        // Waiting happens in completeStep() after action is done
         const running: CalibrationStepState = {
             step,
             status: 'running',
@@ -553,17 +552,30 @@ export class CalibrationRunner {
         });
     }
 
-    private completeStep(status: CalibrationStepStatus, error?: string): void {
+    private async completeStep(status: CalibrationStepStatus, error?: string): Promise<void> {
         if (!this.activeStep) {
             return;
         }
-        const next: CalibrationStepState = {
+        const completed: CalibrationStepState = {
             ...this.activeStep,
             status,
             error,
         };
-        this.activeStep = next;
-        this.emitStepState(next);
+        this.activeStep = completed;
+        this.emitStepState(completed);
+
+        // In step mode, wait for user to advance after viewing results
+        if (this.mode === 'step' && status === 'completed') {
+            // Emit 'waiting' status so UI knows to enable "Next" button
+            const waiting: CalibrationStepState = {
+                ...this.activeStep,
+                status: 'waiting',
+            };
+            this.activeStep = waiting;
+            this.emitStepState(waiting);
+
+            await this.waitForNextStep();
+        }
     }
 
     private emitStepState(state: CalibrationStepState): void {
@@ -606,34 +618,29 @@ export class CalibrationRunner {
     }
 
     private async runInternal(): Promise<void> {
+        // === HOME ALL ===
         this.updateState({ phase: 'homing', error: null });
-        await this.beginStep({ kind: 'home-all', label: 'Home all tiles' });
+        this.beginStep({ kind: 'home-all', label: 'Home all tiles' });
         await this.homeAllMotors();
-        this.completeStep('completed');
+        await this.completeStep('completed'); // PAUSE - user sees homing complete
         await this.checkContinue();
 
+        // === STAGE ALL ===
         this.updateState({ phase: 'staging' });
-        await this.beginStep({ kind: 'stage-all', label: 'Move tiles aside' });
+        this.beginStep({ kind: 'stage-all', label: 'Move tiles aside' });
         await this.stageAllTilesToSide();
-        this.completeStep('completed');
+        await this.completeStep('completed'); // PAUSE - user sees all tiles staged
         await this.checkContinue();
 
+        // === MEASURE TILES ===
         this.updateState({ phase: 'measuring' });
         for (const tile of this.calibratableTiles) {
-            const tileAddress: TileAddress = { row: tile.row, col: tile.col, key: tile.key };
-            await this.beginStep({
-                kind: 'measure-tile',
-                label: `Measure tile R${tile.row}C${tile.col}`,
-                tile: tileAddress,
-            });
             await this.checkContinue();
+            // measureTile manages its own steps internally (measure-home, step-test-x, step-test-y)
             await this.measureTile(tile);
-            const tileState = this.state.tiles[tile.key];
-            const status: CalibrationStepStatus =
-                tileState?.status === 'failed' ? 'error' : 'completed';
-            this.completeStep(status, tileState?.error);
         }
 
+        // === ALIGN ===
         const summary = this.computeSummary();
         this.applySummaryMetrics(summary);
         this.updateState({
@@ -642,12 +649,12 @@ export class CalibrationRunner {
             summary,
         });
         if (summary.gridBlueprint) {
-            await this.beginStep({
+            this.beginStep({
                 kind: 'align-grid',
                 label: 'Align tiles to inferred grid',
             });
             await this.alignTilesToIdealGrid(summary);
-            this.completeStep('completed');
+            await this.completeStep('completed');
         }
         this.updateState({
             phase: 'completed',
@@ -661,8 +668,15 @@ export class CalibrationRunner {
         this.setTileState(tile.key, { status: 'measuring' });
         this.updateState({ activeTile: tileAddress });
 
-        await this.moveTileToPose(tile, 'home', measureGroup);
+        // === HOME MEASUREMENT ===
+        // Step starts immediately, does work, then pauses at completeStep for user to see results
+        this.beginStep({
+            kind: 'measure-home',
+            label: `Home measurement R${tile.row}C${tile.col}`,
+            tile: tileAddress,
+        });
 
+        // Calculate expected position (will be displayed during capture)
         const completedMeasurements = this.getCompletedTileMeasurements();
         const isFirstTile = completedMeasurements.length === 0;
         const expectedPositionCoord = computeExpectedBlobPositionFn(
@@ -676,17 +690,23 @@ export class CalibrationRunner {
             },
         );
         const expectedPosition = rawCoords(expectedPositionCoord);
-        // Use larger tolerance for first tile (no prior measurements to estimate grid from)
         const homeTolerance = isFirstTile
             ? this.settings.firstTileTolerance
             : this.settings.maxBlobDistanceThreshold;
+
+        // Move tile to home position
+        await this.moveTileToPose(tile, 'home', measureGroup);
+
+        // Capture measurement (expected circle is shown via captureMeasurement callback)
         console.log('[CalibrationRunner] Home expected position (view 0-1):', expectedPosition);
         const homeResult = await this.captureMeasurementWithRetries(
             expectedPosition,
             homeTolerance,
         );
+
         if (!homeResult.measurement) {
             const errorMessage = homeResult.error ?? 'Unable to detect blob at home position';
+            await this.completeStep('error', errorMessage);
             this.markTileFailed(tile, errorMessage);
             await this.moveTileToPose(tile, 'aside', measureGroup);
             return;
@@ -703,6 +723,7 @@ export class CalibrationRunner {
             measureGroup,
         );
 
+        // Update state with results (visible on UI while paused)
         const existingMetrics = this.state.tiles[tile.key]?.metrics ?? {};
         const initialMetrics: TileCalibrationMetrics = {
             ...existingMetrics,
@@ -723,6 +744,10 @@ export class CalibrationRunner {
         });
         this.publishSummarySnapshot();
 
+        // PAUSE - User sees: expected circle + home measurement result + grid calculation
+        await this.completeStep('completed');
+
+        // === X STEP TEST ===
         const xMotor = tile.assignment.x;
         const yMotor = tile.assignment.y;
         const xDelta = xMotor
@@ -734,9 +759,15 @@ export class CalibrationRunner {
         const stepTestWarnings: string[] = [];
         let xStepResult: AxisStepTestResult | null = null;
         let yStepResult: AxisStepTestResult | null = null;
-        let positionedForYMeasurementInParallel = false;
 
         if (xMotor && xDelta !== null) {
+            this.beginStep({
+                kind: 'step-test-x',
+                label: `X step test R${tile.row}C${tile.col}`,
+                tile: tileAddress,
+            });
+
+            // Move to X jog position
             this.logCommand(
                 'Jogging X axis for step test',
                 { deltaSteps: xDelta },
@@ -744,8 +775,8 @@ export class CalibrationRunner {
                 measureGroup,
             );
             await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
-            // Use home measurement position as expected (step test moves slightly from home)
-            // Convert from centered coords (-1 to 1) to view coords (0 to 1) for blob selection
+
+            // Capture X measurement (expected circle shown near home position)
             const xExpected = {
                 x: centeredToView(homeMeasurement.x),
                 y: centeredToView(homeMeasurement.y),
@@ -757,6 +788,7 @@ export class CalibrationRunner {
                 { x: homeMeasurement.x, y: homeMeasurement.y },
             );
             const xCaptureResult = await this.captureMeasurementWithRetries(xExpected);
+
             if (xCaptureResult.measurement) {
                 xStepResult = computeAxisStepTestResult(
                     homeMeasurement,
@@ -775,37 +807,43 @@ export class CalibrationRunner {
                     measureGroup,
                 );
             } else if (xCaptureResult.error) {
-                // Track warning and emit to toast - step test is optional
                 const warning = `X step test: ${xCaptureResult.error}`;
                 stepTestWarnings.push(warning);
                 this.onTileError?.(tile.row, tile.col, warning);
             }
-            if (yMotor && yDelta !== null) {
-                await this.moveTileAxesToPositions(tile, { x: 0, y: yDelta }, measureGroup);
-                positionedForYMeasurementInParallel = true;
-            } else {
-                await this.moveAxisToPosition(xMotor, 0, measureGroup);
-            }
+
+            // Move X back to home position
+            await this.moveAxisToPosition(xMotor, 0, measureGroup);
+
+            // PAUSE - User sees X result
+            await this.completeStep('completed');
         }
 
+        // === Y STEP TEST ===
         if (yMotor && yDelta !== null) {
-            if (!positionedForYMeasurementInParallel) {
-                this.logCommand(
-                    'Jogging Y axis for step test',
-                    { deltaSteps: yDelta },
-                    tileAddress,
-                    measureGroup,
-                );
-                await this.moveAxisToPosition(yMotor, yDelta, measureGroup);
-            }
-            // Use home measurement position as expected (step test moves slightly from home)
-            // Convert from centered coords (-1 to 1) to view coords (0 to 1) for blob selection
+            this.beginStep({
+                kind: 'step-test-y',
+                label: `Y step test R${tile.row}C${tile.col}`,
+                tile: tileAddress,
+            });
+
+            // Move to Y jog position
+            this.logCommand(
+                'Jogging Y axis for step test',
+                { deltaSteps: yDelta },
+                tileAddress,
+                measureGroup,
+            );
+            await this.moveAxisToPosition(yMotor, yDelta, measureGroup);
+
+            // Capture Y measurement
             const yExpected = {
                 x: centeredToView(homeMeasurement.x),
                 y: centeredToView(homeMeasurement.y),
             };
             console.log('[CalibrationRunner] Y step test expected (view 0-1):', yExpected);
             const yCaptureResult = await this.captureMeasurementWithRetries(yExpected);
+
             if (yCaptureResult.measurement) {
                 yStepResult = computeAxisStepTestResult(
                     homeMeasurement,
@@ -824,13 +862,16 @@ export class CalibrationRunner {
                     measureGroup,
                 );
             } else if (yCaptureResult.error) {
-                // Track warning and emit to toast - step test is optional
                 const warning = `Y step test: ${yCaptureResult.error}`;
                 stepTestWarnings.push(warning);
                 this.onTileError?.(tile.row, tile.col, warning);
             }
+
+            // PAUSE - User sees Y result
+            await this.completeStep('completed');
         }
 
+        // === FINALIZE TILE ===
         const { stepToDisplacement, sizeDeltaAtStepTest } = combineStepTestResults(
             xStepResult,
             yStepResult,
@@ -863,6 +904,7 @@ export class CalibrationRunner {
         this.publishSummarySnapshot();
         this.bumpProgress('completed');
 
+        // Move tile back to staging (no pause after - continues to next tile)
         await this.moveTileToPose(tile, 'aside', measureGroup);
     }
 
