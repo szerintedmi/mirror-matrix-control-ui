@@ -5,6 +5,7 @@ import CalibrationHomeControls from '@/components/calibration/CalibrationHomeCon
 import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
+import CollapsibleSection from '@/components/common/CollapsibleSection';
 import {
     getTileStatusClasses,
     getTileErrorTextClass,
@@ -386,11 +387,21 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         </div>
                     </div>
                 )}
-                <div className="mt-4">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">
-                            Tile statuses
-                        </p>
+                <CollapsibleSection
+                    title="Tile Statuses"
+                    defaultExpanded
+                    collapsedSummary={`${runnerState.progress.completed}/${runnerState.progress.total} completed`}
+                    icon={
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                            />
+                        </svg>
+                    }
+                    headerActions={
                         <div className="flex flex-wrap items-center gap-3 text-[10px] text-gray-400">
                             <span className="flex items-center gap-1">
                                 <span className="h-2 w-2 rounded-sm bg-gray-700" /> Pending
@@ -411,7 +422,9 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                                 <span className="h-2 w-2 rounded-sm bg-gray-600" /> Skipped
                             </span>
                         </div>
-                    </div>
+                    }
+                    className="mt-4"
+                >
                     <div
                         className="grid gap-2"
                         style={{
@@ -477,7 +490,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                             </div>
                         ))}
                     </div>
-                </div>
+                </CollapsibleSection>
             </section>
             <TileDebugModal
                 open={Boolean(debugTileKey)}

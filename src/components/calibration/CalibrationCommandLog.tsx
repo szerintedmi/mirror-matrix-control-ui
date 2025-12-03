@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
+import CollapsibleSection from '@/components/common/CollapsibleSection';
 import type { CalibrationCommandLogEntry } from '@/services/calibrationRunner';
 
 import { buildCommandLogGroups, formatLogTileLabel } from './commandLogUtils';
@@ -19,7 +20,6 @@ const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({
     mode,
     onClearLog,
 }) => {
-    const [collapsed, setCollapsed] = useState(true);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
     const logGroups = useMemo(() => buildCommandLogGroups(entries), [entries]);
@@ -43,38 +43,44 @@ const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({
     }, [logGroups]);
 
     return (
-        <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs uppercase tracking-wide text-gray-500">
-                    Command log <span className="text-gray-600">({entries.length})</span>
-                </p>
+        <CollapsibleSection
+            title="Command Log"
+            collapsedSummary={`${entries.length} entries`}
+            defaultExpanded={false}
+            icon={
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                </svg>
+            }
+            headerActions={
                 <div className="flex items-center gap-2 text-[11px] text-gray-500">
                     <span className="hidden sm:inline">Mode: {mode}</span>
                     {onClearLog && entries.length > 0 && (
                         <button
                             type="button"
                             className="text-xs text-gray-500 hover:text-gray-300"
-                            onClick={onClearLog}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClearLog();
+                            }}
                         >
                             Clear
                         </button>
                     )}
-                    <button
-                        type="button"
-                        className="rounded border border-gray-700 px-2 py-0.5 text-xs font-semibold text-gray-200 hover:bg-gray-800"
-                        onClick={() => setCollapsed((prev) => !prev)}
-                        aria-pressed={!collapsed}
-                    >
-                        {collapsed ? 'Expand' : 'Collapse'} log
-                    </button>
                 </div>
-            </div>
-            {!collapsed && logGroups.length === 0 && (
+            }
+            className="mt-4"
+        >
+            {logGroups.length === 0 ? (
                 <div className="rounded-md border border-dashed border-gray-800 bg-gray-900/40 p-4 text-sm text-gray-500">
                     No commands logged yet.
                 </div>
-            )}
-            {!collapsed && logGroups.length > 0 && (
+            ) : (
                 <div className={`flex flex-col gap-3 ${DEFAULT_MAX_HEIGHT} overflow-y-auto pr-1`}>
                     {logGroups.map((group) => {
                         const isCollapsed = collapsedGroups[group.id] ?? true;
@@ -142,7 +148,7 @@ const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({
                     })}
                 </div>
             )}
-        </div>
+        </CollapsibleSection>
     );
 };
 

@@ -40,13 +40,17 @@ describe('CalibrationCommandLog', () => {
             root.render(<CalibrationCommandLog entries={entries} mode="auto" />);
         });
 
-        const toggleLog = container.querySelector('button');
-        expect(toggleLog?.textContent).toContain('Expand');
+        // The component now uses CollapsibleSection which starts collapsed
+        // The first button is the CollapsibleSection header toggle
+        const sectionToggle = container.querySelector('button');
+        expect(sectionToggle?.textContent).toContain('Command Log');
 
+        // Expand the CollapsibleSection first
         await act(async () => {
-            toggleLog?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            sectionToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
 
+        // Now the log groups should be visible
         const groupHeaderButton = container.querySelector(
             '[data-testid="command-log-group"] button',
         );
