@@ -37,38 +37,13 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     arrayRotation,
     stagingPosition,
 }) => {
-    const {
-        runnerState,
-        runnerSettings,
-        commandLog,
-        stepState,
-        tileEntries,
-        isActive,
-        isAwaitingAdvance,
-        detectionReady,
-        mode,
-        setMode,
-        start,
-        pause,
-        resume,
-        abort,
-        advance,
-    } = controller;
+    const { runnerState, runnerSettings, commandLog, tileEntries, mode, setMode } = controller;
 
-    const phaseLabel = runnerState.phase.charAt(0).toUpperCase() + runnerState.phase.slice(1);
-    const activeTileLabel = runnerState.activeTile
-        ? `R${runnerState.activeTile.row}C${runnerState.activeTile.col}`
-        : '—';
     const isRunnerBusy =
         runnerState.phase === 'homing' ||
         runnerState.phase === 'staging' ||
         runnerState.phase === 'measuring' ||
         runnerState.phase === 'aligning';
-    const isRunnerPaused = runnerState.phase === 'paused';
-    const canStartRunner = mode === 'step' ? !isActive : !isRunnerBusy && !isRunnerPaused;
-    const canPauseRunner = mode === 'step' ? false : isRunnerBusy;
-    const canResumeRunner = mode === 'step' ? false : isRunnerPaused;
-    const canAbortRunner = mode === 'step' ? isActive : isRunnerBusy || isRunnerPaused;
 
     // Use runner's blueprint if available, otherwise fall back to loaded profile's blueprint
     const runnerBlueprint = runnerState.summary?.gridBlueprint;
@@ -163,178 +138,33 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     return (
         <>
             <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
+                {/* Header with title and mode toggle */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <h2 className="text-lg font-semibold text-emerald-300">
-                            Auto-Calibration Runner
-                        </h2>
-                        <p className="text-sm text-gray-400">
-                            Phase: <span className="font-mono text-gray-200">{phaseLabel}</span>
-                        </p>
-                        <p className="text-sm text-gray-400">
-                            Active tile:{' '}
-                            <span className="font-mono text-gray-200">{activeTileLabel}</span>
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs uppercase tracking-wide text-gray-500">
-                                Mode
-                            </span>
-                            <div className="flex rounded-md border border-gray-700 bg-gray-900 text-xs font-semibold">
-                                {(['auto', 'step'] as CalibrationMode[]).map((m) => (
-                                    <button
-                                        key={m}
-                                        type="button"
-                                        className={`px-3 py-1 transition-colors ${
-                                            mode === m
-                                                ? 'bg-emerald-700 text-white'
-                                                : 'text-gray-300 hover:bg-gray-800'
-                                        } first:rounded-l-md last:rounded-r-md`}
-                                        onClick={() => setMode(m)}
-                                        aria-pressed={mode === m}
-                                    >
-                                        {m === 'auto' ? 'Auto' : 'Step-by-step'}
-                                    </button>
-                                ))}
-                            </div>
+                    <h2 className="text-lg font-semibold text-emerald-300">Calibration Runner</h2>
+                    {/* Mode toggle */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs uppercase tracking-wide text-gray-500">Mode</span>
+                        <div className="flex rounded-md border border-gray-700 bg-gray-900 text-xs font-semibold">
+                            {(['auto', 'step'] as CalibrationMode[]).map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    className={`px-3 py-1 transition-colors ${
+                                        mode === m
+                                            ? 'bg-emerald-700 text-white'
+                                            : 'text-gray-300 hover:bg-gray-800'
+                                    } first:rounded-l-md last:rounded-r-md`}
+                                    onClick={() => setMode(m)}
+                                    aria-pressed={mode === m}
+                                >
+                                    {m === 'auto' ? 'Auto' : 'Step'}
+                                </button>
+                            ))}
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-                                canStartRunner && detectionReady
-                                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                                    : 'bg-gray-800 text-gray-500'
-                            }`}
-                            disabled={!canStartRunner || !detectionReady}
-                            onClick={start}
-                        >
-                            Start
-                        </button>
-                        {mode === 'step' && (
-                            <button
-                                type="button"
-                                className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-                                    isAwaitingAdvance
-                                        ? 'bg-sky-600 text-white hover:bg-sky-500'
-                                        : 'bg-gray-800 text-gray-500'
-                                }`}
-                                disabled={!isAwaitingAdvance}
-                                onClick={advance}
-                            >
-                                Next step
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-                                canPauseRunner
-                                    ? 'bg-amber-600 text-white hover:bg-amber-500'
-                                    : 'bg-gray-800 text-gray-500'
-                            }`}
-                            disabled={!canPauseRunner}
-                            onClick={pause}
-                            title={mode === 'step' ? 'Pause not available in step mode' : ''}
-                        >
-                            Pause
-                        </button>
-                        <button
-                            type="button"
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-                                canResumeRunner
-                                    ? 'bg-sky-600 text-white hover:bg-sky-500'
-                                    : 'bg-gray-800 text-gray-500'
-                            }`}
-                            disabled={!canResumeRunner}
-                            onClick={resume}
-                            title={mode === 'step' ? 'Resume not available in step mode' : ''}
-                        >
-                            Resume
-                        </button>
-                        <button
-                            type="button"
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
-                                canAbortRunner
-                                    ? 'bg-rose-600 text-white hover:bg-rose-500'
-                                    : 'bg-gray-800 text-gray-500'
-                            }`}
-                            disabled={!canAbortRunner}
-                            onClick={abort}
-                        >
-                            Abort
-                        </button>
-                    </div>
                 </div>
-                {/* Step mode action required indicator */}
-                {mode === 'step' && isAwaitingAdvance && (
-                    <div className="mt-3 flex items-center gap-2 rounded-md border border-sky-500/50 bg-sky-500/10 px-3 py-2">
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-                        <span className="text-xs font-medium text-sky-200">
-                            Action required — click &ldquo;Next step&rdquo; to continue
-                        </span>
-                        {stepState?.step.label && (
-                            <span className="ml-auto text-xs text-sky-300/70">
-                                {stepState.step.label}
-                            </span>
-                        )}
-                    </div>
-                )}
-                {runnerState.error && (
-                    <div className="mt-3 rounded-md border border-rose-500/60 bg-rose-900/30 px-3 py-2 text-sm font-semibold text-rose-100">
-                        {runnerState.error}
-                    </div>
-                )}
-                {/* Progress Bar */}
-                {runnerState.progress.total > 0 && (
-                    <div className="mt-4">
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
-                            <div className="flex h-full">
-                                <div
-                                    className="bg-emerald-500 transition-all duration-300"
-                                    style={{
-                                        width: `${(runnerState.progress.completed / runnerState.progress.total) * 100}%`,
-                                    }}
-                                />
-                                <div
-                                    className="bg-rose-500 transition-all duration-300"
-                                    style={{
-                                        width: `${(runnerState.progress.failed / runnerState.progress.total) * 100}%`,
-                                    }}
-                                />
-                                <div
-                                    className="bg-gray-600 transition-all duration-300"
-                                    style={{
-                                        width: `${(runnerState.progress.skipped / runnerState.progress.total) * 100}%`,
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                )}
-                <div className="mt-4 grid gap-3 text-sm text-gray-300 sm:grid-cols-4">
-                    <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Ready tiles</p>
-                        <p className="font-semibold">{runnerState.progress.total}</p>
-                    </div>
-                    <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Completed</p>
-                        <p className="font-semibold text-emerald-300">
-                            {runnerState.progress.completed}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Failed</p>
-                        <p className="font-semibold text-rose-300">{runnerState.progress.failed}</p>
-                    </div>
-                    <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Skipped</p>
-                        <p className="font-semibold text-gray-400">
-                            {runnerState.progress.skipped}
-                        </p>
-                    </div>
-                </div>
+
+                {/* Actions row */}
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <MoveActionsDropdown
                         runnerState={runnerState}
