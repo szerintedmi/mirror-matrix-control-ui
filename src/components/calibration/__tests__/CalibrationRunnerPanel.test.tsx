@@ -3,17 +3,14 @@ import { createRoot } from 'react-dom/client';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
-import {
-    DEFAULT_CALIBRATION_RUNNER_SETTINGS,
-    type CalibrationRunnerSettings,
-} from '@/constants/calibration';
+import { DEFAULT_CALIBRATION_RUNNER_SETTINGS } from '@/constants/calibration';
 import type { DriverView } from '@/context/StatusContext';
+import type { CalibrationController } from '@/hooks/useCalibrationController';
 import type {
     CalibrationRunnerState,
     TileRunState,
     TileCalibrationMetrics,
     CalibrationRunSummary,
-    CalibrationStepState,
 } from '@/services/calibrationRunner';
 import type { Motor } from '@/types';
 
@@ -119,12 +116,32 @@ const runnerState: CalibrationRunnerState = {
     error: null,
 };
 
-const runnerSettings: CalibrationRunnerSettings = DEFAULT_CALIBRATION_RUNNER_SETTINGS;
-
 const drivers: DriverView[] = [];
-const detectionReady = true;
 
 const noop = () => {};
+
+const createMockController = (state: CalibrationRunnerState): CalibrationController => ({
+    runnerState: state,
+    runnerSettings: DEFAULT_CALIBRATION_RUNNER_SETTINGS,
+    commandLog: [],
+    stepState: null,
+    tileEntries: Object.values(state.tiles).sort((a, b) => {
+        if (a.tile.row === b.tile.row) return a.tile.col - b.tile.col;
+        return a.tile.row - b.tile.row;
+    }),
+    isActive: false,
+    isAwaitingAdvance: false,
+    detectionReady: true,
+    updateSetting: noop,
+    mode: 'auto',
+    setMode: noop,
+    start: noop,
+    pause: noop,
+    resume: noop,
+    abort: noop,
+    reset: noop,
+    advance: noop,
+});
 
 const renderPanel = async (
     options: { runnerState?: CalibrationRunnerState; drivers?: DriverView[] } = {},
@@ -133,39 +150,9 @@ const renderPanel = async (
     document.body.appendChild(container);
     const state = options.runnerState ?? runnerState;
     const driverList = options.drivers ?? drivers;
-    const stepState: CalibrationStepState = {
-        step: { kind: 'home-all', label: 'Home all tiles' },
-        status: 'waiting',
-    };
+    const controller = createMockController(state);
     await act(async () => {
-        const element = (
-            <CalibrationRunnerPanel
-                runMode="auto"
-                onRunModeChange={() => {}}
-                runnerSettings={runnerSettings}
-                detectionReady={detectionReady}
-                drivers={driverList}
-                autoControls={{
-                    runnerState: state,
-                    start: noop,
-                    pause: noop,
-                    resume: noop,
-                    abort: noop,
-                    commandLog: [],
-                }}
-                stepControls={{
-                    runnerState: state,
-                    stepState,
-                    commandLog: [],
-                    isAwaitingAdvance: false,
-                    isActive: false,
-                    start: noop,
-                    advance: noop,
-                    abort: noop,
-                    reset: noop,
-                }}
-            />
-        );
+        const element = <CalibrationRunnerPanel controller={controller} drivers={driverList} />;
         const root = createRoot(container);
         root.render(element);
     });

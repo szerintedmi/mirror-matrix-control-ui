@@ -14,6 +14,7 @@ import {
     CalibrationRunner,
     type CalibrationCommandLogEntry,
     type CalibrationRunnerState,
+    type CalibrationStepState,
     type TileRunState,
     type CaptureBlobMeasurement,
     createBaselineRunnerState,
@@ -23,7 +24,11 @@ import type { ArrayRotation, MirrorConfig, NormalizedRoi, StagingPosition } from
 const clampSetting = (value: number, min: number, max: number): number =>
     Math.max(min, Math.min(max, value));
 
-interface UseCalibrationRunnerControllerParams {
+const MAX_LOG_ENTRIES = 120;
+
+export type CalibrationMode = 'auto' | 'step';
+
+interface UseCalibrationControllerParams {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
     motorApi: MotorCommandApi;
@@ -56,23 +61,40 @@ interface UseCalibrationRunnerControllerParams {
     } | null;
 }
 
-export interface CalibrationRunnerController {
+export interface CalibrationController {
+    // State
     runnerState: CalibrationRunnerState;
     runnerSettings: CalibrationRunnerSettings;
     commandLog: CalibrationCommandLogEntry[];
+    stepState: CalibrationStepState | null;
+
+    // Derived state
+    tileEntries: TileRunState[];
+    isActive: boolean;
+    isAwaitingAdvance: boolean;
+    detectionReady: boolean;
+
+    // Settings
     updateSetting: <K extends keyof CalibrationRunnerSettings>(
         key: K,
         value: CalibrationRunnerSettings[K],
     ) => void;
-    tileEntries: TileRunState[];
-    startRunner: () => void;
-    pauseRunner: () => void;
-    resumeRunner: () => void;
-    abortRunner: () => void;
-    detectionReady: boolean;
+
+    // Mode control
+    mode: CalibrationMode;
+    setMode: (mode: CalibrationMode) => void;
+
+    // Unified control methods
+    start: () => void;
+    pause: () => void;
+    resume: () => void;
+    abort: () => void;
+    reset: () => void;
+    /** Advance to next step (step mode only) */
+    advance: () => void;
 }
 
-export const useCalibrationRunnerController = ({
+export const useCalibrationController = ({
     gridSize,
     mirrorConfig,
     motorApi,
@@ -83,7 +105,8 @@ export const useCalibrationRunnerController = ({
     cameraAspectRatio,
     roi,
     initialSessionState,
-}: UseCalibrationRunnerControllerParams): CalibrationRunnerController => {
+}: UseCalibrationControllerParams): CalibrationController => {
+    const [mode, setMode] = useState<CalibrationMode>('auto');
     const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
         DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     );
@@ -101,8 +124,12 @@ export const useCalibrationRunnerController = ({
         }
         return baseState;
     });
+    const [stepState, setStepState] = useState<CalibrationStepState | null>(null);
     const [commandLog, setCommandLog] = useState<CalibrationCommandLogEntry[]>([]);
     const runnerRef = useRef<CalibrationRunner | null>(null);
+
+    // Create accumulating error toast for tile errors
+    const errorToastRef = useRef(createAccumulatingErrorToast('Calibration'));
 
     const updateSetting = useCallback(
         <K extends keyof CalibrationRunnerSettings>(
@@ -113,15 +140,24 @@ export const useCalibrationRunnerController = ({
                 if (prev[key] === value) {
                     return prev;
                 }
-                return {
-                    ...prev,
-                    [key]: value,
-                };
+                // Apply clamping for deltaSteps
+                if (key === 'deltaSteps') {
+                    const clamped = clampSetting(Number(value), 50, MOTOR_MAX_POSITION_STEPS);
+                    return { ...prev, [key]: clamped };
+                }
+                return { ...prev, [key]: value };
             });
         },
         [],
     );
 
+    const resetState = useCallback(() => {
+        setRunnerState(createBaselineRunnerState(gridSize, mirrorConfig));
+        setStepState(null);
+        setCommandLog([]);
+    }, [gridSize, mirrorConfig]);
+
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
             runnerRef.current?.dispose();
@@ -129,22 +165,19 @@ export const useCalibrationRunnerController = ({
         };
     }, []);
 
+    // Reset when grid/mirror config changes
     useEffect(() => {
         runnerRef.current?.abort();
         runnerRef.current = null;
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRunnerState(createBaselineRunnerState(gridSize, mirrorConfig));
-        setCommandLog([]);
-    }, [gridSize, mirrorConfig]);
+        resetState();
+    }, [gridSize, mirrorConfig, resetState]);
 
     const appendLogEntry = useCallback((entry: CalibrationCommandLogEntry) => {
-        setCommandLog((prev) => [entry, ...prev].slice(0, 120));
+        setCommandLog((prev) => [entry, ...prev].slice(0, MAX_LOG_ENTRIES));
     }, []);
 
-    // Create accumulating error toast for tile errors
-    const errorToastRef = useRef(createAccumulatingErrorToast('Calibration'));
-
-    const startRunner = useCallback(() => {
+    const start = useCallback(() => {
         if (!detectionReady) {
             setRunnerState((prev) => ({
                 ...prev,
@@ -169,9 +202,9 @@ export const useCalibrationRunnerController = ({
             stagingPosition,
             cameraAspectRatio,
             roi,
-            onStateChange: (next) => {
-                setRunnerState(next);
-            },
+            mode,
+            onStateChange: setRunnerState,
+            onStepStateChange: setStepState,
             onCommandLog: appendLogEntry,
             onCommandError: showCommandErrorToast,
             onTileError: (row, col, message) => {
@@ -180,6 +213,7 @@ export const useCalibrationRunnerController = ({
         });
         runnerRef.current = runner;
         setCommandLog([]);
+        setStepState(null);
         runner.start();
     }, [
         appendLogEntry,
@@ -189,22 +223,33 @@ export const useCalibrationRunnerController = ({
         detectionReady,
         gridSize,
         mirrorConfig,
+        mode,
         motorApi,
         roi,
         runnerSettings,
         stagingPosition,
     ]);
 
-    const pauseRunner = useCallback(() => {
+    const pause = useCallback(() => {
         runnerRef.current?.pause();
     }, []);
 
-    const resumeRunner = useCallback(() => {
+    const resume = useCallback(() => {
         runnerRef.current?.resume();
     }, []);
 
-    const abortRunner = useCallback(() => {
+    const abort = useCallback(() => {
         runnerRef.current?.abort();
+    }, []);
+
+    const reset = useCallback(() => {
+        runnerRef.current?.dispose();
+        runnerRef.current = null;
+        resetState();
+    }, [resetState]);
+
+    const advance = useCallback(() => {
+        runnerRef.current?.advanceStep();
     }, []);
 
     const tileEntries = useMemo(
@@ -218,22 +263,32 @@ export const useCalibrationRunnerController = ({
         [runnerState.tiles],
     );
 
+    const isActive = useMemo(
+        () => !['idle', 'completed', 'error', 'aborted'].includes(runnerState.phase),
+        [runnerState.phase],
+    );
+
+    const isAwaitingAdvance = stepState?.status === 'waiting';
+
     return {
         runnerState,
         runnerSettings,
         commandLog,
-        updateSetting: (key, value) => {
-            if (key === 'deltaSteps') {
-                updateSetting(key, clampSetting(Number(value), 50, MOTOR_MAX_POSITION_STEPS));
-                return;
-            }
-            updateSetting(key, value);
-        },
+        stepState,
         tileEntries,
-        startRunner,
-        pauseRunner,
-        resumeRunner,
-        abortRunner,
+        isActive,
+        isAwaitingAdvance,
         detectionReady,
+        updateSetting,
+        mode,
+        setMode,
+        start,
+        pause,
+        resume,
+        abort,
+        reset,
+        advance,
     };
 };
+
+export default useCalibrationController;

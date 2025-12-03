@@ -8,13 +8,12 @@ import DetectionProfileManager from '@/components/calibration/DetectionProfileMa
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
 import { DEFAULT_STAGING_POSITION } from '@/constants/calibration';
 import { useStatusStore } from '@/context/StatusContext';
+import { useCalibrationController } from '@/hooks/useCalibrationController';
 import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
-import { useCalibrationRunnerController } from '@/hooks/useCalibrationRunnerController';
 import { useCalibrationStateSession } from '@/hooks/useCalibrationStateSession';
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
-import { useStepwiseCalibrationController } from '@/hooks/useStepwiseCalibrationController';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type {
     ArrayRotation,
@@ -217,16 +216,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         return undefined; // Will default to 16:9 in calibration runner
     }, [videoDimensions.width, videoDimensions.height]);
 
-    const {
-        runnerState,
-        runnerSettings,
-        commandLog,
-        updateSetting: updateRunnerSetting,
-        startRunner,
-        pauseRunner,
-        resumeRunner,
-        abortRunner,
-    } = useCalibrationRunnerController({
+    const calibrationController = useCalibrationController({
         gridSize,
         mirrorConfig,
         motorApi: motorCommands,
@@ -239,20 +229,14 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         initialSessionState,
     });
 
+    const {
+        runnerState,
+        runnerSettings,
+        updateSetting: updateRunnerSetting,
+    } = calibrationController;
+
     // Persist calibration state to sessionStorage
     useCalibrationStateSession(runnerState, gridFingerprint);
-
-    const stepRunnerController = useStepwiseCalibrationController({
-        gridSize,
-        mirrorConfig,
-        motorApi: motorCommands,
-        captureMeasurement: captureBlobMeasurement,
-        detectionReady,
-        settings: runnerSettings,
-        cameraAspectRatio: calibrationCameraAspectRatio,
-    });
-
-    const [runnerMode, setRunnerMode] = useState<'auto' | 'step'>('auto');
 
     const calibrationProfilesController = useCalibrationProfilesController({
         runnerState,
@@ -446,30 +430,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 disabled={isCalibrationActive}
             />
             <CalibrationRunnerPanel
-                runMode={runnerMode}
-                onRunModeChange={setRunnerMode}
-                runnerSettings={runnerSettings}
-                detectionReady={detectionReady}
+                controller={calibrationController}
                 drivers={drivers}
-                autoControls={{
-                    runnerState,
-                    start: startRunner,
-                    pause: pauseRunner,
-                    resume: resumeRunner,
-                    abort: abortRunner,
-                    commandLog,
-                }}
-                stepControls={{
-                    runnerState: stepRunnerController.runnerState,
-                    stepState: stepRunnerController.stepState,
-                    commandLog: stepRunnerController.commandLog,
-                    isAwaitingAdvance: stepRunnerController.isAwaitingAdvance,
-                    isActive: stepRunnerController.isActive,
-                    start: stepRunnerController.start,
-                    advance: stepRunnerController.advance,
-                    abort: stepRunnerController.abort,
-                    reset: stepRunnerController.reset,
-                }}
                 loadedProfileSummary={calibrationProfilesController.activeProfileSummary}
             />
             <div className="flex flex-col gap-6 lg:flex-row">
