@@ -169,13 +169,13 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
 
                 {/* Current step with status */}
                 {isActive && currentStepLabel && !overallStatus ? (
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                         <div className="flex items-center gap-1.5">
                             <span className="text-[10px] uppercase tracking-wide text-gray-500">
                                 Current
                             </span>
                             <span
-                                className={`rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
+                                className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
                                     stepStatus === 'running'
                                         ? 'bg-amber-500/20 text-amber-300'
                                         : stepStatus === 'waiting'
@@ -194,48 +194,37 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                                         : stepStatus}
                             </span>
                         </div>
-                        <span className="text-sm font-medium text-gray-200">
+                        <span className="truncate text-sm font-medium text-gray-200">
                             {currentStepLabel}
                         </span>
                     </div>
                 ) : isActive && !overallStatus ? (
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                         <span className="text-[10px] uppercase tracking-wide text-gray-500">
                             Phase
                         </span>
-                        <span className="text-sm font-medium text-gray-200">{phaseLabel}</span>
+                        <span className="truncate text-sm font-medium text-gray-200">
+                            {phaseLabel}
+                        </span>
                     </div>
                 ) : (
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                         <span className="text-[10px] uppercase tracking-wide text-gray-500">
                             Status
                         </span>
                         <span
-                            className={`text-sm font-medium ${overallStatus?.color ?? 'text-gray-200'}`}
+                            className={`truncate text-sm font-medium ${overallStatus?.color ?? 'text-gray-200'}`}
                         >
                             {overallStatus?.label ?? phaseLabel}
                         </span>
                     </div>
                 )}
 
-                {/* Next step hint (step mode only) */}
-                {nextStepHint && (
-                    <>
-                        <div className="h-8 w-px bg-gray-700" />
-                        <div className="flex flex-col">
-                            <span className="text-[10px] uppercase tracking-wide text-gray-500">
-                                Next
-                            </span>
-                            <span className="text-sm text-gray-400">{nextStepHint}</span>
-                        </div>
-                    </>
-                )}
-
                 {/* Spacer */}
                 <div className="flex-1" />
 
                 {/* Mode toggle */}
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                     <span className="text-[10px] uppercase tracking-wide text-gray-500">Mode</span>
                     <div className="flex rounded-md border border-gray-700 bg-gray-800 text-xs font-semibold">
                         {(['auto', 'step'] as CalibrationMode[]).map((m) => (
@@ -261,7 +250,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 <div className="h-8 w-px bg-gray-700" />
 
                 {/* Action buttons */}
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                     {!isActive && (
                         <button
                             type="button"
@@ -279,7 +268,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                     {isActive && mode === 'step' && (
                         <button
                             type="button"
-                            className={`rounded-md px-5 py-2.5 text-sm font-semibold transition-all ${
+                            className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${
                                 isAwaitingAdvance
                                     ? 'animate-pulse bg-sky-500 text-white shadow-lg shadow-sky-500/30 hover:bg-sky-400'
                                     : 'bg-gray-700 text-gray-400'
@@ -287,7 +276,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                             disabled={!isAwaitingAdvance}
                             onClick={onAdvance}
                         >
-                            Next Step
+                            {nextStepHint ? `Next: ${nextStepHint}` : 'Next'}
                         </button>
                     )}
                     {isActive && mode === 'auto' && (
@@ -340,12 +329,6 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 <div className="mt-2 flex items-center gap-2 text-xs text-amber-300">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
                     <span>Step in progress...</span>
-                </div>
-            )}
-            {mode === 'step' && isAwaitingAdvance && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-sky-300">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-                    <span>Press &quot;Next Step&quot; to continue</span>
                 </div>
             )}
             {isPaused && (
