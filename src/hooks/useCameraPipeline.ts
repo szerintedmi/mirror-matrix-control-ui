@@ -29,7 +29,6 @@ import {
     cameraToViewport,
 } from '@/utils/letterbox';
 import {
-    denormalizeIsotropicDelta,
     normalizeIsotropic,
     viewportToIsotropic,
     viewportToPixels,
@@ -864,8 +863,11 @@ export const useCameraPipeline = ({
                 return viewportToPixels(0, viewport, captureWidth, captureHeight).y;
             };
             // Size/delta conversion: input is in centered system (range 2), convert to isotropic pixels
-            const convertDeltaToPixels = (delta: number): number =>
-                denormalizeIsotropicDelta(centeredDeltaToView(delta), captureWidth, captureHeight);
+            // Uses avgDim to correctly reverse the viewport→isotropic conversion done in measurement storage
+            const convertDeltaToPixels = (delta: number): number => {
+                const avgDim = (captureWidth + captureHeight) / 2;
+                return centeredDeltaToView(delta) * avgDim;
+            };
 
             const drawTileBoundsCanvas = () => {
                 const payload = tileBoundsOverlayRef.current;
@@ -926,34 +928,43 @@ export const useCameraPipeline = ({
                 if (!tileEntries.length) {
                     return;
                 }
-                const spacingX =
-                    blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
-                const spacingY =
-                    blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+
+                // Compute isotropic sizes in pixels for uniform grid display
+                const avgDim = (captureWidth + captureHeight) / 2;
+                const tileWidthCentered = blueprint.adjustedTileFootprint.width;
+                const tileSizePixels = centeredDeltaToView(tileWidthCentered) * avgDim;
+                const gapPixels = centeredDeltaToView(blueprint.tileGap?.x ?? 0) * avgDim;
+                const spacingPixels = tileSizePixels + gapPixels;
+
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
+
+                // Compute origin in pixels, with adjustment for isotropic sizing
+                // The grid origin was computed assuming centered-based spacing, but we render with isotropic spacing
+                // Adjustment ensures tile [0,0] aligns with its measurement position
+                const rawOriginXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
+                const rawOriginYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
+                const adjustmentX = (tileWidthCentered / 4) * (captureWidth - avgDim);
+                const adjustmentY = (tileWidthCentered / 4) * (captureHeight - avgDim);
+                const originXPixels = rawOriginXPixels + adjustmentX;
+                const originYPixels = rawOriginYPixels + adjustmentY;
+
                 ctx.save();
                 ctx.lineWidth = 2;
                 const alignmentStrokeColor = formatAlignmentRgba(0.7);
                 const alignmentFillColor = formatAlignmentRgba(0.15);
                 const alignmentLabelColor = formatAlignmentRgba(0.95);
                 tileEntries.forEach((entry) => {
-                    const adjustedCenterX =
-                        blueprint.gridOrigin.x +
-                        entry.tile.col * spacingX +
-                        blueprint.adjustedTileFootprint.width / 2;
-                    const adjustedCenterY =
-                        blueprint.gridOrigin.y +
-                        entry.tile.row * spacingY +
-                        blueprint.adjustedTileFootprint.height / 2;
-                    const normalizedLeft =
-                        adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
-                    const normalizedTop =
-                        adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = convertCoordToPixelsX(normalizedLeft + offsetX);
-                    const pxTop = convertCoordToPixelsY(normalizedTop + offsetY);
-                    const pxWidth = convertDeltaToPixels(blueprint.adjustedTileFootprint.width);
-                    const pxHeight = convertDeltaToPixels(blueprint.adjustedTileFootprint.height);
+                    // Compute tile center using isotropic pixel spacing
+                    const tileCenterXPixels =
+                        originXPixels + entry.tile.col * spacingPixels + tileSizePixels / 2;
+                    const tileCenterYPixels =
+                        originYPixels + entry.tile.row * spacingPixels + tileSizePixels / 2;
+
+                    const pxLeft = tileCenterXPixels - tileSizePixels / 2;
+                    const pxTop = tileCenterYPixels - tileSizePixels / 2;
+                    const pxWidth = tileSizePixels;
+                    const pxHeight = tileSizePixels;
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     const rectWidth = projectCameraDelta(pxWidth, 'x');
@@ -1094,12 +1105,25 @@ export const useCameraPipeline = ({
                 if (!tileEntries.length) {
                     return;
                 }
-                const spacingX =
-                    blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
-                const spacingY =
-                    blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
+
+                // Compute isotropic sizes in pixels for uniform grid display
+                const avgDim = (captureWidth + captureHeight) / 2;
+                const tileWidthCentered = blueprint.adjustedTileFootprint.width;
+                const tileSizePixels = centeredDeltaToView(tileWidthCentered) * avgDim;
+                const gapPixels = centeredDeltaToView(blueprint.tileGap?.x ?? 0) * avgDim;
+                const spacingPixels = tileSizePixels + gapPixels;
+
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
+
+                // Compute origin in pixels, with adjustment for isotropic sizing
+                const rawOriginXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
+                const rawOriginYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
+                const adjustmentX = (tileWidthCentered / 4) * (captureWidth - avgDim);
+                const adjustmentY = (tileWidthCentered / 4) * (captureHeight - avgDim);
+                const originXPixels = rawOriginXPixels + adjustmentX;
+                const originYPixels = rawOriginYPixels + adjustmentY;
+
                 const squareColor = new runtime.Scalar(
                     ALIGNMENT_TEAL.b,
                     ALIGNMENT_TEAL.g,
@@ -1114,22 +1138,16 @@ export const useCameraPipeline = ({
                 );
                 const measurementColor = new runtime.Scalar(255, 255, 0, 255);
                 tileEntries.forEach((entry) => {
-                    const adjustedCenterX =
-                        blueprint.gridOrigin.x +
-                        entry.tile.col * spacingX +
-                        blueprint.adjustedTileFootprint.width / 2;
-                    const adjustedCenterY =
-                        blueprint.gridOrigin.y +
-                        entry.tile.row * spacingY +
-                        blueprint.adjustedTileFootprint.height / 2;
-                    const normalizedLeft =
-                        adjustedCenterX - blueprint.adjustedTileFootprint.width / 2;
-                    const normalizedTop =
-                        adjustedCenterY - blueprint.adjustedTileFootprint.height / 2;
-                    const pxLeft = convertCoordToPixelsX(normalizedLeft + offsetX);
-                    const pxTop = convertCoordToPixelsY(normalizedTop + offsetY);
-                    const pxWidth = convertDeltaToPixels(blueprint.adjustedTileFootprint.width);
-                    const pxHeight = convertDeltaToPixels(blueprint.adjustedTileFootprint.height);
+                    // Compute tile center using isotropic pixel spacing
+                    const tileCenterXPixels =
+                        originXPixels + entry.tile.col * spacingPixels + tileSizePixels / 2;
+                    const tileCenterYPixels =
+                        originYPixels + entry.tile.row * spacingPixels + tileSizePixels / 2;
+
+                    const pxLeft = tileCenterXPixels - tileSizePixels / 2;
+                    const pxTop = tileCenterYPixels - tileSizePixels / 2;
+                    const pxWidth = tileSizePixels;
+                    const pxHeight = tileSizePixels;
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     const rectWidth = projectCameraDelta(pxWidth, 'x');
