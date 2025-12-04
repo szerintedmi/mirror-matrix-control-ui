@@ -28,11 +28,7 @@ import {
     cameraDeltaToViewport,
     cameraToViewport,
 } from '@/utils/letterbox';
-import {
-    normalizeIsotropic,
-    viewportToIsotropic,
-    viewportToPixels,
-} from '@/utils/normalization';
+import { normalizeIsotropic, viewportToIsotropic, viewportToPixels } from '@/utils/normalization';
 
 import type React from 'react';
 

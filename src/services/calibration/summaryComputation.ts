@@ -84,6 +84,9 @@ function recenterMeasurement(
  * Compute the grid blueprint from measured tiles.
  * Determines tile size, spacing, and grid origin.
  *
+ * Uses isotropic spacing conversion to ensure uniform pixel spacing across both axes,
+ * accounting for different X/Y scales in centered coordinates.
+ *
  * @param measuredTiles - Tiles with valid home measurements
  * @param config - Grid configuration
  * @returns Grid blueprint or null if no tiles measured
@@ -95,6 +98,17 @@ export function computeGridBlueprint(
     if (measuredTiles.length === 0) {
         return null;
     }
+
+    // Get camera dimensions from first measurement for isotropic conversion
+    const firstMeasurement = measuredTiles[0].homeMeasurement;
+    const sourceWidth = firstMeasurement.sourceWidth ?? 1920;
+    const sourceHeight = firstMeasurement.sourceHeight ?? 1080;
+    const avgDim = (sourceWidth + sourceHeight) / 2;
+
+    // Isotropic conversion factors: multiply centered deltas by these to get
+    // centered values that produce uniform pixel spacing
+    const isoFactorX = avgDim / sourceWidth;
+    const isoFactorY = avgDim / sourceHeight;
 
     // Find largest tile size
     const largestSize = measuredTiles.reduce((max, entry) => {
@@ -110,20 +124,32 @@ export function computeGridBlueprint(
     const gapX = normalizedGap;
     const gapY = normalizedGap;
 
-    const spacingX = tileWidth + gapX;
-    const spacingY = tileHeight + gapY;
+    // Base spacing in centered coords (stored in blueprint for reference)
+    const baseSpacing = tileWidth + gapX;
+    const halfTile = tileWidth / 2;
 
-    const totalWidth = config.gridSize.cols * tileWidth + (config.gridSize.cols - 1) * gapX;
-    const totalHeight = config.gridSize.rows * tileHeight + (config.gridSize.rows - 1) * gapY;
+    // Isotropic spacing: converts to centered coords that produce same pixel distance
+    const spacingXCentered = baseSpacing * isoFactorX;
+    const spacingYCentered = baseSpacing * isoFactorY;
+    const halfTileXCentered = halfTile * isoFactorX;
+    const halfTileYCentered = halfTile * isoFactorY;
 
-    // Compute origin from minimum tile positions
+    // Total grid dimensions in isotropic centered coords
+    const totalWidth =
+        config.gridSize.cols * tileWidth * isoFactorX +
+        (config.gridSize.cols - 1) * gapX * isoFactorX;
+    const totalHeight =
+        config.gridSize.rows * tileHeight * isoFactorY +
+        (config.gridSize.rows - 1) * gapY * isoFactorY;
+
+    // Compute origin from minimum tile positions using isotropic spacing
     let minOriginX = Number.POSITIVE_INFINITY;
     let minOriginY = Number.POSITIVE_INFINITY;
 
     for (const entry of measuredTiles) {
         const measurement = entry.homeMeasurement;
-        const candidateX = measurement.x - (entry.tile.col * spacingX + tileWidth / 2);
-        const candidateY = measurement.y - (entry.tile.row * spacingY + tileHeight / 2);
+        const candidateX = measurement.x - (entry.tile.col * spacingXCentered + halfTileXCentered);
+        const candidateY = measurement.y - (entry.tile.row * spacingYCentered + halfTileYCentered);
         if (candidateX < minOriginX) {
             minOriginX = candidateX;
         }
@@ -163,6 +189,8 @@ export function computeGridBlueprint(
  * Compute the full calibration run summary.
  * Calculates grid blueprint and home offsets for each tile.
  *
+ * Uses isotropic spacing conversion to ensure uniform pixel spacing across both axes.
+ *
  * @param tileResults - Map of tile key to calibration result
  * @param config - Summary configuration
  * @returns Complete calibration run summary
@@ -186,13 +214,26 @@ export function computeCalibrationSummary(
     // Compute grid blueprint
     const gridBlueprint = computeGridBlueprint(measuredTiles, config);
 
-    // Calculate spacing for offset computation
-    const spacingX = gridBlueprint
+    // Get camera dimensions for isotropic conversion (must match computeGridBlueprint)
+    const firstMeasurement = measuredTiles[0]?.homeMeasurement;
+    const sourceWidth = firstMeasurement?.sourceWidth ?? 1920;
+    const sourceHeight = firstMeasurement?.sourceHeight ?? 1080;
+    const avgDim = (sourceWidth + sourceHeight) / 2;
+
+    // Isotropic conversion factors
+    const isoFactorX = avgDim / sourceWidth;
+    const isoFactorY = avgDim / sourceHeight;
+
+    // Calculate isotropic spacing for offset computation
+    const baseSpacing = gridBlueprint
         ? gridBlueprint.adjustedTileFootprint.width + gridBlueprint.tileGap.x
         : 0;
-    const spacingY = gridBlueprint
-        ? gridBlueprint.adjustedTileFootprint.height + gridBlueprint.tileGap.y
-        : 0;
+    const spacingXCentered = baseSpacing * isoFactorX;
+    const spacingYCentered = baseSpacing * isoFactorY;
+
+    const halfTile = gridBlueprint ? gridBlueprint.adjustedTileFootprint.width / 2 : 0;
+    const halfTileXCentered = halfTile * isoFactorX;
+    const halfTileYCentered = halfTile * isoFactorY;
 
     // Process each tile result
     const summaryTiles: Record<string, TileCalibrationResult> = {};
@@ -215,15 +256,12 @@ export function computeCalibrationSummary(
         }
 
         // Calculate home offset (difference from ideal grid position)
+        // Uses isotropic spacing to ensure uniform pixel spacing
         const tile = result.tile;
         const adjustedCenterX =
-            gridBlueprint.gridOrigin.x +
-            tile.col * spacingX +
-            gridBlueprint.adjustedTileFootprint.width / 2;
+            gridBlueprint.gridOrigin.x + tile.col * spacingXCentered + halfTileXCentered;
         const adjustedCenterY =
-            gridBlueprint.gridOrigin.y +
-            tile.row * spacingY +
-            gridBlueprint.adjustedTileFootprint.height / 2;
+            gridBlueprint.gridOrigin.y + tile.row * spacingYCentered + halfTileYCentered;
 
         const dx = normalizedMeasurement.x - adjustedCenterX;
         const dy = normalizedMeasurement.y - adjustedCenterY;
