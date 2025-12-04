@@ -5,7 +5,9 @@
  * Pure functions for grid blueprint calculation and home offset computation.
  */
 
-import type { BlobMeasurement, CalibrationGridBlueprint } from '@/types';
+import type { BlobMeasurement, CalibrationGridBlueprint, CalibrationProfileBounds } from '@/types';
+
+import { computeLiveTileBounds } from './boundsComputation';
 
 // =============================================================================
 // TYPES
@@ -29,6 +31,8 @@ export interface TileCalibrationResult {
     adjustedHome?: { x: number; y: number };
     stepToDisplacement?: { x: number | null; y: number | null };
     sizeDeltaAtStepTest?: number | null;
+    /** Motor-range bounds computed from step tests (for live display during calibration) */
+    inferredBounds?: CalibrationProfileBounds | null;
 }
 
 /** Configuration for summary computation */
@@ -269,10 +273,21 @@ export function computeCalibrationSummary(
         const dx = normalizedMeasurement.x - adjustedCenterX;
         const dy = normalizedMeasurement.y - adjustedCenterY;
 
+        // Compute inferred bounds for live display during calibration
+        // Uses raw home measurement (before recentering) with motor at step 0
+        const inferredBounds =
+            result.homeMeasurement && result.stepToDisplacement
+                ? computeLiveTileBounds(
+                      { x: result.homeMeasurement.x, y: result.homeMeasurement.y },
+                      result.stepToDisplacement,
+                  )
+                : null;
+
         tileSummary = {
             ...tileSummary,
             homeOffset: { dx, dy },
             adjustedHome: { x: adjustedCenterX, y: adjustedCenterY },
+            inferredBounds,
         };
 
         summaryTiles[key] = tileSummary;

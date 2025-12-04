@@ -294,6 +294,18 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     const activeProfile = calibrationProfilesController.activeProfile;
 
     const activeTileBounds = useMemo<TileBoundsOverlayEntry[]>(() => {
+        // During calibration: source from runner summary
+        if (isCalibrationActive && runnerState.summary) {
+            return Object.values(runnerState.summary.tiles)
+                .filter((tile) => tile.status === 'completed' && Boolean(tile.inferredBounds))
+                .map((tile) => ({
+                    key: tile.tile.key,
+                    row: tile.tile.row,
+                    col: tile.tile.col,
+                    bounds: tile.inferredBounds!,
+                }));
+        }
+        // When not calibrating: source from active profile
         if (!activeProfile) {
             return [];
         }
@@ -305,9 +317,15 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 col: tile.col,
                 bounds: tile.inferredBounds!,
             }));
-    }, [activeProfile]);
+    }, [activeProfile, isCalibrationActive, runnerState.summary]);
 
-    const activeCameraOriginOffset = activeProfile?.gridBlueprint?.cameraOriginOffset ?? null;
+    const activeCameraOriginOffset = useMemo(() => {
+        // During calibration: source from runner summary if available
+        if (isCalibrationActive && runnerState.summary?.gridBlueprint) {
+            return runnerState.summary.gridBlueprint.cameraOriginOffset;
+        }
+        return activeProfile?.gridBlueprint?.cameraOriginOffset ?? null;
+    }, [isCalibrationActive, runnerState.summary, activeProfile]);
 
     const currentCameraResolution: CalibrationCameraResolution | null = useMemo(() => {
         if (videoDimensions.width > 0 && videoDimensions.height > 0) {
@@ -392,7 +410,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     ]);
 
     const tileBoundsOverlayAvailable =
-        !isCalibrationActive && activeTileBounds.length > 0 && Boolean(activeCameraOriginOffset);
+        activeTileBounds.length > 0 && Boolean(activeCameraOriginOffset);
     const displayedTileBoundsOverlayEnabled =
         tileBoundsOverlayVisible && tileBoundsOverlayAvailable;
 

@@ -1,4 +1,5 @@
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
+import { computeTileBounds } from '@/services/calibration';
 import type {
     CalibrationRunSummary,
     CalibrationRunnerState,
@@ -23,7 +24,7 @@ import type {
     TileCalibrationResults,
 } from '@/types';
 import { isValidArrayRotation } from '@/utils/arrayRotation';
-import { STEP_EPSILON, clampNormalized, convertDeltaToSteps } from '@/utils/calibrationMath';
+import { STEP_EPSILON, convertDeltaToSteps } from '@/utils/calibrationMath';
 
 export const CALIBRATION_PROFILES_STORAGE_KEY = 'mirror:calibration:profiles';
 export const CALIBRATION_PROFILES_CHANGED_EVENT = 'mirror:calibration-profiles-changed';
@@ -124,47 +125,6 @@ const computeAxisCalibration = (
         : null,
     stepScale: perStep && Math.abs(perStep) >= STEP_EPSILON ? 1 / perStep : null,
 });
-
-const computeAxisBounds = (
-    center: number | null,
-    centerSteps: number | null,
-    perStep: number | null,
-): { min: number; max: number } | null => {
-    if (
-        center == null ||
-        centerSteps == null ||
-        perStep == null ||
-        Math.abs(perStep) < STEP_EPSILON
-    ) {
-        return null;
-    }
-    const deltaMin = MOTOR_MIN_POSITION_STEPS - centerSteps;
-    const deltaMax = MOTOR_MAX_POSITION_STEPS - centerSteps;
-    const candidateA = clampNormalized(center + deltaMin * perStep);
-    const candidateB = clampNormalized(center + deltaMax * perStep);
-    return {
-        min: Math.min(candidateA, candidateB),
-        max: Math.max(candidateA, candidateB),
-    };
-};
-
-const computeTileBounds = (
-    adjustedHome: CalibrationTilePosition | null,
-    stepToDisplacement: StepVector,
-): CalibrationProfileBounds | null => {
-    if (!adjustedHome) {
-        return null;
-    }
-    const boundsX = computeAxisBounds(adjustedHome.x, adjustedHome.stepsX, stepToDisplacement.x);
-    const boundsY = computeAxisBounds(adjustedHome.y, adjustedHome.stepsY, stepToDisplacement.y);
-    if (!boundsX || !boundsY) {
-        return null;
-    }
-    return {
-        x: boundsX,
-        y: boundsY,
-    };
-};
 
 const mergeBoundsIntersection = (
     current: CalibrationProfileBounds | null,

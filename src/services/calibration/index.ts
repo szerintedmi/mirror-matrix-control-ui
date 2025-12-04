@@ -4,6 +4,15 @@
 
 export {
     // Types
+    type StepVector,
+    // Functions
+    computeAxisBounds,
+    computeTileBounds,
+    computeLiveTileBounds,
+} from './boundsComputation';
+
+export {
+    // Types
     type TileMeasurement,
     type GridEstimate,
     type ExpectedPositionConfig,
