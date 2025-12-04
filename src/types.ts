@@ -257,6 +257,9 @@ export interface CalibrationGridBlueprint {
     tileGap: { x: number; y: number };
     gridOrigin: { x: number; y: number };
     cameraOriginOffset: { x: number; y: number };
+    /** Camera dimensions for isotropic spacing calculations */
+    sourceWidth?: number;
+    sourceHeight?: number;
 }
 
 export interface BlobMeasurementStats {

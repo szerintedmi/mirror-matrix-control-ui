@@ -178,6 +178,9 @@ export function computeGridBlueprint(
         tileGap: { x: gapX, y: gapY },
         gridOrigin: { x: originX, y: originY },
         cameraOriginOffset,
+        // Store camera dimensions for isotropic spacing calculations
+        sourceWidth,
+        sourceHeight,
     };
 }
 

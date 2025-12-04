@@ -700,6 +700,18 @@ export const useCameraPipeline = ({
                 const dimension = axis === 'x' ? width : height;
                 return viewportDelta * dimension;
             };
+            // Isotropic delta projection for square tiles: uses minimum scale to preserve aspect ratio
+            const projectCameraDeltaIsotropic = (delta: number): number => {
+                const avgCameraSize = (baseRect.width + baseRect.height) / 2;
+                if (!avgCameraSize) {
+                    return 0;
+                }
+                // Use minimum letterbox scale to fit within bounds while maintaining aspect ratio
+                const minScale = Math.min(letterbox.scaleX, letterbox.scaleY);
+                const viewportDelta = (delta / avgCameraSize) * minScale;
+                const avgCanvasSize = (width + height) / 2;
+                return viewportDelta * avgCanvasSize;
+            };
             const projectCameraPoint = (point: {
                 x: number;
                 y: number;
@@ -835,8 +847,9 @@ export const useCameraPipeline = ({
                 const pxHeight = convertDeltaToPixels(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
                 const localTop = projectCameraValue(pxTop, 'y');
-                const rectWidth = projectCameraDelta(pxWidth, 'x');
-                const rectHeight = projectCameraDelta(pxHeight, 'y');
+                // Use isotropic projection to maintain correct aspect ratio
+                const rectWidth = projectCameraDeltaIsotropic(pxWidth);
+                const rectHeight = projectCameraDeltaIsotropic(pxHeight);
                 if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
                     return;
                 }
@@ -885,8 +898,9 @@ export const useCameraPipeline = ({
                     const pxHeight = convertDeltaToPixels(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    const rectWidth = projectCameraDelta(pxWidth, 'x');
-                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    // Use isotropic projection to maintain square tiles on canvas
+                    const rectWidth = projectCameraDeltaIsotropic(pxWidth);
+                    const rectHeight = projectCameraDeltaIsotropic(pxHeight);
                     if (
                         rectWidth <= 0 ||
                         rectHeight <= 0 ||
@@ -935,15 +949,9 @@ export const useCameraPipeline = ({
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
 
-                // Compute origin in pixels, with adjustment for isotropic sizing
-                // The grid origin was computed assuming centered-based spacing, but we render with isotropic spacing
-                // Adjustment ensures tile [0,0] aligns with its measurement position
-                const rawOriginXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
-                const rawOriginYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
-                const adjustmentX = (tileWidthCentered / 4) * (captureWidth - avgDim);
-                const adjustmentY = (tileWidthCentered / 4) * (captureHeight - avgDim);
-                const originXPixels = rawOriginXPixels + adjustmentX;
-                const originYPixels = rawOriginYPixels + adjustmentY;
+                // Origin in pixels - no adjustment needed since blueprint uses isotropic spacing
+                const originXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
+                const originYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
 
                 ctx.save();
                 ctx.lineWidth = 2;
@@ -959,12 +967,12 @@ export const useCameraPipeline = ({
 
                     const pxLeft = tileCenterXPixels - tileSizePixels / 2;
                     const pxTop = tileCenterYPixels - tileSizePixels / 2;
-                    const pxWidth = tileSizePixels;
-                    const pxHeight = tileSizePixels;
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    const rectWidth = projectCameraDelta(pxWidth, 'x');
-                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    // Use isotropic projection to maintain square aspect ratio on canvas
+                    const rectSize = projectCameraDeltaIsotropic(tileSizePixels);
+                    const rectWidth = rectSize;
+                    const rectHeight = rectSize;
                     if (localLeft == null || localTop == null) {
                         return;
                     }
@@ -1112,13 +1120,9 @@ export const useCameraPipeline = ({
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
 
-                // Compute origin in pixels, with adjustment for isotropic sizing
-                const rawOriginXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
-                const rawOriginYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
-                const adjustmentX = (tileWidthCentered / 4) * (captureWidth - avgDim);
-                const adjustmentY = (tileWidthCentered / 4) * (captureHeight - avgDim);
-                const originXPixels = rawOriginXPixels + adjustmentX;
-                const originYPixels = rawOriginYPixels + adjustmentY;
+                // Origin in pixels - no adjustment needed since blueprint uses isotropic spacing
+                const originXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
+                const originYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
 
                 const squareColor = new runtime.Scalar(
                     ALIGNMENT_TEAL.b,
@@ -1142,12 +1146,12 @@ export const useCameraPipeline = ({
 
                     const pxLeft = tileCenterXPixels - tileSizePixels / 2;
                     const pxTop = tileCenterYPixels - tileSizePixels / 2;
-                    const pxWidth = tileSizePixels;
-                    const pxHeight = tileSizePixels;
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    const rectWidth = projectCameraDelta(pxWidth, 'x');
-                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    // Use isotropic projection to maintain square aspect ratio on canvas
+                    const rectSize = projectCameraDeltaIsotropic(tileSizePixels);
+                    const rectWidth = rectSize;
+                    const rectHeight = rectSize;
                     if (localLeft == null || localTop == null) {
                         return;
                     }
@@ -1250,8 +1254,9 @@ export const useCameraPipeline = ({
                 const pxHeight = convertDeltaToPixels(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
                 const localTop = projectCameraValue(pxTop, 'y');
-                const rectWidth = projectCameraDelta(pxWidth, 'x');
-                const rectHeight = projectCameraDelta(pxHeight, 'y');
+                // Use isotropic projection to maintain correct aspect ratio
+                const rectWidth = projectCameraDeltaIsotropic(pxWidth);
+                const rectHeight = projectCameraDeltaIsotropic(pxHeight);
                 if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
                     return;
                 }
@@ -1282,8 +1287,9 @@ export const useCameraPipeline = ({
                     const pxHeight = convertDeltaToPixels(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    const rectWidth = projectCameraDelta(pxWidth, 'x');
-                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+                    // Use isotropic projection to maintain square tiles on canvas
+                    const rectWidth = projectCameraDeltaIsotropic(pxWidth);
+                    const rectHeight = projectCameraDeltaIsotropic(pxHeight);
                     if (localLeft == null || localTop == null) {
                         return;
                     }

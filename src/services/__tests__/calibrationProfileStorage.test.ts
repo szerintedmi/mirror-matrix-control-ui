@@ -373,14 +373,24 @@ describe('calibrationProfileStorage', () => {
             expect(saved).not.toBeNull();
             const bounds = saved!.tiles[tileKey].inferredBounds!;
             const blueprint = runnerState.summary!.gridBlueprint!;
+
+            // Compute expected isotropic bounds
+            const sourceWidth = blueprint.sourceWidth ?? 1920;
+            const sourceHeight = blueprint.sourceHeight ?? 1080;
+            const avgDim = (sourceWidth + sourceHeight) / 2;
+            const isoFactorX = avgDim / sourceWidth;
+            const isoFactorY = avgDim / sourceHeight;
+            const tileSizeXCentered = blueprint.adjustedTileFootprint.width * isoFactorX;
+            const tileSizeYCentered = blueprint.adjustedTileFootprint.height * isoFactorY;
+
             expect(bounds).toEqual({
                 x: {
                     min: blueprint.gridOrigin.x,
-                    max: blueprint.gridOrigin.x + blueprint.adjustedTileFootprint.width,
+                    max: blueprint.gridOrigin.x + tileSizeXCentered,
                 },
                 y: {
                     min: blueprint.gridOrigin.y,
-                    max: blueprint.gridOrigin.y + blueprint.adjustedTileFootprint.height,
+                    max: blueprint.gridOrigin.y + tileSizeYCentered,
                 },
             });
         });

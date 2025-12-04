@@ -335,18 +335,40 @@ const computeBlueprintFootprintBounds = (
     row: number,
     col: number,
 ): CalibrationProfileBounds => {
-    const spacingX = blueprint.adjustedTileFootprint.width + (blueprint.tileGap?.x ?? 0);
-    const spacingY = blueprint.adjustedTileFootprint.height + (blueprint.tileGap?.y ?? 0);
-    const minX = blueprint.gridOrigin.x + col * spacingX;
-    const minY = blueprint.gridOrigin.y + row * spacingY;
+    // Get camera dimensions for isotropic conversion (with sensible defaults)
+    const sourceWidth = blueprint.sourceWidth ?? 1920;
+    const sourceHeight = blueprint.sourceHeight ?? 1080;
+    const avgDim = (sourceWidth + sourceHeight) / 2;
+
+    // Isotropic conversion factors: multiply centered deltas by these to get
+    // centered values that produce uniform pixel spacing
+    const isoFactorX = avgDim / sourceWidth;
+    const isoFactorY = avgDim / sourceHeight;
+
+    // Base tile size and gap in centered coords
+    const tileWidth = blueprint.adjustedTileFootprint.width;
+    const tileHeight = blueprint.adjustedTileFootprint.height;
+    const gapX = blueprint.tileGap?.x ?? 0;
+
+    // Isotropic spacing in centered coords
+    const baseSpacing = tileWidth + gapX;
+    const spacingXCentered = baseSpacing * isoFactorX;
+    const spacingYCentered = baseSpacing * isoFactorY;
+
+    // Isotropic tile size in centered coords
+    const tileSizeXCentered = tileWidth * isoFactorX;
+    const tileSizeYCentered = tileHeight * isoFactorY;
+
+    const minX = blueprint.gridOrigin.x + col * spacingXCentered;
+    const minY = blueprint.gridOrigin.y + row * spacingYCentered;
     return {
         x: {
             min: minX,
-            max: minX + blueprint.adjustedTileFootprint.width,
+            max: minX + tileSizeXCentered,
         },
         y: {
             min: minY,
-            max: minY + blueprint.adjustedTileFootprint.height,
+            max: minY + tileSizeYCentered,
         },
     };
 };
