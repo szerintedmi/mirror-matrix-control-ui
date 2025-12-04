@@ -776,9 +776,10 @@ export class CalibrationRunner {
             );
             await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
 
-            // Capture X measurement (expected circle shown near home position)
+            // Capture X measurement - expected position is home + estimated X displacement
+            const estimatedXDisplacement = this.estimateExpectedDisplacement('x', xDelta);
             const xExpected = {
-                x: centeredToView(homeMeasurement.x),
+                x: centeredToView(homeMeasurement.x + estimatedXDisplacement),
                 y: centeredToView(homeMeasurement.y),
             };
             console.log(
@@ -786,6 +787,8 @@ export class CalibrationRunner {
                 xExpected,
                 'from home (centered):',
                 { x: homeMeasurement.x, y: homeMeasurement.y },
+                'estimated X displacement:',
+                estimatedXDisplacement,
             );
             const xCaptureResult = await this.captureMeasurementWithRetries(xExpected);
 
@@ -836,12 +839,20 @@ export class CalibrationRunner {
             );
             await this.moveAxisToPosition(yMotor, yDelta, measureGroup);
 
-            // Capture Y measurement
+            // Capture Y measurement - expected position is home + estimated Y displacement
+            const estimatedYDisplacement = this.estimateExpectedDisplacement('y', yDelta);
             const yExpected = {
                 x: centeredToView(homeMeasurement.x),
-                y: centeredToView(homeMeasurement.y),
+                y: centeredToView(homeMeasurement.y + estimatedYDisplacement),
             };
-            console.log('[CalibrationRunner] Y step test expected (view 0-1):', yExpected);
+            console.log(
+                '[CalibrationRunner] Y step test expected (view 0-1):',
+                yExpected,
+                'from home (centered):',
+                { x: homeMeasurement.x, y: homeMeasurement.y },
+                'estimated Y displacement:',
+                estimatedYDisplacement,
+            );
             const yCaptureResult = await this.captureMeasurementWithRetries(yExpected);
 
             if (yCaptureResult.measurement) {
@@ -1099,6 +1110,43 @@ export class CalibrationRunner {
         }
 
         return measurements;
+    }
+
+    /**
+     * Estimate the expected displacement for a jog test based on prior tile measurements.
+     * Uses average perStep ratio from completed tiles, or falls back to a default estimate.
+     *
+     * @param axis - The axis being tested ('x' or 'y')
+     * @param deltaSteps - Number of steps to move (can be negative)
+     * @returns Estimated displacement in centered coordinates
+     */
+    private estimateExpectedDisplacement(axis: Axis, deltaSteps: number): number {
+        // Collect perStep values from completed tiles
+        const perStepValues: number[] = [];
+
+        for (const tileState of Object.values(this.state.tiles)) {
+            if (tileState.status === 'completed' && tileState.metrics?.stepToDisplacement) {
+                const perStep = tileState.metrics.stepToDisplacement[axis];
+                if (perStep !== null && perStep !== undefined && Number.isFinite(perStep)) {
+                    perStepValues.push(perStep);
+                }
+            }
+        }
+
+        if (perStepValues.length > 0) {
+            // Use average perStep from completed tiles
+            const avgPerStep = perStepValues.reduce((a, b) => a + b, 0) / perStepValues.length;
+            return deltaSteps * avgPerStep;
+        }
+
+        // Fall back to default estimate based on typical step-to-displacement ratio.
+        // Motor coordinate system: +X = LEFT, +Y = UP (from camera view)
+        // Centered coordinate system: +X = RIGHT, +Y = DOWN
+        // Therefore: motor positive steps → NEGATIVE displacement in centered coords.
+        // The perStep ratio is typically negative (e.g., -0.00025).
+        // With ~1200 steps producing ~0.30 centered units displacement:
+        const DEFAULT_PER_STEP = -0.3 / 1200; // Negative because motor and centered coords are inverted
+        return deltaSteps * DEFAULT_PER_STEP;
     }
 
     private applySummaryMetrics(summary: CalibrationRunSummary): void {

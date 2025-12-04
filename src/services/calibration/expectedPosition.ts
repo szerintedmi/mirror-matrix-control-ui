@@ -181,16 +181,20 @@ export function estimateGridFromMeasurements(
 // =============================================================================
 
 /**
- * Computes expected blob position for first tile using ROI center.
- * Returns position in viewport coordinates.
+ * Computes expected blob position for first tile.
+ * Returns position at the left edge of ROI, vertically centered.
+ *
+ * The first tile calibrated is (0,0) - top-left in logical coordinates.
+ * This typically appears at the left side of the camera view.
  *
  * @param roi - Region of interest bounds (viewport coords)
- * @returns Expected position at ROI center
+ * @returns Expected position at ROI left edge, vertically centered
  */
 export function computeFirstTileExpected(roi: NormalizedRoi): ViewportCoord {
-    const roiCenterX = roi.x + roi.width / 2;
+    // First tile (0,0) expected at left edge of ROI, centered vertically
+    const roiLeftX = roi.x;
     const roiCenterY = roi.y + roi.height / 2;
-    return asViewport(roiCenterX, roiCenterY);
+    return asViewport(roiLeftX, roiCenterY);
 }
 
 /**

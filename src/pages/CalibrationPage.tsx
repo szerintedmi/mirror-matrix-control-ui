@@ -3,10 +3,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
-import CalibrationSettingsPanel from '@/components/calibration/CalibrationSettingsPanel';
-import CalibrationStatusBar from '@/components/calibration/CalibrationStatusBar';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
+import TileStatusesPanel from '@/components/calibration/TileStatusesPanel';
 import { DEFAULT_STAGING_POSITION } from '@/constants/calibration';
 import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationController } from '@/hooks/useCalibrationController';
@@ -234,10 +233,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     const {
         runnerState,
         runnerSettings,
-        updateSetting: updateRunnerSetting,
-        mode: calibrationMode,
+        tileEntries,
         stepState,
-        isActive: isCalibrationRunnerActive,
         isAwaitingAdvance,
         detectionReady: calibrationDetectionReady,
         start: startCalibration,
@@ -433,120 +430,101 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                     </p>
                 </div>
             )}
-            <CalibrationSettingsPanel
+            <TileStatusesPanel
+                tileEntries={tileEntries}
+                drivers={drivers}
+                runnerSummary={runnerState.summary ?? null}
+                deltaSteps={runnerSettings.deltaSteps}
+            />
+            <CalibrationRunnerPanel
+                controller={calibrationController}
+                loadedProfileSummary={calibrationProfilesController.activeProfileSummary}
+                gridSize={gridSize}
                 arrayRotation={arrayRotation}
                 onArrayRotationChange={setArrayRotation}
                 stagingPosition={stagingPosition}
                 onStagingPositionChange={setStagingPosition}
-                deltaSteps={runnerSettings.deltaSteps}
-                onDeltaStepsChange={(v) => updateRunnerSetting('deltaSteps', v)}
-                gridGapNormalized={runnerSettings.gridGapNormalized}
-                onGridGapNormalizedChange={(v) => updateRunnerSetting('gridGapNormalized', v)}
-                maxBlobDistanceThreshold={runnerSettings.maxBlobDistanceThreshold}
-                onMaxBlobDistanceThresholdChange={(v) =>
-                    updateRunnerSetting('maxBlobDistanceThreshold', v)
-                }
-                firstTileTolerance={runnerSettings.firstTileTolerance}
-                onFirstTileToleranceChange={(v) => updateRunnerSetting('firstTileTolerance', v)}
-                disabled={isCalibrationActive}
+                isCalibrationActive={isCalibrationActive}
+                stepState={stepState}
+                isAwaitingAdvance={isAwaitingAdvance}
+                isPaused={isCalibrationPaused}
+                detectionReady={calibrationDetectionReady}
+                onStart={startCalibration}
+                onPause={pauseCalibration}
+                onResume={resumeCalibration}
+                onAbort={abortCalibration}
+                onAdvance={advanceCalibration}
             />
-            <CalibrationRunnerPanel
-                controller={calibrationController}
-                drivers={drivers}
-                loadedProfileSummary={calibrationProfilesController.activeProfileSummary}
-                gridSize={gridSize}
-                arrayRotation={arrayRotation}
-                stagingPosition={stagingPosition}
-            />
-            <div className="flex flex-col gap-4">
-                {/* Status bar - shown above camera for both auto and step modes */}
-                <CalibrationStatusBar
-                    runnerState={runnerState}
-                    stepState={stepState}
-                    mode={calibrationMode}
-                    isAwaitingAdvance={isAwaitingAdvance}
-                    isActive={isCalibrationRunnerActive}
-                    isPaused={isCalibrationPaused}
-                    detectionReady={calibrationDetectionReady}
-                    onStart={startCalibration}
-                    onPause={pauseCalibration}
-                    onResume={resumeCalibration}
-                    onAbort={abortCalibration}
-                    onAdvance={advanceCalibration}
-                />
-                <div className="flex flex-col gap-6 lg:flex-row">
-                    <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">
-                        <DetectionProfileManager
-                            savedProfiles={savedProfiles}
-                            profileName={profileNameInput}
-                            onProfileNameChange={setProfileNameInput}
-                            selectedProfileId={selectedProfileId}
-                            onSelectProfile={selectProfileId}
-                            onSaveProfile={saveProfile}
-                            onNewProfile={resetProfileSelection}
-                            onLoadProfile={applyProfileById}
-                        />
-                        <DetectionSettingsPanel
-                            devices={devices}
-                            selectedDeviceId={selectedDeviceId}
-                            onSelectDevice={setSelectedDeviceId}
-                            selectedResolutionId={selectedResolutionId}
-                            onSelectResolution={setSelectedResolutionId}
-                            videoDimensions={videoDimensions}
-                            roi={roi}
-                            processedFps={processedFps}
-                            previewMode={previewMode}
-                            detectedBlobCount={detectedBlobCount}
-                            opencvStatus={opencvStatus}
-                            cameraStatus={cameraStatus}
-                            cameraError={cameraError}
-                            detectionReady={detectionReady}
-                            brightness={brightness}
-                            onChangeBrightness={setBrightness}
-                            contrast={contrast}
-                            onChangeContrast={setContrast}
-                            rotationDegrees={rotationDegrees}
-                            onChangeRotation={setRotationDegrees}
-                            onRotationAdjustStart={() => setIsRotationAdjusting(true)}
-                            onRotationAdjustEnd={() => setIsRotationAdjusting(false)}
-                            claheClipLimit={claheClipLimit}
-                            onChangeClaheClipLimit={setClaheClipLimit}
-                            claheTileGridSize={claheTileGridSize}
-                            onChangeClaheTileGridSize={setClaheTileGridSize}
-                            blobParams={blobParams}
-                            onUpdateBlobParam={updateBlobParam}
-                            useWasmDetector={useWasmDetector}
-                            onToggleUseWasmDetector={setUseWasmDetector}
-                            nativeBlobDetectorAvailable={nativeBlobDetectorAvailable}
-                        />
-                    </div>
-                    <CalibrationPreview
-                        previewMode={previewMode}
-                        onPreviewModeChange={setPreviewMode}
-                        roi={roi}
-                        roiViewEnabled={roiViewEnabled}
-                        onToggleRoiView={toggleRoiView}
-                        onResetRoi={resetRoi}
-                        previewRefs={previewRefs}
-                        overlayHandlers={overlayHandlers}
-                        rotationDegrees={rotationDegrees}
-                        rotationOverlayVisible={rotationOverlayVisible}
-                        roiEditingMode={roiEditingMode}
-                        opencvStatus={opencvStatus}
-                        opencvError={opencvError}
+            <div className="flex flex-col gap-6 lg:flex-row">
+                <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">
+                    <DetectionProfileManager
+                        savedProfiles={savedProfiles}
+                        profileName={profileNameInput}
+                        onProfileNameChange={setProfileNameInput}
+                        selectedProfileId={selectedProfileId}
+                        onSelectProfile={selectProfileId}
+                        onSaveProfile={saveProfile}
+                        onNewProfile={resetProfileSelection}
+                        onLoadProfile={applyProfileById}
+                    />
+                    <DetectionSettingsPanel
+                        devices={devices}
+                        selectedDeviceId={selectedDeviceId}
+                        onSelectDevice={setSelectedDeviceId}
+                        selectedResolutionId={selectedResolutionId}
+                        onSelectResolution={setSelectedResolutionId}
                         videoDimensions={videoDimensions}
-                        blobsOverlayEnabled={blobsOverlayEnabled}
-                        onToggleBlobsOverlay={() => setBlobsOverlayEnabled(!blobsOverlayEnabled)}
-                        alignmentOverlayEnabled={displayedAlignmentOverlayEnabled}
-                        alignmentOverlayAvailable={alignmentOverlayAvailable}
-                        onToggleAlignmentOverlay={() => setAlignmentOverlayVisible((prev) => !prev)}
-                        tileBoundsOverlayEnabled={displayedTileBoundsOverlayEnabled}
-                        tileBoundsOverlayAvailable={tileBoundsOverlayAvailable}
-                        onToggleTileBoundsOverlay={() =>
-                            setTileBoundsOverlayVisible((prev) => !prev)
-                        }
+                        roi={roi}
+                        processedFps={processedFps}
+                        previewMode={previewMode}
+                        detectedBlobCount={detectedBlobCount}
+                        opencvStatus={opencvStatus}
+                        cameraStatus={cameraStatus}
+                        cameraError={cameraError}
+                        detectionReady={detectionReady}
+                        brightness={brightness}
+                        onChangeBrightness={setBrightness}
+                        contrast={contrast}
+                        onChangeContrast={setContrast}
+                        rotationDegrees={rotationDegrees}
+                        onChangeRotation={setRotationDegrees}
+                        onRotationAdjustStart={() => setIsRotationAdjusting(true)}
+                        onRotationAdjustEnd={() => setIsRotationAdjusting(false)}
+                        claheClipLimit={claheClipLimit}
+                        onChangeClaheClipLimit={setClaheClipLimit}
+                        claheTileGridSize={claheTileGridSize}
+                        onChangeClaheTileGridSize={setClaheTileGridSize}
+                        blobParams={blobParams}
+                        onUpdateBlobParam={updateBlobParam}
+                        useWasmDetector={useWasmDetector}
+                        onToggleUseWasmDetector={setUseWasmDetector}
+                        nativeBlobDetectorAvailable={nativeBlobDetectorAvailable}
                     />
                 </div>
+                <CalibrationPreview
+                    previewMode={previewMode}
+                    onPreviewModeChange={setPreviewMode}
+                    roi={roi}
+                    roiViewEnabled={roiViewEnabled}
+                    onToggleRoiView={toggleRoiView}
+                    onResetRoi={resetRoi}
+                    previewRefs={previewRefs}
+                    overlayHandlers={overlayHandlers}
+                    rotationDegrees={rotationDegrees}
+                    rotationOverlayVisible={rotationOverlayVisible}
+                    roiEditingMode={roiEditingMode}
+                    opencvStatus={opencvStatus}
+                    opencvError={opencvError}
+                    videoDimensions={videoDimensions}
+                    blobsOverlayEnabled={blobsOverlayEnabled}
+                    onToggleBlobsOverlay={() => setBlobsOverlayEnabled(!blobsOverlayEnabled)}
+                    alignmentOverlayEnabled={displayedAlignmentOverlayEnabled}
+                    alignmentOverlayAvailable={alignmentOverlayAvailable}
+                    onToggleAlignmentOverlay={() => setAlignmentOverlayVisible((prev) => !prev)}
+                    tileBoundsOverlayEnabled={displayedTileBoundsOverlayEnabled}
+                    tileBoundsOverlayAvailable={tileBoundsOverlayAvailable}
+                    onToggleTileBoundsOverlay={() => setTileBoundsOverlayVisible((prev) => !prev)}
+                />
             </div>
         </div>
     );

@@ -29,7 +29,6 @@ import {
     cameraToViewport,
 } from '@/utils/letterbox';
 import {
-    denormalizeIsotropic,
     denormalizeIsotropicDelta,
     normalizeIsotropic,
     viewportToIsotropic,
@@ -689,7 +688,8 @@ export const useCameraPipeline = ({
                     return null;
                 }
                 const normalized = (value - baseStart) / baseSize;
-                if (normalized < 0 || normalized > 1 || Number.isNaN(normalized)) {
+                // Allow slightly out of bounds values (handled by clamping in cameraToViewport)
+                if (Number.isNaN(normalized)) {
                     return null;
                 }
                 const viewportNormalized = cameraToViewport(normalized, axis, letterbox);
@@ -853,14 +853,17 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
+            // Convert centered coordinates [-1,1] to pixel coordinates
+            // Grid blueprint uses centered coordinate system (grid center at origin)
             const convertCoordToPixelsX = (value: number): number => {
-                const iso = centeredToView(value);
-                return denormalizeIsotropic(iso, 0, captureWidth, captureHeight).x;
+                const viewport = centeredToView(value); // [-1,1] -> [0,1]
+                return viewportToPixels(viewport, 0, captureWidth, captureHeight).x;
             };
             const convertCoordToPixelsY = (value: number): number => {
-                const iso = centeredToView(value);
-                return denormalizeIsotropic(0, iso, captureWidth, captureHeight).y;
+                const viewport = centeredToView(value); // [-1,1] -> [0,1]
+                return viewportToPixels(0, viewport, captureWidth, captureHeight).y;
             };
+            // Size/delta conversion: input is in centered system (range 2), convert to isotropic pixels
             const convertDeltaToPixels = (delta: number): number =>
                 denormalizeIsotropicDelta(centeredDeltaToView(delta), captureWidth, captureHeight);
 

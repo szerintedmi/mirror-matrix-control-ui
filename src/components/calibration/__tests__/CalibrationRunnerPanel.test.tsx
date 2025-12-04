@@ -4,7 +4,6 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import { DEFAULT_CALIBRATION_RUNNER_SETTINGS } from '@/constants/calibration';
-import type { DriverView } from '@/context/StatusContext';
 import type { CalibrationController } from '@/hooks/useCalibrationController';
 import type {
     CalibrationRunnerState,
@@ -34,25 +33,6 @@ const createMotor = (motorIndex: number): Motor => ({
 });
 
 const baseAssignment = { x: createMotor(1), y: createMotor(2) };
-
-const createDriverView = (topicMac: string): DriverView => ({
-    mac: topicMac,
-    topicMac,
-    snapshot: {
-        mac: topicMac,
-        topicMac,
-        nodeState: 'ready',
-        motors: {},
-        raw: {},
-    },
-    firstSeenAt: 0,
-    lastSeenAt: 0,
-    isNew: false,
-    source: 'ws',
-    presence: 'ready',
-    staleForMs: 0,
-    brokerDisconnected: false,
-});
 
 const pendingTile: TileRunState = {
     tile: { row: 0, col: 0, key: '0-0' },
@@ -116,8 +96,6 @@ const runnerState: CalibrationRunnerState = {
     error: null,
 };
 
-const drivers: DriverView[] = [];
-
 const noop = () => {};
 
 const createMockController = (state: CalibrationRunnerState): CalibrationController => ({
@@ -143,22 +121,30 @@ const createMockController = (state: CalibrationRunnerState): CalibrationControl
     advance: noop,
 });
 
-const renderPanel = async (
-    options: { runnerState?: CalibrationRunnerState; drivers?: DriverView[] } = {},
-) => {
+const renderPanel = async (options: { runnerState?: CalibrationRunnerState } = {}) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const state = options.runnerState ?? runnerState;
-    const driverList = options.drivers ?? drivers;
     const controller = createMockController(state);
     await act(async () => {
         const element = (
             <CalibrationRunnerPanel
                 controller={controller}
-                drivers={driverList}
                 gridSize={{ rows: 2, cols: 2 }}
                 arrayRotation={0}
+                onArrayRotationChange={noop}
                 stagingPosition="nearest-corner"
+                onStagingPositionChange={noop}
+                isCalibrationActive={false}
+                stepState={null}
+                isAwaitingAdvance={false}
+                isPaused={false}
+                detectionReady={true}
+                onStart={noop}
+                onPause={noop}
+                onResume={noop}
+                onAbort={noop}
+                onAdvance={noop}
             />
         );
         const root = createRoot(container);
@@ -177,23 +163,6 @@ beforeEach(() => {
 
 afterEach(() => {
     document.body.innerHTML = '';
-});
-
-describe('CalibrationRunnerPanel tile modal', () => {
-    it('shows selected tile metrics for completed tiles', async () => {
-        const container = await renderPanel();
-        const completedCard = container.querySelector<HTMLElement>(
-            '[aria-label="Inspect calibration metrics for tile [0,1]"]',
-        );
-        expect(completedCard).toBeTruthy();
-        await act(async () => {
-            completedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-        const modalRoot = document.getElementById('modal-root');
-        expect(modalRoot).not.toBeNull();
-        expect(modalRoot?.textContent).toContain('Tile [0,1] – debug metrics');
-        expect(modalRoot?.textContent).not.toContain('[0,0]');
-    });
 });
 
 describe('CalibrationRunnerPanel homing actions', () => {
@@ -217,8 +186,7 @@ describe('CalibrationRunnerPanel homing actions', () => {
     });
 
     it('homes all motors to physical zero', async () => {
-        const driverList = [createDriverView('aa:bb'), createDriverView('cc:dd')];
-        const container = await renderPanel({ drivers: driverList });
+        const container = await renderPanel();
         // Open the Move dropdown first
         const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
             button.textContent?.includes('Move'),

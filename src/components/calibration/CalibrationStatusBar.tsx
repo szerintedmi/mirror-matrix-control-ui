@@ -11,6 +11,7 @@ interface CalibrationStatusBarProps {
     runnerState: CalibrationRunnerState;
     stepState: CalibrationStepState | null;
     mode: CalibrationMode;
+    onModeChange: (mode: CalibrationMode) => void;
     isAwaitingAdvance: boolean;
     isActive: boolean;
     isPaused: boolean;
@@ -57,6 +58,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
     runnerState,
     stepState,
     mode,
+    onModeChange,
     isAwaitingAdvance,
     isActive,
     isPaused,
@@ -232,6 +234,32 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 {/* Spacer */}
                 <div className="flex-1" />
 
+                {/* Mode toggle */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-gray-500">Mode</span>
+                    <div className="flex rounded-md border border-gray-700 bg-gray-800 text-xs font-semibold">
+                        {(['auto', 'step'] as CalibrationMode[]).map((m) => (
+                            <button
+                                key={m}
+                                type="button"
+                                className={`px-2.5 py-1 transition-colors ${
+                                    mode === m
+                                        ? 'bg-emerald-700 text-white'
+                                        : 'text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                                } first:rounded-l-md last:rounded-r-md ${isActive ? 'cursor-not-allowed opacity-60' : ''}`}
+                                onClick={() => !isActive && onModeChange(m)}
+                                disabled={isActive}
+                                aria-pressed={mode === m}
+                            >
+                                {m === 'auto' ? 'Auto' : 'Step'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Divider */}
+                <div className="h-8 w-px bg-gray-700" />
+
                 {/* Action buttons */}
                 <div className="flex items-center gap-2">
                     {!isActive && (
@@ -262,7 +290,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                             Next Step
                         </button>
                     )}
-                    {mode === 'auto' && (
+                    {isActive && mode === 'auto' && (
                         <>
                             <button
                                 type="button"

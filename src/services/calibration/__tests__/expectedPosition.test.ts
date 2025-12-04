@@ -172,12 +172,13 @@ describe('expectedPosition', () => {
     });
 
     describe('computeFirstTileExpected', () => {
-        it('should return ROI center', () => {
+        it('should return ROI left edge, vertically centered', () => {
             const roi = { enabled: true, x: 0.1, y: 0.2, width: 0.6, height: 0.5 };
             const expected = computeFirstTileExpected(roi);
 
-            // Center = (0.1 + 0.6/2, 0.2 + 0.5/2) = (0.4, 0.45)
-            expect(expected.x).toBeCloseTo(0.4);
+            // First tile expected at ROI left edge (x), vertically centered (y)
+            // x = 0.1 (left edge), y = 0.2 + 0.5/2 = 0.45 (vertical center)
+            expect(expected.x).toBeCloseTo(0.1);
             expect(expected.y).toBeCloseTo(0.45);
         });
 
@@ -185,8 +186,8 @@ describe('expectedPosition', () => {
             const defaultRoi = { enabled: true, x: 0.15, y: 0.15, width: 0.7, height: 0.7 };
             const expected = computeFirstTileExpected(defaultRoi);
 
-            // Center = (0.15 + 0.7/2, 0.15 + 0.7/2) = (0.5, 0.5)
-            expect(expected.x).toBeCloseTo(0.5);
+            // x = 0.15 (left edge), y = 0.15 + 0.7/2 = 0.5 (vertical center)
+            expect(expected.x).toBeCloseTo(0.15);
             expect(expected.y).toBeCloseTo(0.5);
         });
 
@@ -194,8 +195,8 @@ describe('expectedPosition', () => {
             const edgeRoi = { enabled: true, x: 0, y: 0, width: 1, height: 1 };
             const expected = computeFirstTileExpected(edgeRoi);
 
-            // Full frame ROI, center at (0.5, 0.5)
-            expect(expected.x).toBeCloseTo(0.5);
+            // Full frame ROI: x = 0 (left edge), y = 0.5 (vertical center)
+            expect(expected.x).toBeCloseTo(0);
             expect(expected.y).toBeCloseTo(0.5);
         });
     });
@@ -245,11 +246,12 @@ describe('expectedPosition', () => {
             roi: { enabled: true, x: 0.15, y: 0.15, width: 0.7, height: 0.7 },
         };
 
-        it('should return ROI center for first tile (no measurements)', () => {
+        it('should return ROI left edge for first tile (no measurements)', () => {
             const expected = computeExpectedBlobPosition(0, 0, [], config);
 
-            // ROI center = (0.15 + 0.7/2, 0.15 + 0.7/2) = (0.5, 0.5)
-            expect(expected.x).toBeCloseTo(0.5);
+            // ROI left edge (x), vertically centered (y)
+            // x = 0.15, y = 0.15 + 0.7/2 = 0.5
+            expect(expected.x).toBeCloseTo(0.15);
             expect(expected.y).toBeCloseTo(0.5);
         });
 

@@ -1,24 +1,16 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 
 import CalibrationCommandLog from '@/components/calibration/CalibrationCommandLog';
+import CalibrationSettingsPanel from '@/components/calibration/CalibrationSettingsPanel';
+import CalibrationStatusBar from '@/components/calibration/CalibrationStatusBar';
 import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
 import MoveActionsDropdown from '@/components/calibration/MoveActionsDropdown';
-import TileAxisAction from '@/components/calibration/TileAxisAction';
-import TileDebugModal from '@/components/calibration/TileDebugModal';
-import CollapsibleSection from '@/components/common/CollapsibleSection';
-import {
-    getTileStatusClasses,
-    getTileErrorTextClass,
-    TILE_WARNING_TEXT_CLASS,
-} from '@/constants/calibrationUiThemes';
-import type { DriverView } from '@/context/StatusContext';
-import type { CalibrationController, CalibrationMode } from '@/hooks/useCalibrationController';
-import type { CalibrationRunSummary } from '@/services/calibrationRunner';
-import type { ArrayRotation, Motor, MotorTelemetry, StagingPosition } from '@/types';
+import type { CalibrationController } from '@/hooks/useCalibrationController';
+import type { CalibrationRunSummary, CalibrationStepState } from '@/services/calibrationRunner';
+import type { ArrayRotation, StagingPosition } from '@/types';
 
 interface CalibrationRunnerPanelProps {
     controller: CalibrationController;
-    drivers: DriverView[];
     /**
      * Summary from a loaded calibration profile. When present, shows calibration actions
      * even if no calibration has been run in the current session.
@@ -26,18 +18,43 @@ interface CalibrationRunnerPanelProps {
     loadedProfileSummary?: CalibrationRunSummary | null;
     gridSize: { rows: number; cols: number };
     arrayRotation: ArrayRotation;
+    onArrayRotationChange: (rotation: ArrayRotation) => void;
     stagingPosition: StagingPosition;
+    onStagingPositionChange: (position: StagingPosition) => void;
+    isCalibrationActive: boolean;
+    // Status bar props
+    stepState: CalibrationStepState | null;
+    isAwaitingAdvance: boolean;
+    isPaused: boolean;
+    detectionReady: boolean;
+    onStart: () => void;
+    onPause: () => void;
+    onResume: () => void;
+    onAbort: () => void;
+    onAdvance: () => void;
 }
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     controller,
-    drivers,
     loadedProfileSummary,
     gridSize,
     arrayRotation,
+    onArrayRotationChange,
     stagingPosition,
+    onStagingPositionChange,
+    isCalibrationActive,
+    stepState,
+    isAwaitingAdvance,
+    isPaused,
+    detectionReady,
+    onStart,
+    onPause,
+    onResume,
+    onAbort,
+    onAdvance,
 }) => {
-    const { runnerState, runnerSettings, commandLog, tileEntries, mode, setMode } = controller;
+    const { runnerState, runnerSettings, updateSetting, commandLog, tileEntries, mode, setMode } =
+        controller;
 
     const isRunnerBusy =
         runnerState.phase === 'homing' ||
@@ -49,256 +66,77 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     const runnerBlueprint = runnerState.summary?.gridBlueprint;
     const loadedBlueprint = loadedProfileSummary?.gridBlueprint;
     const blueprint = runnerBlueprint ?? loadedBlueprint;
-    const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-
-    const debugTileEntry = useMemo(() => {
-        if (!debugTileKey) {
-            return null;
-        }
-        return tileEntries.find((entry) => entry.tile.key === debugTileKey) ?? null;
-    }, [debugTileKey, tileEntries]);
-    const debugTileSummary = useMemo(() => {
-        if (!debugTileKey || !runnerState.summary) {
-            return null;
-        }
-        return runnerState.summary.tiles[debugTileKey] ?? null;
-    }, [runnerState.summary, debugTileKey]);
-    const stepTestSnapshot =
-        runnerState.summary?.stepTestSettings ??
-        ({
-            deltaSteps: runnerSettings.deltaSteps,
-        } as const);
-    const telemetryMap = useMemo(() => {
-        const map = new Map<string, MotorTelemetry>();
-        drivers.forEach((driver) => {
-            const topicMac = driver.snapshot.topicMac;
-            Object.values(driver.snapshot.motors).forEach((motor) => {
-                map.set(`${topicMac}-${motor.id}`, {
-                    id: motor.id,
-                    position: motor.position,
-                    moving: motor.moving,
-                    awake: motor.awake,
-                    homed: motor.homed,
-                    stepsSinceHome: motor.stepsSinceHome,
-                });
-            });
-        });
-        return map;
-    }, [drivers]);
-
-    const getTelemetryForMotor = useCallback(
-        (motor: Motor | null): MotorTelemetry | undefined => {
-            if (!motor) {
-                return undefined;
-            }
-            return telemetryMap.get(`${motor.nodeMac}-${motor.motorIndex}`);
-        },
-        [telemetryMap],
-    );
-
-    const handleInspectTile = useCallback((tileKey: string) => {
-        setDebugTileKey(tileKey);
-    }, []);
-
-    const closeDebugModal = useCallback(() => {
-        setDebugTileKey(null);
-    }, []);
-
-    const handleTileCardClick = useCallback(
-        (event: React.MouseEvent<HTMLDivElement>, tileKey: string) => {
-            const target = event.target as HTMLElement | null;
-            const interactiveAncestor = target?.closest(
-                'button, a, input, textarea, select, [role="button"]',
-            );
-            if (interactiveAncestor && interactiveAncestor !== event.currentTarget) {
-                return;
-            }
-            handleInspectTile(tileKey);
-        },
-        [handleInspectTile],
-    );
-
-    const handleTileCardKeyDown = useCallback(
-        (event: React.KeyboardEvent<HTMLDivElement>, tileKey: string) => {
-            if (event.currentTarget !== event.target) {
-                return;
-            }
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                handleInspectTile(tileKey);
-            }
-        },
-        [handleInspectTile],
-    );
-
-    const gridColumnCount =
-        tileEntries.reduce((max, entry) => (entry.tile.col > max ? entry.tile.col : max), 0) + 1;
 
     return (
         <>
             <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
-                {/* Header with title and mode toggle */}
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <h2 className="text-lg font-semibold text-emerald-300">Calibration Runner</h2>
-                    {/* Mode toggle */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs uppercase tracking-wide text-gray-500">Mode</span>
-                        <div className="flex rounded-md border border-gray-700 bg-gray-900 text-xs font-semibold">
-                            {(['auto', 'step'] as CalibrationMode[]).map((m) => (
-                                <button
-                                    key={m}
-                                    type="button"
-                                    className={`px-3 py-1 transition-colors ${
-                                        mode === m
-                                            ? 'bg-emerald-700 text-white'
-                                            : 'text-gray-300 hover:bg-gray-800'
-                                    } first:rounded-l-md last:rounded-r-md`}
-                                    onClick={() => setMode(m)}
-                                    aria-pressed={mode === m}
-                                >
-                                    {m === 'auto' ? 'Auto' : 'Step'}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
+                {/* Section header */}
+                <h2 className="text-lg font-semibold text-emerald-300 mb-4">Calibration</h2>
 
-                {/* Actions row */}
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <MoveActionsDropdown
-                        runnerState={runnerState}
-                        tileEntries={tileEntries}
-                        isRunnerBusy={isRunnerBusy}
-                        loadedProfileSummary={loadedProfileSummary}
-                        gridSize={gridSize}
+                <div className="space-y-4">
+                    {/* Calibration Settings - collapsed by default */}
+                    <CalibrationSettingsPanel
                         arrayRotation={arrayRotation}
+                        onArrayRotationChange={onArrayRotationChange}
                         stagingPosition={stagingPosition}
+                        onStagingPositionChange={onStagingPositionChange}
+                        deltaSteps={runnerSettings.deltaSteps}
+                        onDeltaStepsChange={(v) => updateSetting('deltaSteps', v)}
+                        gridGapNormalized={runnerSettings.gridGapNormalized}
+                        onGridGapNormalizedChange={(v) => updateSetting('gridGapNormalized', v)}
+                        maxBlobDistanceThreshold={runnerSettings.maxBlobDistanceThreshold}
+                        onMaxBlobDistanceThresholdChange={(v) =>
+                            updateSetting('maxBlobDistanceThreshold', v)
+                        }
+                        firstTileTolerance={runnerSettings.firstTileTolerance}
+                        onFirstTileToleranceChange={(v) => updateSetting('firstTileTolerance', v)}
+                        disabled={isCalibrationActive}
                     />
-                    {blueprint && (
-                        <button
-                            type="button"
-                            onClick={() => setSummaryModalOpen(true)}
-                            className="text-xs text-gray-500 hover:text-gray-300 hover:underline"
-                        >
-                            View calibration math
-                        </button>
-                    )}
-                </div>
-                <CalibrationCommandLog entries={commandLog} mode={mode} />
-                <CollapsibleSection
-                    title="Tile Statuses"
-                    defaultExpanded
-                    collapsedSummary={`${runnerState.progress.completed}/${runnerState.progress.total} completed`}
-                    icon={
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                            />
-                        </svg>
-                    }
-                    headerActions={
-                        <div className="flex flex-wrap items-center gap-3 text-[10px] text-gray-400">
-                            <span className="flex items-center gap-1">
-                                <span className="h-2 w-2 rounded-sm bg-gray-700" /> Pending
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="h-2 w-2 rounded-sm bg-sky-700" /> Staged
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="h-2 w-2 rounded-sm bg-amber-600" /> Measuring
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="h-2 w-2 rounded-sm bg-emerald-600" /> Completed
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="h-2 w-2 rounded-sm bg-rose-600" /> Failed
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="h-2 w-2 rounded-sm bg-gray-600" /> Skipped
-                            </span>
-                        </div>
-                    }
-                    className="mt-4"
-                >
-                    <div
-                        className="grid gap-2"
-                        style={{
-                            gridTemplateColumns: `repeat(${Math.max(gridColumnCount, 1)}, minmax(0, 1fr))`,
-                        }}
-                    >
-                        {tileEntries.map((entry) => (
-                            <div
-                                key={entry.tile.key}
-                                role="button"
-                                tabIndex={0}
-                                aria-label={`Inspect calibration metrics for tile [${entry.tile.row},${entry.tile.col}]`}
-                                onClick={(event) => handleTileCardClick(event, entry.tile.key)}
-                                onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
-                                className={`rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'}`}
+
+                    {/* Status bar with progress, mode toggle, and action buttons */}
+                    <CalibrationStatusBar
+                        runnerState={runnerState}
+                        stepState={stepState}
+                        mode={mode}
+                        onModeChange={setMode}
+                        isAwaitingAdvance={isAwaitingAdvance}
+                        isActive={isCalibrationActive}
+                        isPaused={isPaused}
+                        detectionReady={detectionReady}
+                        onStart={onStart}
+                        onPause={onPause}
+                        onResume={onResume}
+                        onAbort={onAbort}
+                        onAdvance={onAdvance}
+                    />
+
+                    {/* Actions row */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <MoveActionsDropdown
+                            runnerState={runnerState}
+                            tileEntries={tileEntries}
+                            isRunnerBusy={isRunnerBusy}
+                            loadedProfileSummary={loadedProfileSummary}
+                            gridSize={gridSize}
+                            arrayRotation={arrayRotation}
+                            stagingPosition={stagingPosition}
+                        />
+                        {blueprint && (
+                            <button
+                                type="button"
+                                onClick={() => setSummaryModalOpen(true)}
+                                className="text-xs text-gray-500 hover:text-gray-300 hover:underline"
                             >
-                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] font-semibold">
-                                    <span className="font-mono">
-                                        [{entry.tile.row},{entry.tile.col}]
-                                    </span>
-                                    <span className="text-xs capitalize font-medium">
-                                        {entry.status}
-                                    </span>
-                                </div>
-                                {entry.error && (
-                                    <div
-                                        className={`mt-1 text-[10px] leading-tight ${getTileErrorTextClass(entry.status)}`}
-                                    >
-                                        {entry.error}
-                                    </div>
-                                )}
-                                {entry.warnings && entry.warnings.length > 0 && (
-                                    <div
-                                        className={`mt-1 text-[10px] leading-tight ${TILE_WARNING_TEXT_CLASS}`}
-                                    >
-                                        {entry.warnings.map((warning, idx) => (
-                                            <div key={idx}>{warning}</div>
-                                        ))}
-                                    </div>
-                                )}
-                                {(entry.assignment.x || entry.assignment.y) && (
-                                    <div className="mt-2 rounded-md border border-gray-800/70 bg-gray-950/60 p-1.5 text-[10px] text-gray-200">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <TileAxisAction
-                                                axis="x"
-                                                motor={entry.assignment.x}
-                                                telemetry={getTelemetryForMotor(entry.assignment.x)}
-                                                layout="inline"
-                                                className="flex-1 min-w-[120px]"
-                                                showHomeButton
-                                            />
-                                            <TileAxisAction
-                                                axis="y"
-                                                motor={entry.assignment.y}
-                                                telemetry={getTelemetryForMotor(entry.assignment.y)}
-                                                layout="inline"
-                                                className="flex-1 min-w-[120px]"
-                                                showHomeButton
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                View calibration math
+                            </button>
+                        )}
                     </div>
-                </CollapsibleSection>
+
+                    {/* Command log - collapsed by default */}
+                    <CalibrationCommandLog entries={commandLog} mode={mode} />
+                </div>
             </section>
-            <TileDebugModal
-                open={Boolean(debugTileKey)}
-                entry={debugTileEntry}
-                summaryTile={debugTileSummary}
-                onClose={closeDebugModal}
-                stepTestSettings={stepTestSnapshot}
-                getTelemetryForMotor={getTelemetryForMotor}
-            />
             <CalibrationSummaryModal
                 open={summaryModalOpen}
                 summary={runnerState.summary ?? null}
