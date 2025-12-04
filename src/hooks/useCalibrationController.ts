@@ -59,6 +59,14 @@ interface UseCalibrationControllerParams {
         tiles: CalibrationRunnerState['tiles'];
         progress: CalibrationRunnerState['progress'];
     } | null;
+    /**
+     * Callback to update the expected blob position overlay.
+     * Position is in viewport coordinates (0 to 1).
+     */
+    onExpectedPositionChange?: (
+        position: { x: number; y: number } | null,
+        tolerance: number,
+    ) => void;
 }
 
 export interface CalibrationController {
@@ -105,6 +113,7 @@ export const useCalibrationController = ({
     cameraAspectRatio,
     roi,
     initialSessionState,
+    onExpectedPositionChange,
 }: UseCalibrationControllerParams): CalibrationController => {
     const [mode, setMode] = useState<CalibrationMode>('auto');
     const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
@@ -210,6 +219,7 @@ export const useCalibrationController = ({
             onTileError: (row, col, message) => {
                 errorToastRef.current.addError({ row, col, message });
             },
+            onExpectedPositionChange,
         });
         runnerRef.current = runner;
         setCommandLog([]);
@@ -225,6 +235,7 @@ export const useCalibrationController = ({
         mirrorConfig,
         mode,
         motorApi,
+        onExpectedPositionChange,
         roi,
         runnerSettings,
         stagingPosition,

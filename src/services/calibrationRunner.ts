@@ -218,6 +218,15 @@ export interface CalibrationRunnerParams {
     onCommandError?: (context: CommandErrorContext) => void;
     /** Callback for tile-level errors (detection failures, calibration errors) */
     onTileError?: (row: number, col: number, message: string) => void;
+    /**
+     * Callback to update the expected blob position overlay.
+     * Called before motor moves so the circle is visible while moving.
+     * Position is in viewport coordinates (0 to 1).
+     */
+    onExpectedPositionChange?: (
+        position: { x: number; y: number } | null,
+        tolerance: number,
+    ) => void;
 }
 
 class RunnerAbortError extends Error {
@@ -355,6 +364,11 @@ export class CalibrationRunner {
 
     private readonly onTileError?: (row: number, col: number, message: string) => void;
 
+    private readonly onExpectedPositionChange?: (
+        position: { x: number; y: number } | null,
+        tolerance: number,
+    ) => void;
+
     private state: CalibrationRunnerState;
 
     private runPromise: Promise<void> | null = null;
@@ -396,6 +410,7 @@ export class CalibrationRunner {
         this.onCommandLog = params.onCommandLog;
         this.onCommandError = params.onCommandError;
         this.onTileError = params.onTileError;
+        this.onExpectedPositionChange = params.onExpectedPositionChange;
 
         this.descriptors = buildTileDescriptors(params.gridSize, params.mirrorConfig);
         this.calibratableTiles = this.descriptors.filter((descriptor) => descriptor.calibratable);
@@ -694,11 +709,14 @@ export class CalibrationRunner {
             ? this.settings.firstTileTolerance
             : this.settings.maxBlobDistanceThreshold;
 
-        // Move tile to home position
+        // Show expected position circle BEFORE moving
+        console.log('[CalibrationRunner] Home expected position (view 0-1):', expectedPosition);
+        this.onExpectedPositionChange?.(expectedPosition, homeTolerance);
+
+        // Move tile to home position (circle already visible)
         await this.moveTileToPose(tile, 'home', measureGroup);
 
-        // Capture measurement (expected circle is shown via captureMeasurement callback)
-        console.log('[CalibrationRunner] Home expected position (view 0-1):', expectedPosition);
+        // Capture measurement
         const homeResult = await this.captureMeasurementWithRetries(
             expectedPosition,
             homeTolerance,
@@ -767,16 +785,7 @@ export class CalibrationRunner {
                 tile: tileAddress,
             });
 
-            // Move to X jog position
-            this.logCommand(
-                'Jogging X axis for step test',
-                { deltaSteps: xDelta },
-                tileAddress,
-                measureGroup,
-            );
-            await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
-
-            // Capture X measurement - expected position is home + estimated X displacement
+            // Calculate and show expected position BEFORE moving
             const estimatedXDisplacement = this.estimateExpectedDisplacement('x', xDelta);
             const xExpected = {
                 x: centeredToView(homeMeasurement.x + estimatedXDisplacement),
@@ -790,6 +799,18 @@ export class CalibrationRunner {
                 'estimated X displacement:',
                 estimatedXDisplacement,
             );
+            this.onExpectedPositionChange?.(xExpected, this.settings.maxBlobDistanceThreshold);
+
+            // Move to X jog position (circle already visible)
+            this.logCommand(
+                'Jogging X axis for step test',
+                { deltaSteps: xDelta },
+                tileAddress,
+                measureGroup,
+            );
+            await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
+
+            // Capture X measurement
             const xCaptureResult = await this.captureMeasurementWithRetries(xExpected);
 
             if (xCaptureResult.measurement) {
@@ -815,8 +836,8 @@ export class CalibrationRunner {
                 this.onTileError?.(tile.row, tile.col, warning);
             }
 
-            // Move X back to home position
-            await this.moveAxisToPosition(xMotor, 0, measureGroup);
+            // Stay at X jog position - user sees X result at the jogged position
+            // X will be moved back when Y step starts (or when tile moves aside)
 
             // PAUSE - User sees X result
             await this.completeStep('completed');
@@ -830,16 +851,7 @@ export class CalibrationRunner {
                 tile: tileAddress,
             });
 
-            // Move to Y jog position
-            this.logCommand(
-                'Jogging Y axis for step test',
-                { deltaSteps: yDelta },
-                tileAddress,
-                measureGroup,
-            );
-            await this.moveAxisToPosition(yMotor, yDelta, measureGroup);
-
-            // Capture Y measurement - expected position is home + estimated Y displacement
+            // Calculate and show expected position BEFORE moving
             const estimatedYDisplacement = this.estimateExpectedDisplacement('y', yDelta);
             const yExpected = {
                 x: centeredToView(homeMeasurement.x),
@@ -853,6 +865,22 @@ export class CalibrationRunner {
                 'estimated Y displacement:',
                 estimatedYDisplacement,
             );
+            this.onExpectedPositionChange?.(yExpected, this.settings.maxBlobDistanceThreshold);
+
+            // Move to Y jog position (and X back to home in parallel)
+            this.logCommand(
+                'Jogging Y axis for step test',
+                { deltaSteps: yDelta },
+                tileAddress,
+                measureGroup,
+            );
+            await Promise.all([
+                this.moveAxisToPosition(yMotor, yDelta, measureGroup),
+                // Move X back to home position in parallel (if X motor exists and was jogged)
+                xMotor ? this.moveAxisToPosition(xMotor, 0, measureGroup) : Promise.resolve(),
+            ]);
+
+            // Capture Y measurement
             const yCaptureResult = await this.captureMeasurementWithRetries(yExpected);
 
             if (yCaptureResult.measurement) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
@@ -217,6 +217,18 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         return undefined; // Will default to 16:9 in calibration runner
     }, [videoDimensions.width, videoDimensions.height]);
 
+    // Callback for CalibrationRunner to update expected position overlay before motor moves
+    const handleExpectedPositionChange = useCallback(
+        (position: { x: number; y: number } | null, tolerance: number) => {
+            if (position) {
+                setExpectedBlobPosition({ position, maxDistance: tolerance });
+            } else {
+                setExpectedBlobPosition(null);
+            }
+        },
+        [setExpectedBlobPosition],
+    );
+
     const calibrationController = useCalibrationController({
         gridSize,
         mirrorConfig,
@@ -228,6 +240,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         cameraAspectRatio: calibrationCameraAspectRatio,
         roi,
         initialSessionState,
+        onExpectedPositionChange: handleExpectedPositionChange,
     });
 
     const {
