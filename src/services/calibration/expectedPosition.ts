@@ -181,11 +181,13 @@ export function estimateGridFromMeasurements(
 // =============================================================================
 
 /**
- * Computes expected blob position for first tile.
+ * Computes expected blob position for the first tile.
  * Returns position at the left edge of ROI, vertically centered.
  *
- * The first tile calibrated is (0,0) - top-left in logical coordinates.
- * This typically appears at the left side of the camera view.
+ * Since the grid location is unknown before the first measurement,
+ * we use a heuristic: placing the expected position at the left edge of the ROI.
+ * This provides a consistent starting point as the user is expected to set the left edge
+ * of the ROI to contain the leftmost tile when all at physical home. TODO: potential feature to detect it automatically (eg. OpenCV connected components)
  *
  * @param roi - Region of interest bounds (viewport coords)
  * @returns Expected position at ROI left edge, vertically centered
