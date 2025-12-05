@@ -6,11 +6,10 @@ import {
     DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT,
     DETECTION_BLOB_MIN_SAMPLES,
 } from '@/constants/calibration';
+import { asIsotropic, convert, convertDelta } from '@/coords';
 import { computeMedian } from '@/services/calibration/math/robustStatistics';
 import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
-import { viewDeltaToCentered, viewToCentered } from '@/utils/centeredCoordinates';
-import { isotropicToViewport, isotropicDeltaToViewport } from '@/utils/normalization';
 
 /** Parameters for blob selection when reading a sample. */
 export interface BlobSelectionParams {
@@ -201,17 +200,14 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
     // (measurements come from BlobSample which has required sourceWidth/sourceHeight)
     const sourceWidth = measurement.sourceWidth!;
     const sourceHeight = measurement.sourceHeight!;
+    const ctx = { width: sourceWidth, height: sourceHeight } as const;
 
     // Convert isotropic [0,1] → viewport [0,1] first, then viewport → centered [-1,1]
     // This fixes the coordinate system mismatch where blob measurements are captured
     // in isotropic coords but were incorrectly treated as viewport coords.
-    const { x: viewX, y: viewY } = isotropicToViewport(
-        measurement.x,
-        measurement.y,
-        sourceWidth,
-        sourceHeight,
-    );
-    const viewSize = isotropicDeltaToViewport(measurement.size, sourceWidth, sourceHeight);
+    const isoCoord = asIsotropic(measurement.x, measurement.y);
+    const centeredCoord = convert(isoCoord, 'isotropic', 'centered', ctx);
+    const centeredSize = convertDelta(measurement.size, 'x', 'isotropic', 'centered', ctx);
 
     const convertStats = measurement.stats
         ? {
@@ -221,37 +217,32 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
                   maxMedianDeviationPt: measurement.stats.thresholds.maxMedianDeviationPt * 2,
               },
               median: (() => {
-                  const { x, y } = isotropicToViewport(
+                  const medianIso = asIsotropic(
                       measurement.stats.median.x,
                       measurement.stats.median.y,
-                      sourceWidth,
-                      sourceHeight,
                   );
+                  const medianCentered = convert(medianIso, 'isotropic', 'centered', ctx);
                   return {
-                      x: viewToCentered(x),
-                      y: viewToCentered(y),
-                      size: viewDeltaToCentered(
-                          isotropicDeltaToViewport(
-                              measurement.stats.median.size,
-                              sourceWidth,
-                              sourceHeight,
-                          ),
+                      x: medianCentered.x,
+                      y: medianCentered.y,
+                      size: convertDelta(
+                          measurement.stats.median.size,
+                          'x',
+                          'isotropic',
+                          'centered',
+                          ctx,
                       ),
                   };
               })(),
               nMad: {
-                  x: viewDeltaToCentered(
-                      isotropicDeltaToViewport(measurement.stats.nMad.x, sourceWidth, sourceHeight),
-                  ),
-                  y: viewDeltaToCentered(
-                      isotropicDeltaToViewport(measurement.stats.nMad.y, sourceWidth, sourceHeight),
-                  ),
-                  size: viewDeltaToCentered(
-                      isotropicDeltaToViewport(
-                          measurement.stats.nMad.size,
-                          sourceWidth,
-                          sourceHeight,
-                      ),
+                  x: convertDelta(measurement.stats.nMad.x, 'x', 'isotropic', 'centered', ctx),
+                  y: convertDelta(measurement.stats.nMad.y, 'y', 'isotropic', 'centered', ctx),
+                  size: convertDelta(
+                      measurement.stats.nMad.size,
+                      'x',
+                      'isotropic',
+                      'centered',
+                      ctx,
                   ),
               },
           }
@@ -259,9 +250,9 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
 
     return {
         ...measurement,
-        x: viewToCentered(viewX),
-        y: viewToCentered(viewY),
-        size: viewDeltaToCentered(viewSize),
+        x: centeredCoord.x,
+        y: centeredCoord.y,
+        size: centeredSize,
         stats: convertStats,
     };
 };

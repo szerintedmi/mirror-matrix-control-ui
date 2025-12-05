@@ -1,7 +1,7 @@
 import React from 'react';
 
 import type { Pattern } from '@/types';
-import { centeredDeltaToView, centeredToView } from '@/utils/centeredCoordinates';
+import { centeredDeltaToView, centeredToView } from '@/utils/coordinates';
 
 interface PatternPreviewProps {
     pattern: Pattern;

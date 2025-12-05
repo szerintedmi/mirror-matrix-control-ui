@@ -1,44 +1,32 @@
 /**
- * Type-safe coordinate system utilities using branded types.
+ * Coordinate conversion utilities (wrapper over the canonical coords kernel).
  *
- * This module provides compile-time safety for coordinate conversions
- * to prevent mixing different coordinate systems (viewport, isotropic,
- * centered, camera pixels).
- *
- * COORDINATE SYSTEMS:
- * - CameraPixels: Raw pixel coordinates from blob detection (0 to width/height)
- * - IsotropicCoord: Aspect-ratio preserved [0,1], used for blob comparison
- * - ViewportCoord: Full frame [0,1], used for ROI and expected positions
- * - CenteredCoord: Origin at center [-1,1], used for measurements and motor displacement
+ * Exposes the same branded types as before while delegating math to the
+ * central `src/coords` module. This keeps legacy call sites stable and
+ * concentrates conversion logic in one place.
  */
 
-import { clamp01 } from '@/constants/calibration';
-
-// Brand symbol for type safety
-declare const __brand: unique symbol;
-type Brand<T, B> = T & { readonly [__brand]: B };
-
-// =============================================================================
-// COORDINATE TYPES
-// =============================================================================
-
-/** Raw pixel coordinates from camera/blob detection (0 to width/height) */
-export type CameraPixels = Brand<{ x: number; y: number }, 'CameraPixels'>;
-
-/** Isotropic normalized coordinates [0,1], aspect-ratio preserved */
-export type IsotropicCoord = Brand<{ x: number; y: number }, 'Isotropic'>;
-
-/** Viewport coordinates [0,1], full frame without aspect ratio adjustment */
-export type ViewportCoord = Brand<{ x: number; y: number }, 'Viewport'>;
-
-/** Centered coordinates [-1,1], origin at center */
-export type CenteredCoord = Brand<{ x: number; y: number }, 'Centered'>;
-
-// Delta types for sizes and distances
-export type CameraPixelsDelta = Brand<number, 'CameraPixelsDelta'>;
-export type IsotropicDelta = Brand<number, 'IsotropicDelta'>;
-export type ViewportDelta = Brand<number, 'ViewportDelta'>;
-export type CenteredDelta = Brand<number, 'CenteredDelta'>;
+import {
+    asCameraPixels,
+    asCameraPixelsDelta,
+    asCentered,
+    asCenteredDelta,
+    asIsotropic,
+    asIsotropicDelta,
+    asViewport,
+    asViewportDelta,
+    convert,
+    convertDelta,
+    type CameraPixels,
+    type CameraPixelsDelta,
+    type CenteredCoord,
+    type CenteredDelta,
+    type CoordSpace,
+    type IsotropicCoord,
+    type IsotropicDelta,
+    type ViewportCoord,
+    type ViewportDelta,
+} from '@/coords';
 
 // =============================================================================
 // CAMERA INFO
@@ -50,27 +38,8 @@ export interface CameraInfo {
     height: number;
 }
 
-// =============================================================================
-// CONSTRUCTORS
-// =============================================================================
-
-/** Create CameraPixels from raw numbers */
-export const asCameraPixels = (x: number, y: number): CameraPixels => ({ x, y }) as CameraPixels;
-
-/** Create IsotropicCoord from raw numbers */
-export const asIsotropic = (x: number, y: number): IsotropicCoord => ({ x, y }) as IsotropicCoord;
-
-/** Create ViewportCoord from raw numbers */
-export const asViewport = (x: number, y: number): ViewportCoord => ({ x, y }) as ViewportCoord;
-
-/** Create CenteredCoord from raw numbers */
-export const asCentered = (x: number, y: number): CenteredCoord => ({ x, y }) as CenteredCoord;
-
-// Delta constructors
-export const asCameraPixelsDelta = (d: number): CameraPixelsDelta => d as CameraPixelsDelta;
-export const asIsotropicDelta = (d: number): IsotropicDelta => d as IsotropicDelta;
-export const asViewportDelta = (d: number): ViewportDelta => d as ViewportDelta;
-export const asCenteredDelta = (d: number): CenteredDelta => d as CenteredDelta;
+const unitContext = { width: 1, height: 1 } as const;
+const ctxFromCamera = (camera: CameraInfo) => ({ width: camera.width, height: camera.height });
 
 // =============================================================================
 // VIEWPORT <-> CENTERED CONVERSIONS
@@ -78,19 +47,19 @@ export const asCenteredDelta = (d: number): CenteredDelta => d as CenteredDelta;
 
 /** Convert viewport [0,1] to centered [-1,1] */
 export const viewportToCentered = (coord: ViewportCoord): CenteredCoord =>
-    asCentered(coord.x * 2 - 1, coord.y * 2 - 1);
+    convert(coord, 'viewport', 'centered', unitContext);
 
 /** Convert centered [-1,1] to viewport [0,1] */
 export const centeredToViewport = (coord: CenteredCoord): ViewportCoord =>
-    asViewport((coord.x + 1) / 2, (coord.y + 1) / 2);
+    convert(coord, 'centered', 'viewport', unitContext);
 
 /** Convert viewport delta to centered delta (multiply by 2) */
 export const viewportDeltaToCentered = (delta: ViewportDelta): CenteredDelta =>
-    asCenteredDelta((delta as number) * 2);
+    asCenteredDelta(convertDelta(delta as number, 'x', 'viewport', 'centered', unitContext));
 
 /** Convert centered delta to viewport delta (divide by 2) */
 export const centeredDeltaToViewport = (delta: CenteredDelta): ViewportDelta =>
-    asViewportDelta((delta as number) / 2);
+    asViewportDelta(convertDelta(delta as number, 'x', 'centered', 'viewport', unitContext));
 
 // =============================================================================
 // VIEWPORT <-> CAMERA PIXELS CONVERSIONS
@@ -98,23 +67,29 @@ export const centeredDeltaToViewport = (delta: CenteredDelta): ViewportDelta =>
 
 /** Convert viewport [0,1] to camera pixels */
 export const viewportToPixels = (coord: ViewportCoord, camera: CameraInfo): CameraPixels =>
-    asCameraPixels(coord.x * camera.width, coord.y * camera.height);
+    convert(coord, 'viewport', 'camera', ctxFromCamera(camera));
 
 /** Convert camera pixels to viewport [0,1] */
 export const pixelsToViewport = (coord: CameraPixels, camera: CameraInfo): ViewportCoord =>
-    asViewport(coord.x / camera.width, coord.y / camera.height);
+    convert(coord, 'camera', 'viewport', ctxFromCamera(camera));
 
 /** Convert viewport delta to pixel delta for X axis */
 export const viewportDeltaToPixelsX = (
     delta: ViewportDelta,
     camera: CameraInfo,
-): CameraPixelsDelta => asCameraPixelsDelta((delta as number) * camera.width);
+): CameraPixelsDelta =>
+    asCameraPixelsDelta(
+        convertDelta(delta as number, 'x', 'viewport', 'camera', ctxFromCamera(camera)),
+    );
 
 /** Convert viewport delta to pixel delta for Y axis */
 export const viewportDeltaToPixelsY = (
     delta: ViewportDelta,
     camera: CameraInfo,
-): CameraPixelsDelta => asCameraPixelsDelta((delta as number) * camera.height);
+): CameraPixelsDelta =>
+    asCameraPixelsDelta(
+        convertDelta(delta as number, 'y', 'viewport', 'camera', ctxFromCamera(camera)),
+    );
 
 // =============================================================================
 // CAMERA PIXELS <-> ISOTROPIC CONVERSIONS
@@ -123,82 +98,64 @@ export const viewportDeltaToPixelsY = (
 /**
  * Convert camera pixels to isotropic [0,1] coordinates.
  * Isotropic coordinates preserve aspect ratio by using max dimension.
- * For 16:9 camera, Y range is compressed to ~[0.22, 0.78].
  */
-export const pixelsToIsotropic = (coord: CameraPixels, camera: CameraInfo): IsotropicCoord => {
-    const maxDim = Math.max(camera.width, camera.height);
-    const offsetX = (maxDim - camera.width) / 2;
-    const offsetY = (maxDim - camera.height) / 2;
+export const pixelsToIsotropic = (coord: CameraPixels, camera: CameraInfo): IsotropicCoord =>
+    convert(coord, 'camera', 'isotropic', ctxFromCamera(camera));
 
-    return asIsotropic(
-        clamp01((coord.x + offsetX) / maxDim),
-        clamp01((coord.y + offsetY) / maxDim),
-    );
-};
+/** Convert isotropic [0,1] to camera pixels. */
+export const isotropicToPixels = (coord: IsotropicCoord, camera: CameraInfo): CameraPixels =>
+    convert(coord, 'isotropic', 'camera', ctxFromCamera(camera));
 
-/**
- * Convert isotropic [0,1] to camera pixels.
- * Reverses the aspect-ratio adjustment.
- */
-export const isotropicToPixels = (coord: IsotropicCoord, camera: CameraInfo): CameraPixels => {
-    const maxDim = Math.max(camera.width, camera.height);
-    const offsetX = (maxDim - camera.width) / 2;
-    const offsetY = (maxDim - camera.height) / 2;
-
-    return asCameraPixels(coord.x * maxDim - offsetX, coord.y * maxDim - offsetY);
-};
-
-/** Convert pixel delta to isotropic delta */
+/** Convert pixel delta to isotropic delta (uses max dimension) */
 export const pixelsDeltaToIsotropic = (
     delta: CameraPixelsDelta,
     camera: CameraInfo,
-): IsotropicDelta => {
-    const maxDim = Math.max(camera.width, camera.height);
-    return asIsotropicDelta((delta as number) / maxDim);
-};
+): IsotropicDelta =>
+    asIsotropicDelta(
+        convertDelta(delta as number, 'x', 'camera', 'isotropic', ctxFromCamera(camera)),
+    );
 
-/** Convert isotropic delta to pixel delta */
+/** Convert isotropic delta to pixel delta (uses max dimension) */
 export const isotropicDeltaToPixels = (
     delta: IsotropicDelta,
     camera: CameraInfo,
-): CameraPixelsDelta => {
-    const maxDim = Math.max(camera.width, camera.height);
-    return asCameraPixelsDelta((delta as number) * maxDim);
-};
+): CameraPixelsDelta =>
+    asCameraPixelsDelta(
+        convertDelta(delta as number, 'x', 'isotropic', 'camera', ctxFromCamera(camera)),
+    );
 
 // =============================================================================
 // VIEWPORT <-> ISOTROPIC CONVERSIONS (composite)
 // =============================================================================
 
-/**
- * Convert viewport [0,1] to isotropic [0,1].
- * Goes through pixel space as intermediate.
- */
-export const viewportToIsotropic = (coord: ViewportCoord, camera: CameraInfo): IsotropicCoord => {
-    const pixels = viewportToPixels(coord, camera);
-    return pixelsToIsotropic(pixels, camera);
-};
+/** Convert viewport [0,1] to isotropic [0,1]. Goes through pixel space. */
+export const viewportToIsotropic = (coord: ViewportCoord, camera: CameraInfo): IsotropicCoord =>
+    convert(coord, 'viewport', 'isotropic', ctxFromCamera(camera));
 
-/**
- * Convert isotropic [0,1] to viewport [0,1].
- * Goes through pixel space as intermediate.
- */
-export const isotropicToViewport = (coord: IsotropicCoord, camera: CameraInfo): ViewportCoord => {
-    const pixels = isotropicToPixels(coord, camera);
-    return pixelsToViewport(pixels, camera);
-};
+/** Convert isotropic [0,1] to viewport [0,1]. Goes through pixel space. */
+export const isotropicToViewport = (coord: IsotropicCoord, camera: CameraInfo): ViewportCoord =>
+    convert(coord, 'isotropic', 'viewport', ctxFromCamera(camera));
 
-/**
- * Convert viewport delta to isotropic delta.
- * Uses average dimension for approximation.
- */
+/** Convert viewport delta to isotropic delta (average X/Y for aspect) */
 export const viewportDeltaToIsotropic = (
     delta: ViewportDelta,
     camera: CameraInfo,
 ): IsotropicDelta => {
-    const maxDim = Math.max(camera.width, camera.height);
-    const avgDim = (camera.width + camera.height) / 2;
-    return asIsotropicDelta(((delta as number) * avgDim) / maxDim);
+    const ctx = ctxFromCamera(camera);
+    const dx = convertDelta(delta as number, 'x', 'viewport', 'isotropic', ctx);
+    const dy = convertDelta(delta as number, 'y', 'viewport', 'isotropic', ctx);
+    return asIsotropicDelta((dx + dy) / 2);
+};
+
+/** Convert isotropic delta to viewport delta (average X/Y for aspect) */
+export const isotropicDeltaToViewport = (
+    delta: IsotropicDelta,
+    camera: CameraInfo,
+): ViewportDelta => {
+    const ctx = ctxFromCamera(camera);
+    const dx = convertDelta(delta as number, 'x', 'isotropic', 'viewport', ctx);
+    const dy = convertDelta(delta as number, 'y', 'isotropic', 'viewport', ctx);
+    return asViewportDelta((dx + dy) / 2);
 };
 
 // =============================================================================
@@ -207,19 +164,19 @@ export const viewportDeltaToIsotropic = (
 
 /** Convert isotropic [0,1] to centered [-1,1] */
 export const isotropicToCentered = (coord: IsotropicCoord): CenteredCoord =>
-    asCentered(coord.x * 2 - 1, coord.y * 2 - 1);
+    convert(coord, 'isotropic', 'centered', unitContext);
 
 /** Convert centered [-1,1] to isotropic [0,1] */
 export const centeredToIsotropic = (coord: CenteredCoord): IsotropicCoord =>
-    asIsotropic((coord.x + 1) / 2, (coord.y + 1) / 2);
+    convert(coord, 'centered', 'isotropic', unitContext);
 
 /** Convert isotropic delta to centered delta */
 export const isotropicDeltaToCentered = (delta: IsotropicDelta): CenteredDelta =>
-    asCenteredDelta((delta as number) * 2);
+    asCenteredDelta(convertDelta(delta as number, 'x', 'isotropic', 'centered', unitContext));
 
 /** Convert centered delta to isotropic delta */
 export const centeredDeltaToIsotropic = (delta: CenteredDelta): IsotropicDelta =>
-    asIsotropicDelta((delta as number) / 2);
+    asIsotropicDelta(convertDelta(delta as number, 'x', 'centered', 'isotropic', unitContext));
 
 // =============================================================================
 // CONVENIENCE EXTRACTORS (for when you need raw numbers)
@@ -245,4 +202,33 @@ export const distance = <T extends { x: number; y: number }>(a: T, b: T): number
     const dx = a.x - b.x;
     const dy = a.y - b.y;
     return Math.sqrt(dx * dx + dy * dy);
+};
+
+// =============================================================================
+// LEGACY HELPERS (single-number conversions for convenience)
+// =============================================================================
+
+const clampCentered = (value: number): number => {
+    if (Number.isNaN(value)) return 0;
+    if (value < -1) return -1;
+    if (value > 1) return 1;
+    return value;
+};
+
+export const viewToCentered = (value: number): number => clampCentered(value * 2 - 1);
+export const centeredToView = (value: number): number => (value + 1) / 2;
+export const centeredDeltaToView = (delta: number): number => delta / 2;
+export const viewDeltaToCentered = (delta: number): number => delta * 2;
+
+export type { CameraPixels, CenteredCoord, CoordSpace, IsotropicCoord, ViewportCoord };
+export type { CameraPixelsDelta, CenteredDelta, IsotropicDelta, ViewportDelta };
+export {
+    asCameraPixels,
+    asCentered,
+    asIsotropic,
+    asViewport,
+    asCameraPixelsDelta,
+    asCenteredDelta,
+    asIsotropicDelta,
+    asViewportDelta,
 };

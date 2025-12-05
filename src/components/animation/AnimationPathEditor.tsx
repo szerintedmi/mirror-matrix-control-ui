@@ -4,7 +4,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import TransformToolbar from '@/components/common/TransformToolbar';
 import { createWaypointId } from '@/services/animationStorage';
 import type { AnimationPath, AnimationWaypoint } from '@/types/animation';
-import { centeredToView, viewToCentered, centeredDeltaToView } from '@/utils/centeredCoordinates';
+import { centeredToView, viewToCentered, centeredDeltaToView } from '@/utils/coordinates';
 
 export interface TileBound {
     id: string;

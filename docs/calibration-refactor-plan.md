@@ -37,13 +37,25 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 
 ## Priority roadmap
 
-1. [ ] **Coordinate kernel** (low-medium effort, high gain)
+1. [X] **Coordinate kernel** (low-medium effort, high gain)
    - Create `coords/` module with branded types for `cameraPx`, `viewport`, `isotropic`, `centered`, `pattern`.
    - Single convert(from, to, aspect, resolution) API plus delta helpers.
    - Add a lightweight `Transformer` object that captures camera context (aspect, resolution, ROI) so call sites stay terse (`t.toViewport(pt)`).
    - Migrate scattered helpers (`centeredToView`, `isotropicDeltaToViewport`, etc.) to wrappers over this kernel.
    - Tests: conversion round-trips and known pixel/aspect fixtures.
    - Starting point: [`../src/utils/coordinates.ts`](../src/utils/coordinates.ts)
+   - Progress: Kernel in place (`src/coords/index.ts`) with convert/Transformer/delta helpers, wrapped legacy helpers in [`src/utils/coordinates.ts`](../src/utils/coordinates.ts), removed `src/utils/centeredCoordinates.ts`, and migrated call sites to the wrapper; call-site cleanup to adopt `Transformer` directly still pending.
+   - **Review (post-migration)**:
+     - Kernel (`src/coords/index.ts`) is solid: hub-and-spoke via viewport, branded types, `Transformer` class, and comprehensive tests (394 tests pass).
+     - `centeredCoordinates.ts` deleted; all legacy scalar helpers (`viewToCentered`, `centeredToView`, etc.) moved into `coordinates.ts` wrapper.
+     - `useStableBlobMeasurement` now uses `createTransformer` and `convert`/`convertDelta` directly—good adoption of new API.
+     - Component and page imports updated to use `@/utils/coordinates` (no more `centeredCoordinates`).
+      - Remaining items and decisions:
+        - **`roi` unused**: Keeping the field and `Transformer.withRoi()` for now but will *remove* if we don’t wire ROI math in the next checkpoint to avoid dead code (prefer explicit reintroduction when ROI support is scoped).
+        - **`normalization.ts` overlap**: Action item to migrate or wrap `normalizeIsotropic`/`viewportToIsotropic`/`viewportToPixels` through the kernel so `useCameraPipeline` and overlays share the same math.
+        - **Legacy scalar helpers**: Intend to mark `viewToCentered`, `centeredToView`, etc. as `@deprecated` after the remaining call sites move to branded coords/`Transformer`; they stay temporarily for ease of incremental migration.
+        - **Delta averaging heuristic**: Accept the current average-based `viewportDeltaToIsotropic`/`isotropicDeltaToViewport` for square-ish deltas; plan to add axis-specific variants to avoid ambiguity and document the trade-off.
+        - **Clamping semantics**: Only viewport→isotropic conversion clamps to [0,1]; document this behaviour in the kernel comments to make the intent explicit.
 
 2. [ ] **Canonical calibration snapshot** (medium effort, high gain)
    - Define `CalibrationSnapshot` type (per-tile: adjustedHome, perStep, motorReachBounds, footprintBounds, camera meta, blueprint).

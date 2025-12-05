@@ -22,7 +22,7 @@ import type {
 } from '@/services/opencvWorkerClient';
 import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
 import type { CalibrationProfileBounds, NormalizedRoi } from '@/types';
-import { centeredDeltaToView, centeredToView } from '@/utils/centeredCoordinates';
+import { centeredDeltaToView, centeredToView } from '@/utils/coordinates';
 import {
     buildLetterboxTransform,
     cameraDeltaToViewport,

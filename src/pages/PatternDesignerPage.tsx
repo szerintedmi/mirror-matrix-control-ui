@@ -12,7 +12,7 @@ import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import { loadGridState } from '@/services/gridStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
-import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/centeredCoordinates';
+import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/coordinates';
 import {
     createHistoryStacks,
     pushHistorySnapshot,

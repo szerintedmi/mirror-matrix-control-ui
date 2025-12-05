@@ -33,8 +33,8 @@ import type {
     StagingPosition,
 } from '@/types';
 import type { CommandErrorContext } from '@/types/commandError';
-import { centeredToView } from '@/utils/centeredCoordinates';
 import { extractCommandErrorDetail } from '@/utils/commandErrors';
+import { centeredToView } from '@/utils/coordinates';
 import { asCentered, rawCoords } from '@/utils/coordinates';
 
 export interface TileAddress {
