@@ -1,5 +1,6 @@
 agent_notes
-
+.history
+.worktrees
 .corepack
 .yarn
 
@@ -16,7 +17,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-.history
+
 
 
 .yarn/install-state.gz

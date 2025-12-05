@@ -21,6 +21,7 @@ export default [
             'test-results',
             '.tmp',
             '.local',
+            '.worktrees',
             'agent_notes',
             'public/opencv_js.js',
         ],

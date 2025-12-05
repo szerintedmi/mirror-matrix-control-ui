@@ -42,7 +42,7 @@ export default defineConfig(async ({ mode }) => {
             globals: true,
             environment: 'jsdom',
             setupFiles: ['vitest.setup.ts'],
-            exclude: [...configDefaults.exclude, 'e2e/**'],
+            exclude: [...configDefaults.exclude, 'e2e/**', '.worktrees/**'],
             pool: 'threads',
             threads: {
                 singleThread: true,
