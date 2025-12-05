@@ -295,13 +295,26 @@ export const planProfilePlayback = ({
     // Apply array rotation to pattern points.
     // This transforms pattern coordinates to match the calibrated coordinate space.
     const arrayRotation: ArrayRotation = profile.arrayRotation ?? 0;
-    const rotatedPoints: PatternPoint[] =
-        arrayRotation === 0
-            ? pattern.points
-            : pattern.points.map((point) => {
-                  const rotated = rotateVector({ x: point.x, y: point.y }, arrayRotation);
-                  return { ...point, x: rotated.x, y: rotated.y };
-              });
+    // Default to 16:9 if aspect ratio is missing, as that's the standard camera aspect
+    const aspect = profile.calibrationCameraAspect ?? 16 / 9;
+
+    const rotatedPoints: PatternPoint[] = pattern.points.map((point) => {
+        const rotated =
+            arrayRotation === 0
+                ? { x: point.x, y: point.y }
+                : rotateVector({ x: point.x, y: point.y }, arrayRotation);
+
+        // Convert Isotropic Pattern coordinates to Anisotropic Centered coordinates
+        // We use "Fit Width" strategy where Pattern X [-1, 1] maps to Centered X [-1, 1].
+        // Since Centered Y [-1, 1] covers a smaller physical distance than Centered X [-1, 1],
+        // we must scale Pattern Y by the aspect ratio to preserve circularity.
+        // This means Pattern Y=1 maps to Centered Y=aspect (e.g. 1.77), which may be outside the image.
+        return {
+            ...point,
+            x: rotated.x,
+            y: rotated.y * aspect,
+        };
+    });
 
     if (rotatedPoints.length > totalMirrors) {
         globalErrors.push(

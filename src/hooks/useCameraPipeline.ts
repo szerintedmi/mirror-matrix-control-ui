@@ -843,13 +843,15 @@ export const useCameraPipeline = ({
                 }
                 const pxLeft = convertCoordToPixelsX(bounds.x.min + cameraOriginOffset.x);
                 const pxTop = convertCoordToPixelsY(bounds.y.min + cameraOriginOffset.y);
-                const pxWidth = convertDeltaToPixels(normalizedWidth);
-                const pxHeight = convertDeltaToPixels(normalizedHeight);
+                const pxWidth = convertDeltaToPixelsX(normalizedWidth);
+                const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
                 const localTop = projectCameraValue(pxTop, 'y');
-                // Use isotropic projection to maintain correct aspect ratio
-                const rectWidth = projectCameraDeltaIsotropic(pxWidth);
-                const rectHeight = projectCameraDeltaIsotropic(pxHeight);
+
+                // Use anisotropic projection for rectangular bounds
+                const rectWidth = projectCameraDelta(pxWidth, 'x');
+                const rectHeight = projectCameraDelta(pxHeight, 'y');
+
                 if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
                     return;
                 }
@@ -871,11 +873,13 @@ export const useCameraPipeline = ({
                 const viewport = centeredToView(value); // [-1,1] -> [0,1]
                 return viewportToPixels(0, viewport, captureWidth, captureHeight).y;
             };
-            // Size/delta conversion: input is in centered system (range 2), convert to isotropic pixels
-            // Uses avgDim to correctly reverse the viewport→isotropic conversion done in measurement storage
-            const convertDeltaToPixels = (delta: number): number => {
-                const avgDim = (captureWidth + captureHeight) / 2;
-                return centeredDeltaToView(delta) * avgDim;
+            // Size/delta conversion: input is in centered system (range 2), convert to pixels
+            // Centered coords are anisotropic (relative to image dimensions), so we must scale X and Y differently
+            const convertDeltaToPixelsX = (delta: number): number => {
+                return centeredDeltaToView(delta) * captureWidth;
+            };
+            const convertDeltaToPixelsY = (delta: number): number => {
+                return centeredDeltaToView(delta) * captureHeight;
             };
 
             const drawTileBoundsCanvas = () => {
@@ -894,13 +898,22 @@ export const useCameraPipeline = ({
                     }
                     const pxLeft = convertCoordToPixelsX(entry.bounds.x.min + cameraOriginOffset.x);
                     const pxTop = convertCoordToPixelsY(entry.bounds.y.min + cameraOriginOffset.y);
-                    const pxWidth = convertDeltaToPixels(normalizedWidth);
-                    const pxHeight = convertDeltaToPixels(normalizedHeight);
+                    const pxWidth = convertDeltaToPixelsX(normalizedWidth);
+                    const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
                     // Use isotropic projection to maintain square tiles on canvas
-                    const rectWidth = projectCameraDeltaIsotropic(pxWidth);
-                    const rectHeight = projectCameraDeltaIsotropic(pxHeight);
+                    // Note: projectCameraDeltaIsotropic is for ISOTROPIC deltas (like circle radius).
+                    // Here we have a rectangle that might be anisotropic in pixels (if the tile is physically rectangular).
+                    // However, we want to project the pixel rectangle onto the canvas.
+                    // projectCameraValue handles the letterboxing/scaling.
+                    // We should project the width and height separately using the letterbox scale.
+
+                    // Actually, projectCameraValue projects a POINT.
+                    // projectCameraDelta projects a LENGTH.
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+
                     if (
                         rectWidth <= 0 ||
                         rectHeight <= 0 ||
@@ -1250,13 +1263,15 @@ export const useCameraPipeline = ({
                 }
                 const pxLeft = convertCoordToPixelsX(bounds.x.min + cameraOriginOffset.x);
                 const pxTop = convertCoordToPixelsY(bounds.y.min + cameraOriginOffset.y);
-                const pxWidth = convertDeltaToPixels(normalizedWidth);
-                const pxHeight = convertDeltaToPixels(normalizedHeight);
+                const pxWidth = convertDeltaToPixelsX(normalizedWidth);
+                const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
                 const localTop = projectCameraValue(pxTop, 'y');
-                // Use isotropic projection to maintain correct aspect ratio
-                const rectWidth = projectCameraDeltaIsotropic(pxWidth);
-                const rectHeight = projectCameraDeltaIsotropic(pxHeight);
+
+                // Use anisotropic projection for rectangular bounds
+                const rectWidth = projectCameraDelta(pxWidth, 'x');
+                const rectHeight = projectCameraDelta(pxHeight, 'y');
+
                 if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
                     return;
                 }
@@ -1283,13 +1298,15 @@ export const useCameraPipeline = ({
                     }
                     const pxLeft = convertCoordToPixelsX(entry.bounds.x.min + cameraOriginOffset.x);
                     const pxTop = convertCoordToPixelsY(entry.bounds.y.min + cameraOriginOffset.y);
-                    const pxWidth = convertDeltaToPixels(normalizedWidth);
-                    const pxHeight = convertDeltaToPixels(normalizedHeight);
+                    const pxWidth = convertDeltaToPixelsX(normalizedWidth);
+                    const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    // Use isotropic projection to maintain square tiles on canvas
-                    const rectWidth = projectCameraDeltaIsotropic(pxWidth);
-                    const rectHeight = projectCameraDeltaIsotropic(pxHeight);
+
+                    // Use anisotropic projection for rectangular bounds
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
+
                     if (localLeft == null || localTop == null) {
                         return;
                     }

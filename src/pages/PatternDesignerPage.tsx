@@ -628,17 +628,22 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         if (!selectedCalibrationProfile) {
             return [];
         }
+        // Default to 16:9 if aspect ratio is missing
+        const aspect = selectedCalibrationProfile.calibrationCameraAspect ?? 16 / 9;
+
         return Object.entries(selectedCalibrationProfile.tiles)
             .map(([id, tile]) => {
                 if (!tile.inferredBounds) {
                     return null;
                 }
+                // Convert Centered bounds to Isotropic Pattern Space (Fit Width)
+                // X is unchanged. Y is scaled by 1/aspect.
                 return {
                     id,
                     xMin: tile.inferredBounds.x.min,
                     xMax: tile.inferredBounds.x.max,
-                    yMin: tile.inferredBounds.y.min,
-                    yMax: tile.inferredBounds.y.max,
+                    yMin: tile.inferredBounds.y.min / aspect,
+                    yMax: tile.inferredBounds.y.max / aspect,
                 };
             })
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
@@ -680,22 +685,32 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         // This is useful for "profile_grid_mismatch" so we can still see if points are roughly valid.
         // We also do this if there are NO specific errors but still global errors, just in case.
         const invalid = new Set<string>();
+        // Default to 16:9 if aspect ratio is missing
+        const aspect = selectedCalibrationProfile.calibrationCameraAspect ?? 16 / 9;
+
         const bounds = Object.values(selectedCalibrationProfile.tiles)
             .map((t) => {
                 if (t.inferredBounds) {
+                    // Convert Centered bounds to Isotropic Pattern Space (Fit Width)
+                    // X is unchanged. Y is scaled by 1/aspect.
+                    const yMin = t.inferredBounds.y.min / aspect;
+                    const yMax = t.inferredBounds.y.max / aspect;
                     return {
                         x: t.inferredBounds.x.min,
-                        y: t.inferredBounds.y.min,
+                        y: yMin,
                         width: t.inferredBounds.x.max - t.inferredBounds.x.min,
-                        height: t.inferredBounds.y.max - t.inferredBounds.y.min,
+                        height: yMax - yMin,
                     };
                 }
                 if (t.homeMeasurement) {
+                    // Measurements are also in Centered coords, so apply same scaling
+                    const y = (t.homeMeasurement.y - t.homeMeasurement.size / 2) / aspect;
+                    const height = t.homeMeasurement.size / aspect;
                     return {
                         x: t.homeMeasurement.x - t.homeMeasurement.size / 2,
-                        y: t.homeMeasurement.y - t.homeMeasurement.size / 2,
+                        y: y,
                         width: t.homeMeasurement.size,
-                        height: t.homeMeasurement.size,
+                        height: height,
                     };
                 }
                 return null;
