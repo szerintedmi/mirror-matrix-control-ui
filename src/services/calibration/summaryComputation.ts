@@ -274,11 +274,12 @@ export function computeCalibrationSummary(
         const dy = normalizedMeasurement.y - adjustedCenterY;
 
         // Compute inferred bounds for live display during calibration
-        // Uses raw home measurement (before recentering) with motor at step 0
+        // Uses normalized home measurement (recentered) so bounds are relative to grid origin
+        // This matches how homeMeasurement is stored in the summary
         const inferredBounds =
-            result.homeMeasurement && result.stepToDisplacement
+            normalizedMeasurement && result.stepToDisplacement
                 ? computeLiveTileBounds(
-                      { x: result.homeMeasurement.x, y: result.homeMeasurement.y },
+                      { x: normalizedMeasurement.x, y: normalizedMeasurement.y },
                       result.stepToDisplacement,
                   )
                 : null;
