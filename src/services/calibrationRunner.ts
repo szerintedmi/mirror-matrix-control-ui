@@ -906,11 +906,46 @@ export class CalibrationRunner {
                 this.onTileError?.(tile.row, tile.col, warning);
             }
 
-            // PAUSE - User sees Y result
+            // Finalize tile BEFORE pause so inferred bounds are visible
+            this.finalizeTileMeasurement(
+                tile,
+                tileAddress,
+                homeMeasurement,
+                xStepResult,
+                yStepResult,
+                stepTestWarnings,
+            );
+
+            // PAUSE - User sees Y result AND inferred bounds
             await this.completeStep('completed');
+
+            // Move tile back to staging (no pause after - continues to next tile)
+            await this.moveTileToPose(tile, 'aside', measureGroup);
+            return;
         }
 
-        // === FINALIZE TILE ===
+        // === FINALIZE TILE (only if Y step test was skipped) ===
+        this.finalizeTileMeasurement(
+            tile,
+            tileAddress,
+            homeMeasurement,
+            xStepResult,
+            yStepResult,
+            stepTestWarnings,
+        );
+
+        // Move tile back to staging (no pause after - continues to next tile)
+        await this.moveTileToPose(tile, 'aside', measureGroup);
+    }
+
+    private finalizeTileMeasurement(
+        tile: TileDescriptor,
+        tileAddress: TileAddress,
+        homeMeasurement: BlobMeasurement,
+        xStepResult: AxisStepTestResult | null,
+        yStepResult: AxisStepTestResult | null,
+        stepTestWarnings: string[],
+    ): void {
         const { stepToDisplacement, sizeDeltaAtStepTest } = combineStepTestResults(
             xStepResult,
             yStepResult,
@@ -942,9 +977,6 @@ export class CalibrationRunner {
         });
         this.publishSummarySnapshot();
         this.bumpProgress('completed');
-
-        // Move tile back to staging (no pause after - continues to next tile)
-        await this.moveTileToPose(tile, 'aside', measureGroup);
     }
 
     private async homeAllMotors(): Promise<void> {
