@@ -52,12 +52,38 @@ export const clampRoi = (roi: NormalizedRoi): NormalizedRoi => {
 export const STAGING_POSITIONS: StagingPosition[] = ['nearest-corner', 'corner', 'bottom', 'left'];
 export const DEFAULT_STAGING_POSITION: StagingPosition = 'nearest-corner';
 
+// =============================================================================
+// GRID GAP RANGE
+// =============================================================================
+
+/** Minimum grid gap (normalized). -0.5 = 50% overlap between tiles. */
+export const GRID_GAP_MIN_NORMALIZED = -0.5;
+
+/** Maximum grid gap (normalized). 0.05 = 5% spacing between tiles. */
+export const GRID_GAP_MAX_NORMALIZED = 0.05;
+
+/** Minimum grid gap as percentage for UI display. */
+export const GRID_GAP_MIN_PERCENT = -50;
+
+/** Maximum grid gap as percentage for UI display. */
+export const GRID_GAP_MAX_PERCENT = 5;
+
 export const STAGING_POSITION_LABELS: Record<StagingPosition, string> = {
     'nearest-corner': 'Nearest Corner',
     corner: 'Corner (all same)',
     bottom: 'Bottom',
     left: 'Left',
 };
+
+/**
+ * Configuration for robust tile sizing (outlier detection).
+ */
+export interface RobustTileSizeConfig {
+    /** Whether to use robust sizing (excludes outliers). Default: true */
+    enabled: boolean;
+    /** MAD threshold for outlier detection (number of MADs from median). Default: 3.0 */
+    madThreshold: number;
+}
 
 export interface CalibrationRunnerSettings {
     deltaSteps: number;
@@ -75,6 +101,11 @@ export interface CalibrationRunnerSettings {
      * After this interim step, the full deltaSteps step test follows.
      */
     firstTileInterimStepDelta: number;
+    /**
+     * Configuration for robust tile sizing (outlier detection).
+     * When enabled, outlier measurements are excluded from tile footprint calculation.
+     */
+    robustTileSize: RobustTileSizeConfig;
 }
 
 /** Default first tile tolerance - larger radius for initial detection (25% of frame dimension). */
@@ -86,6 +117,15 @@ export const DEFAULT_TILE_TOLERANCE = 0.15;
 /** Default interim step delta for first tile X/Y tests (smaller since we use home as expected center). */
 export const DEFAULT_FIRST_TILE_INTERIM_STEP_DELTA = 300;
 
+/** Default MAD threshold for outlier detection (3 MADs from median). */
+export const DEFAULT_OUTLIER_MAD_THRESHOLD = 3.0;
+
+/** Default robust tile size configuration. */
+export const DEFAULT_ROBUST_TILE_SIZE_CONFIG: RobustTileSizeConfig = {
+    enabled: true,
+    madThreshold: DEFAULT_OUTLIER_MAD_THRESHOLD,
+};
+
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 1200,
     gridGapNormalized: 0.0,
@@ -95,4 +135,5 @@ export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     firstTileTolerance: DEFAULT_FIRST_TILE_TOLERANCE,
     tileTolerance: DEFAULT_TILE_TOLERANCE,
     firstTileInterimStepDelta: DEFAULT_FIRST_TILE_INTERIM_STEP_DELTA,
+    robustTileSize: DEFAULT_ROBUST_TILE_SIZE_CONFIG,
 };

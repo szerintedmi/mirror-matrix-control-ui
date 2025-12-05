@@ -124,12 +124,36 @@ export interface TileCalibrationResult {
     stepScale?: { x: number | null; y: number | null };
 }
 
+/**
+ * Outlier analysis results from robust tile sizing.
+ */
+export interface OutlierAnalysis {
+    /** Whether robust sizing was enabled */
+    enabled: boolean;
+    /** Tile keys identified as outliers */
+    outlierTileKeys: string[];
+    /** Number of outliers detected */
+    outlierCount: number;
+    /** Median blob size across all tiles */
+    median: number;
+    /** Median Absolute Deviation (non-normalized) */
+    mad: number;
+    /** Normalized MAD (comparable to standard deviation) */
+    nMad: number;
+    /** Upper threshold for outlier detection (median + madThreshold * nMad) */
+    upperThreshold: number;
+    /** Tile size computed (robust max or regular max) */
+    computedTileSize: number;
+}
+
 export interface CalibrationRunSummary {
     gridBlueprint: CalibrationGridBlueprint | null;
     stepTestSettings: {
         deltaSteps: number;
     };
     tiles: Record<string, TileCalibrationResult>;
+    /** Outlier analysis results (present when robust tile sizing is enabled) */
+    outlierAnalysis?: OutlierAnalysis;
 }
 
 export interface CalibrationRunnerState {

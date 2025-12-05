@@ -38,13 +38,13 @@ describe('summaryComputation', () => {
     describe('computeGridBlueprint', () => {
         const config: SummaryConfig = {
             gridSize: { rows: 2, cols: 2 },
-            gridGapNormalized: 0.1, // 10% gap
+            gridGapNormalized: 0.05, // 5% gap (within allowed range)
             deltaSteps: 100,
         };
 
-        it('should return null for empty tiles array', () => {
+        it('should return null blueprint for empty tiles array', () => {
             const result = computeGridBlueprint([], config);
-            expect(result).toBeNull();
+            expect(result.blueprint).toBeNull();
         });
 
         it('should compute blueprint from single tile', () => {
@@ -57,12 +57,12 @@ describe('summaryComputation', () => {
 
             const result = computeGridBlueprint(tiles, config);
 
-            expect(result).not.toBeNull();
-            expect(result!.adjustedTileFootprint.width).toBe(0.2);
-            expect(result!.adjustedTileFootprint.height).toBe(0.2);
+            expect(result.blueprint).not.toBeNull();
+            expect(result.blueprint!.adjustedTileFootprint.width).toBe(0.2);
+            expect(result.blueprint!.adjustedTileFootprint.height).toBe(0.2);
         });
 
-        it('should use largest tile size', () => {
+        it('should use robust max (exclude outliers) by default', () => {
             const tiles = [
                 {
                     tile: { row: 0, col: 0, key: '0-0' },
@@ -70,13 +70,24 @@ describe('summaryComputation', () => {
                 },
                 {
                     tile: { row: 0, col: 1, key: '0-1' },
-                    homeMeasurement: createMeasurement(0.5, 0, 0.3), // larger
+                    homeMeasurement: createMeasurement(0.3, 0, 0.21),
+                },
+                {
+                    tile: { row: 1, col: 0, key: '1-0' },
+                    homeMeasurement: createMeasurement(0, 0.3, 0.19),
+                },
+                {
+                    tile: { row: 1, col: 1, key: '1-1' },
+                    homeMeasurement: createMeasurement(0.3, 0.3, 0.5), // outlier
                 },
             ];
 
             const result = computeGridBlueprint(tiles, config);
 
-            expect(result!.adjustedTileFootprint.width).toBe(0.3);
+            // Should exclude 0.5 outlier and use max of inliers (~0.21)
+            expect(result.blueprint!.adjustedTileFootprint.width).toBeLessThan(0.5);
+            expect(result.outlierAnalysis.outlierCount).toBe(1);
+            expect(result.outlierAnalysis.outlierTileKeys).toContain('1-1');
         });
 
         it('should calculate gap from normalized setting', () => {
@@ -89,9 +100,28 @@ describe('summaryComputation', () => {
 
             const result = computeGridBlueprint(tiles, config);
 
-            // normalizedGap = 0.1 * 2 = 0.2
-            expect(result!.tileGap.x).toBe(0.2);
-            expect(result!.tileGap.y).toBe(0.2);
+            // normalizedGap = 0.05 * 2 = 0.1 (clamped to max 5%)
+            expect(result.blueprint!.tileGap.x).toBe(0.1);
+            expect(result.blueprint!.tileGap.y).toBe(0.1);
+        });
+
+        it('should allow negative gap values', () => {
+            const negativeGapConfig: SummaryConfig = {
+                ...config,
+                gridGapNormalized: -0.25, // -25% overlap
+            };
+            const tiles = [
+                {
+                    tile: { row: 0, col: 0, key: '0-0' },
+                    homeMeasurement: createMeasurement(0, 0, 0.2),
+                },
+            ];
+
+            const result = computeGridBlueprint(tiles, negativeGapConfig);
+
+            // normalizedGap = -0.25 * 2 = -0.5 (negative gap)
+            expect(result.blueprint!.tileGap.x).toBe(-0.5);
+            expect(result.blueprint!.tileGap.y).toBe(-0.5);
         });
 
         it('should have cameraOriginOffset centered on grid', () => {
@@ -105,7 +135,26 @@ describe('summaryComputation', () => {
             const result = computeGridBlueprint(tiles, config);
 
             // cameraOriginOffset should be computed to center the grid
-            expect(result!.cameraOriginOffset).toBeDefined();
+            expect(result.blueprint!.cameraOriginOffset).toBeDefined();
+        });
+
+        it('should return outlier analysis with statistics', () => {
+            const tiles = [
+                {
+                    tile: { row: 0, col: 0, key: '0-0' },
+                    homeMeasurement: createMeasurement(0, 0, 0.2),
+                },
+                {
+                    tile: { row: 0, col: 1, key: '0-1' },
+                    homeMeasurement: createMeasurement(0.3, 0, 0.21),
+                },
+            ];
+
+            const result = computeGridBlueprint(tiles, config);
+
+            expect(result.outlierAnalysis).toBeDefined();
+            expect(result.outlierAnalysis.enabled).toBe(true);
+            expect(result.outlierAnalysis.median).toBeGreaterThan(0);
         });
     });
 

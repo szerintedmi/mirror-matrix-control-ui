@@ -457,6 +457,11 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 drivers={drivers}
                 runnerSummary={runnerState.summary ?? null}
                 deltaSteps={runnerSettings.deltaSteps}
+                outlierTileKeys={
+                    runnerState.summary?.outlierAnalysis?.outlierTileKeys
+                        ? new Set(runnerState.summary.outlierAnalysis.outlierTileKeys)
+                        : undefined
+                }
             />
             <CalibrationRunnerPanel
                 controller={calibrationController}

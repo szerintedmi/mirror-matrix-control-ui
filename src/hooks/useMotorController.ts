@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { showSingleCommandErrorToast } from '../components/common/CommandErrorToast';
+import { showSingleCommandErrorToast } from '../components/common/StyledToast';
 import { extractCommandErrorDetail } from '../utils/commandErrors';
 
 import { useCommandFeedback } from './useCommandFeedback';

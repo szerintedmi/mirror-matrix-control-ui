@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 
-import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
+import { showCommandErrorToast } from '@/components/common/StyledToast';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import { useCommandFeedback } from '@/hooks/useCommandFeedback';
 import { useMotorCommands } from '@/hooks/useMotorCommands';

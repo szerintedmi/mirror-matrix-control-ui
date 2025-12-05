@@ -6,6 +6,7 @@ import {
     DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT,
     DETECTION_BLOB_MIN_SAMPLES,
 } from '@/constants/calibration';
+import { computeMedian } from '@/services/calibration/math/robustStatistics';
 import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
 import { viewDeltaToCentered, viewToCentered } from '@/utils/centeredCoordinates';
@@ -42,18 +43,6 @@ const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
             signal.addEventListener('abort', onAbort);
         }
     });
-
-const computeMedian = (values: number[]): number => {
-    if (!values.length) {
-        return 0;
-    }
-    const sorted = [...values].sort((a, b) => a - b);
-    const middle = Math.floor(sorted.length / 2);
-    if (sorted.length % 2 === 0) {
-        return (sorted[middle - 1] + sorted[middle]) / 2;
-    }
-    return sorted[middle];
-};
 
 export interface BlobSample {
     x: number;

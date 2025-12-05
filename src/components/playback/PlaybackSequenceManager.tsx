@@ -23,7 +23,7 @@ import React, {
     useState,
 } from 'react';
 
-import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
+import { showCommandErrorToast } from '@/components/common/StyledToast';
 import Modal from '@/components/Modal';
 import SequencePreview from '@/components/SequencePreview';
 import { useLogStore } from '@/context/LogContext';

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     createAccumulatingErrorToast,
     showCommandErrorToast,
-} from '@/components/common/CommandErrorToast';
+    showSimpleWarningToast,
+} from '@/components/common/StyledToast';
 import {
     DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     type CalibrationRunnerSettings,
@@ -274,6 +275,58 @@ export const useCalibrationController = ({
     );
 
     const isAwaitingAdvance = stepState?.status === 'waiting';
+
+    // Track whether we've shown the outlier warning for current calibration
+    const outlierToastShownRef = useRef(false);
+
+    // Show outlier warning toast when calibration completes with outliers
+    useEffect(() => {
+        const summary = runnerState.summary;
+        const outlierAnalysis = summary?.outlierAnalysis;
+
+        // Reset toast flag when a new calibration starts
+        if (isActive) {
+            outlierToastShownRef.current = false;
+            return;
+        }
+
+        // Only show toast once per calibration, when it completes with outliers
+        if (
+            runnerState.phase === 'completed' &&
+            outlierAnalysis?.outlierCount &&
+            outlierAnalysis.outlierCount > 0 &&
+            !outlierToastShownRef.current
+        ) {
+            outlierToastShownRef.current = true;
+            const count = outlierAnalysis.outlierCount;
+            const tileKeys = outlierAnalysis.outlierTileKeys;
+
+            // Calculate max percentage above median for outlier tiles
+            const median = outlierAnalysis.median;
+            let maxPctAboveMedian = 0;
+            for (const key of tileKeys) {
+                const tile = summary?.tiles[key];
+                const size = tile?.homeMeasurement?.size;
+                if (size !== undefined && median > 0) {
+                    const pct = ((size - median) / median) * 100;
+                    if (pct > maxPctAboveMedian) {
+                        maxPctAboveMedian = pct;
+                    }
+                }
+            }
+
+            const pctStr =
+                maxPctAboveMedian > 0
+                    ? ` (up to ${Math.round(maxPctAboveMedian)}% above median)`
+                    : '';
+            const plural = count > 1 ? 's' : '';
+
+            showSimpleWarningToast(
+                `${count} outlier size tile${plural} detected`,
+                `Tile${plural} [${tileKeys.join(', ')}] excluded from grid sizing${pctStr}.`,
+            );
+        }
+    }, [runnerState.phase, runnerState.summary, isActive]);
 
     return {
         runnerState,

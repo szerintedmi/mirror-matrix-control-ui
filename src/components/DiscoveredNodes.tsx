@@ -6,7 +6,7 @@ import { useMotorController } from '../hooks/useMotorController';
 import { extractCommandErrorDetail } from '../utils/commandErrors';
 import { formatRelativeTime } from '../utils/time';
 
-import { showSingleCommandErrorToast } from './common/CommandErrorToast';
+import { showSingleCommandErrorToast } from './common/StyledToast';
 import MotorActionButtons from './MotorActionButtons';
 import MotorChip from './MotorChip';
 

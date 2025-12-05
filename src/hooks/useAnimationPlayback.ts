@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type RefObject } from 'react';
 
-import { showCommandErrorToast } from '@/components/common/CommandErrorToast';
+import { showCommandErrorToast } from '@/components/common/StyledToast';
 import { useLogStore } from '@/context/LogContext';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
 import { planAnimation } from '@/services/animationPlanner';

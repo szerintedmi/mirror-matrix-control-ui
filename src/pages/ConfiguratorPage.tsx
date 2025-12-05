@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
 import ArrayPersistenceControls from '../components/ArrayPersistenceControls';
-import { showSingleCommandErrorToast } from '../components/common/CommandErrorToast';
+import { showSingleCommandErrorToast } from '../components/common/StyledToast';
 import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';

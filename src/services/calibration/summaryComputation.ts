@@ -5,9 +5,15 @@
  * Pure functions for grid blueprint calculation and home offset computation.
  */
 
+import {
+    GRID_GAP_MIN_NORMALIZED,
+    GRID_GAP_MAX_NORMALIZED,
+    type RobustTileSizeConfig,
+} from '@/constants/calibration';
 import type { BlobMeasurement, CalibrationGridBlueprint, CalibrationProfileBounds } from '@/types';
 
 import { computeLiveTileBounds } from './boundsComputation';
+import { RobustMaxSizingStrategy, type TileEntry } from './math/blueprintStrategies';
 
 // =============================================================================
 // TYPES
@@ -40,6 +46,30 @@ export interface SummaryConfig {
     gridSize: { rows: number; cols: number };
     gridGapNormalized: number;
     deltaSteps: number;
+    /** Configuration for robust tile sizing (outlier detection). */
+    robustTileSize?: RobustTileSizeConfig;
+}
+
+/**
+ * Outlier analysis results from robust tile sizing.
+ */
+export interface OutlierAnalysis {
+    /** Whether robust sizing was enabled */
+    enabled: boolean;
+    /** Tile keys identified as outliers */
+    outlierTileKeys: string[];
+    /** Number of outliers detected */
+    outlierCount: number;
+    /** Median blob size across all tiles */
+    median: number;
+    /** Median Absolute Deviation (non-normalized) */
+    mad: number;
+    /** Normalized MAD (comparable to standard deviation) */
+    nMad: number;
+    /** Upper threshold for outlier detection (median + madThreshold * nMad) */
+    upperThreshold: number;
+    /** Tile size computed (robust max or regular max) */
+    computedTileSize: number;
 }
 
 /** Full calibration run summary */
@@ -49,6 +79,8 @@ export interface CalibrationRunSummary {
         deltaSteps: number;
     };
     tiles: Record<string, TileCalibrationResult>;
+    /** Outlier analysis results (present when robust tile sizing is enabled) */
+    outlierAnalysis?: OutlierAnalysis;
 }
 
 // =============================================================================
@@ -85,22 +117,45 @@ function recenterMeasurement(
 // =============================================================================
 
 /**
+ * Result of grid blueprint computation including outlier analysis.
+ */
+export interface GridBlueprintResult {
+    blueprint: CalibrationGridBlueprint | null;
+    outlierAnalysis: OutlierAnalysis;
+}
+
+/**
  * Compute the grid blueprint from measured tiles.
  * Determines tile size, spacing, and grid origin.
  *
  * Uses isotropic spacing conversion to ensure uniform pixel spacing across both axes,
  * accounting for different X/Y scales in centered coordinates.
  *
+ * When robust tile sizing is enabled (default), outlier measurements are excluded
+ * from the tile size calculation to prevent a single oversized mirror from
+ * inflating the entire grid.
+ *
  * @param measuredTiles - Tiles with valid home measurements
  * @param config - Grid configuration
- * @returns Grid blueprint or null if no tiles measured
+ * @returns Grid blueprint result with blueprint and outlier analysis
  */
 export function computeGridBlueprint(
     measuredTiles: Array<{ tile: TileAddress; homeMeasurement: BlobMeasurement }>,
     config: SummaryConfig,
-): CalibrationGridBlueprint | null {
+): GridBlueprintResult {
+    const emptyAnalysis: OutlierAnalysis = {
+        enabled: config.robustTileSize?.enabled ?? true,
+        outlierTileKeys: [],
+        outlierCount: 0,
+        median: 0,
+        mad: 0,
+        nMad: 0,
+        upperThreshold: 0,
+        computedTileSize: 0,
+    };
+
     if (measuredTiles.length === 0) {
-        return null;
+        return { blueprint: null, outlierAnalysis: emptyAnalysis };
     }
 
     // Get camera dimensions from first measurement for isotropic conversion
@@ -114,17 +169,62 @@ export function computeGridBlueprint(
     const isoFactorX = avgDim / sourceWidth;
     const isoFactorY = avgDim / sourceHeight;
 
-    // Find largest tile size
-    const largestSize = measuredTiles.reduce((max, entry) => {
-        const size = entry.homeMeasurement.size ?? 0;
-        return size > max ? size : max;
-    }, 0);
+    // Compute tile size using robust max (excluding outliers) or regular max
+    const robustEnabled = config.robustTileSize?.enabled ?? true;
+    const madThreshold = config.robustTileSize?.madThreshold ?? 3.0;
 
-    const tileWidth = largestSize;
-    const tileHeight = largestSize;
+    let tileSize: number;
+    let outlierAnalysis: OutlierAnalysis;
 
-    // Calculate gap from normalized setting
-    const normalizedGap = Math.max(0, Math.min(1, config.gridGapNormalized)) * 2;
+    if (robustEnabled && measuredTiles.length > 1) {
+        // Use robust max sizing strategy
+        const strategy = new RobustMaxSizingStrategy(madThreshold);
+        const entries: TileEntry[] = measuredTiles.map((entry) => ({
+            key: entry.tile.key,
+            size: entry.homeMeasurement.size ?? 0,
+        }));
+
+        const { result, outlierDetection } = strategy.computeWithKeys(entries);
+        tileSize = result.tileSize;
+
+        outlierAnalysis = {
+            enabled: true,
+            outlierTileKeys: outlierDetection.outliers.map((e) => e.key),
+            outlierCount: outlierDetection.outliers.length,
+            median: outlierDetection.median,
+            mad: outlierDetection.mad,
+            nMad: outlierDetection.nMad,
+            upperThreshold: outlierDetection.upperThreshold,
+            computedTileSize: tileSize,
+        };
+    } else {
+        // Use regular max (legacy behavior or single tile)
+        tileSize = measuredTiles.reduce((max, entry) => {
+            const size = entry.homeMeasurement.size ?? 0;
+            return size > max ? size : max;
+        }, 0);
+
+        outlierAnalysis = {
+            enabled: false,
+            outlierTileKeys: [],
+            outlierCount: 0,
+            median: tileSize,
+            mad: 0,
+            nMad: 0,
+            upperThreshold: tileSize,
+            computedTileSize: tileSize,
+        };
+    }
+
+    const tileWidth = tileSize;
+    const tileHeight = tileSize;
+
+    // Calculate gap from normalized setting (allow negative values for overlap)
+    const clampedGap = Math.max(
+        GRID_GAP_MIN_NORMALIZED,
+        Math.min(GRID_GAP_MAX_NORMALIZED, config.gridGapNormalized),
+    );
+    const normalizedGap = clampedGap * 2; // Convert to centered coordinate scale
     const gapX = normalizedGap;
     const gapY = normalizedGap;
 
@@ -174,7 +274,7 @@ export function computeGridBlueprint(
     originX -= cameraOriginOffset.x;
     originY -= cameraOriginOffset.y;
 
-    return {
+    const blueprint: CalibrationGridBlueprint = {
         adjustedTileFootprint: {
             width: tileWidth,
             height: tileHeight,
@@ -186,6 +286,8 @@ export function computeGridBlueprint(
         sourceWidth,
         sourceHeight,
     };
+
+    return { blueprint, outlierAnalysis };
 }
 
 // =============================================================================
@@ -218,8 +320,11 @@ export function computeCalibrationSummary(
             homeMeasurement: entry.homeMeasurement,
         }));
 
-    // Compute grid blueprint
-    const gridBlueprint = computeGridBlueprint(measuredTiles, config);
+    // Compute grid blueprint with outlier analysis
+    const { blueprint: gridBlueprint, outlierAnalysis } = computeGridBlueprint(
+        measuredTiles,
+        config,
+    );
 
     // Get camera dimensions for isotropic conversion (must match computeGridBlueprint)
     const firstMeasurement = measuredTiles[0]?.homeMeasurement;
@@ -300,5 +405,6 @@ export function computeCalibrationSummary(
             deltaSteps: config.deltaSteps,
         },
         tiles: summaryTiles,
+        outlierAnalysis,
     };
 }

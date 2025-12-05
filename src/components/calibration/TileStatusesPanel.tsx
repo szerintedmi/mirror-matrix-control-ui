@@ -17,6 +17,8 @@ interface TileStatusesPanelProps {
     drivers: DriverView[];
     runnerSummary: CalibrationRunSummary | null;
     deltaSteps: number;
+    /** Keys of tiles identified as outliers (unusually large measurements) */
+    outlierTileKeys?: Set<string>;
 }
 
 const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
@@ -24,6 +26,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
     drivers,
     runnerSummary,
     deltaSteps,
+    outlierTileKeys,
 }) => {
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
 
@@ -159,64 +162,82 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                         gridTemplateColumns: `repeat(${Math.max(gridColumnCount, 1)}, minmax(0, 1fr))`,
                     }}
                 >
-                    {tileEntries.map((entry) => (
-                        <div
-                            key={entry.tile.key}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`Inspect calibration metrics for tile [${entry.tile.row},${entry.tile.col}]`}
-                            onClick={(event) => handleTileCardClick(event, entry.tile.key)}
-                            onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
-                            className={`rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'}`}
-                        >
-                            <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] font-semibold">
-                                <span className="font-mono">
-                                    [{entry.tile.row},{entry.tile.col}]
-                                </span>
-                                <span className="text-xs capitalize font-medium">
-                                    {entry.status}
-                                </span>
-                            </div>
-                            {entry.error && (
-                                <div
-                                    className={`mt-1 text-[10px] leading-tight ${getTileErrorTextClass(entry.status)}`}
-                                >
-                                    {entry.error}
+                    {tileEntries.map((entry) => {
+                        const isOutlier = outlierTileKeys?.has(entry.tile.key) ?? false;
+                        return (
+                            <div
+                                key={entry.tile.key}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Inspect calibration metrics for tile [${entry.tile.row},${entry.tile.col}]${isOutlier ? ' (outlier)' : ''}`}
+                                onClick={(event) => handleTileCardClick(event, entry.tile.key)}
+                                onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
+                                className={`rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'} ${isOutlier ? 'ring-2 ring-amber-500/60 ring-offset-1 ring-offset-gray-950' : ''}`}
+                            >
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] font-semibold">
+                                    <span className="font-mono">
+                                        [{entry.tile.row},{entry.tile.col}]
+                                        {isOutlier && (
+                                            <span
+                                                className="ml-1 text-amber-400"
+                                                title="Outlier: unusually large measurement, excluded from grid sizing"
+                                            >
+                                                !
+                                            </span>
+                                        )}
+                                    </span>
+                                    <span className="text-xs capitalize font-medium">
+                                        {entry.status}
+                                    </span>
                                 </div>
-                            )}
-                            {entry.warnings && entry.warnings.length > 0 && (
-                                <div
-                                    className={`mt-1 text-[10px] leading-tight ${TILE_WARNING_TEXT_CLASS}`}
-                                >
-                                    {entry.warnings.map((warning: string, idx: number) => (
-                                        <div key={idx}>{warning}</div>
-                                    ))}
-                                </div>
-                            )}
-                            {(entry.assignment.x || entry.assignment.y) && (
-                                <div className="mt-2 rounded-md border border-gray-800/70 bg-gray-950/60 p-1.5 text-[10px] text-gray-200">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <TileAxisAction
-                                            axis="x"
-                                            motor={entry.assignment.x}
-                                            telemetry={getTelemetryForMotor(entry.assignment.x)}
-                                            layout="inline"
-                                            className="flex-1 min-w-[120px]"
-                                            showHomeButton
-                                        />
-                                        <TileAxisAction
-                                            axis="y"
-                                            motor={entry.assignment.y}
-                                            telemetry={getTelemetryForMotor(entry.assignment.y)}
-                                            layout="inline"
-                                            className="flex-1 min-w-[120px]"
-                                            showHomeButton
-                                        />
+                                {entry.error && (
+                                    <div
+                                        className={`mt-1 text-[10px] leading-tight ${getTileErrorTextClass(entry.status)}`}
+                                    >
+                                        {entry.error}
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                                )}
+                                {entry.warnings && entry.warnings.length > 0 && (
+                                    <div
+                                        className={`mt-1 text-[10px] leading-tight ${TILE_WARNING_TEXT_CLASS}`}
+                                    >
+                                        {entry.warnings.map((warning: string, idx: number) => (
+                                            <div key={idx}>{warning}</div>
+                                        ))}
+                                    </div>
+                                )}
+                                {isOutlier && (
+                                    <div
+                                        className={`mt-1 text-[10px] leading-tight ${TILE_WARNING_TEXT_CLASS}`}
+                                    >
+                                        Outlier size - excluded from grid sizing
+                                    </div>
+                                )}
+                                {(entry.assignment.x || entry.assignment.y) && (
+                                    <div className="mt-2 rounded-md border border-gray-800/70 bg-gray-950/60 p-1.5 text-[10px] text-gray-200">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <TileAxisAction
+                                                axis="x"
+                                                motor={entry.assignment.x}
+                                                telemetry={getTelemetryForMotor(entry.assignment.x)}
+                                                layout="inline"
+                                                className="flex-1 min-w-[120px]"
+                                                showHomeButton
+                                            />
+                                            <TileAxisAction
+                                                axis="y"
+                                                motor={entry.assignment.y}
+                                                telemetry={getTelemetryForMotor(entry.assignment.y)}
+                                                layout="inline"
+                                                className="flex-1 min-w-[120px]"
+                                                showHomeButton
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
                 {/* Color legend - synced with TILE_STATUS_CLASSES */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-800 pt-3 text-[10px] text-gray-400">

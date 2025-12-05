@@ -1,5 +1,6 @@
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import { computeTileBounds } from '@/services/calibration';
+import { computeMedian } from '@/services/calibration/math/robustStatistics';
 import type {
     CalibrationRunSummary,
     CalibrationRunnerState,
@@ -61,18 +62,6 @@ const isFiniteNumber = (value: unknown): value is number =>
 
 const isPositiveFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value) && value > 0;
-
-const computeMedian = (values: number[]): number => {
-    if (values.length === 0) {
-        return 0;
-    }
-    const sorted = [...values].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    if (sorted.length % 2 === 0) {
-        return (sorted[mid - 1] + sorted[mid]) / 2;
-    }
-    return sorted[mid];
-};
 
 const normalizeStepVector = (input?: StepVector | null): StepVector => ({
     x: input?.x ?? null,

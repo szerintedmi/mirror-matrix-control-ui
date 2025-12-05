@@ -1,7 +1,12 @@
 import React from 'react';
 
 import CollapsibleSection from '@/components/common/CollapsibleSection';
-import { STAGING_POSITIONS, STAGING_POSITION_LABELS } from '@/constants/calibration';
+import {
+    STAGING_POSITIONS,
+    STAGING_POSITION_LABELS,
+    GRID_GAP_MIN_PERCENT,
+    GRID_GAP_MAX_PERCENT,
+} from '@/constants/calibration';
 import { useEditableInput } from '@/hooks/useEditableInput';
 import type { ArrayRotation, StagingPosition } from '@/types';
 import { ARRAY_ROTATIONS, getRotationLabel } from '@/utils/arrayRotation';
@@ -26,6 +31,8 @@ interface CalibrationSettingsPanelProps {
 
 const INTEGER_PATTERN = /^\d*$/;
 const DECIMAL_PATTERN = /^\d*(?:\.\d*)?$/;
+/** Allow negative sign, digits, and decimal point for signed decimal input */
+const SIGNED_DECIMAL_PATTERN = /^-?\d*(?:\.\d*)?$/;
 
 const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
     arrayRotation,
@@ -77,9 +84,13 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
             const percent = Number(s);
             return Number.isNaN(percent) ? null : percent;
         },
-        validateInput: (s) => DECIMAL_PATTERN.test(s),
+        // Allow negative values and decimal point - don't restrict typing
+        validateInput: (s) => SIGNED_DECIMAL_PATTERN.test(s),
+        // Defer clamping to blur so user can type freely (e.g., type "-25" without issues)
+        transformOnBlur: true,
         transform: (percent) => {
-            const clamped = Math.min(Math.max(percent, 0), 5);
+            // Clamp to allowed range [-50%, +5%]
+            const clamped = Math.min(Math.max(percent, GRID_GAP_MIN_PERCENT), GRID_GAP_MAX_PERCENT);
             const normalized = Number((clamped / 100).toFixed(4));
             return [normalized, clamped.toString()];
         },
