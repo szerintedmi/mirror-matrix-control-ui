@@ -186,17 +186,21 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
         if (!selectedCalibrationProfile) {
             return [];
         }
+        // Match Pattern Designer: render bounds in square canvas by scaling Y with camera aspect
+        const aspect = selectedCalibrationProfile.calibrationCameraAspect ?? 16 / 9;
         return Object.entries(selectedCalibrationProfile.tiles)
             .map(([id, tile]) => {
                 if (!tile.inferredBounds) {
                     return null;
                 }
+                const yMin = tile.inferredBounds.y.min / aspect;
+                const yMax = tile.inferredBounds.y.max / aspect;
                 return {
                     id,
                     xMin: tile.inferredBounds.x.min,
                     xMax: tile.inferredBounds.x.max,
-                    yMin: tile.inferredBounds.y.min,
-                    yMax: tile.inferredBounds.y.max,
+                    yMin,
+                    yMax,
                 };
             })
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
