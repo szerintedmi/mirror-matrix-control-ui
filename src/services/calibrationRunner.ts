@@ -200,12 +200,6 @@ export interface CalibrationRunnerParams {
      */
     stagingPosition?: StagingPosition;
     /**
-     * Camera aspect ratio (width / height). Used to compute expected blob positions
-     * that account for isotropic coordinate space limitations.
-     * Defaults to 16/9 (1.778) if not specified.
-     */
-    cameraAspectRatio?: number;
-    /**
      * ROI (Region of Interest) settings. Used to compute expected blob position
      * for the first tile when no prior measurements exist.
      */
@@ -342,8 +336,6 @@ export class CalibrationRunner {
 
     private readonly stagingPosition: StagingPosition;
 
-    private readonly cameraAspectRatio: number;
-
     private readonly roi: NormalizedRoi;
 
     private readonly descriptors: TileDescriptor[];
@@ -402,7 +394,6 @@ export class CalibrationRunner {
         this.settings = { ...DEFAULT_CALIBRATION_RUNNER_SETTINGS, ...params.settings };
         this.arrayRotation = params.arrayRotation ?? 0;
         this.stagingPosition = params.stagingPosition ?? 'corner';
-        this.cameraAspectRatio = params.cameraAspectRatio ?? 16 / 9;
         this.roi = params.roi ?? DEFAULT_ROI;
         this.onStateChange = params.onStateChange;
         this.mode = params.mode ?? 'auto';

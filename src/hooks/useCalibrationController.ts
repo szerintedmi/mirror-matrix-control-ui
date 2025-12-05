@@ -43,10 +43,7 @@ interface UseCalibrationControllerParams {
      * Position where tiles are moved during staging phase.
      */
     stagingPosition: StagingPosition;
-    /**
-     * Camera aspect ratio (width / height) for expected blob position calculation.
-     */
-    cameraAspectRatio?: number;
+
     /**
      * ROI (Region of Interest) settings for expected blob position calculation.
      */
@@ -110,7 +107,6 @@ export const useCalibrationController = ({
     detectionReady,
     arrayRotation,
     stagingPosition,
-    cameraAspectRatio,
     roi,
     initialSessionState,
     onExpectedPositionChange,
@@ -209,7 +205,6 @@ export const useCalibrationController = ({
             settings: runnerSettings,
             arrayRotation,
             stagingPosition,
-            cameraAspectRatio,
             roi,
             mode,
             onStateChange: setRunnerState,
@@ -228,7 +223,6 @@ export const useCalibrationController = ({
     }, [
         appendLogEntry,
         arrayRotation,
-        cameraAspectRatio,
         captureMeasurement,
         detectionReady,
         gridSize,

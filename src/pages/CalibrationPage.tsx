@@ -209,14 +209,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Only load once on mount
 
-    // Compute camera aspect ratio for expected blob position calculation
-    const calibrationCameraAspectRatio = useMemo(() => {
-        if (videoDimensions.width > 0 && videoDimensions.height > 0) {
-            return videoDimensions.width / videoDimensions.height;
-        }
-        return undefined; // Will default to 16:9 in calibration runner
-    }, [videoDimensions.width, videoDimensions.height]);
-
     // Callback for CalibrationRunner to update expected position overlay before motor moves
     const handleExpectedPositionChange = useCallback(
         (position: { x: number; y: number } | null, tolerance: number) => {
@@ -237,7 +229,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         detectionReady,
         arrayRotation,
         stagingPosition,
-        cameraAspectRatio: calibrationCameraAspectRatio,
         roi,
         initialSessionState,
         onExpectedPositionChange: handleExpectedPositionChange,
