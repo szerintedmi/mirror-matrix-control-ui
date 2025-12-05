@@ -11,14 +11,16 @@ interface CalibrationSettingsPanelProps {
     onArrayRotationChange: (rotation: ArrayRotation) => void;
     stagingPosition: StagingPosition;
     onStagingPositionChange: (position: StagingPosition) => void;
+    firstTileInterimStepDelta: number;
+    onFirstTileInterimStepDeltaChange: (value: number) => void;
     deltaSteps: number;
     onDeltaStepsChange: (value: number) => void;
     gridGapNormalized: number;
     onGridGapNormalizedChange: (value: number) => void;
-    maxBlobDistanceThreshold: number;
-    onMaxBlobDistanceThresholdChange: (value: number) => void;
     firstTileTolerance: number;
     onFirstTileToleranceChange: (value: number) => void;
+    tileTolerance: number;
+    onTileToleranceChange: (value: number) => void;
     disabled?: boolean;
 }
 
@@ -30,16 +32,29 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
     onArrayRotationChange,
     stagingPosition,
     onStagingPositionChange,
+    firstTileInterimStepDelta,
+    onFirstTileInterimStepDeltaChange,
     deltaSteps,
     onDeltaStepsChange,
     gridGapNormalized,
     onGridGapNormalizedChange,
-    maxBlobDistanceThreshold,
-    onMaxBlobDistanceThresholdChange,
     firstTileTolerance,
     onFirstTileToleranceChange,
+    tileTolerance,
+    onTileToleranceChange,
     disabled = false,
 }) => {
+    const firstTileInterimStepDeltaInput = useEditableInput({
+        value: firstTileInterimStepDelta,
+        onChange: onFirstTileInterimStepDeltaChange,
+        format: (v) => v.toString(),
+        parse: (s) => {
+            const n = Number(s);
+            return Number.isNaN(n) ? null : Math.round(n);
+        },
+        validateInput: (s) => INTEGER_PATTERN.test(s),
+    });
+
     const stepDeltaInput = useEditableInput({
         value: deltaSteps,
         onChange: onDeltaStepsChange,
@@ -70,27 +85,6 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
         },
     });
 
-    const maxBlobDistanceInput = useEditableInput({
-        value: maxBlobDistanceThreshold,
-        onChange: onMaxBlobDistanceThresholdChange,
-        format: (v) => {
-            const percent = Number((v * 100).toFixed(0));
-            return percent.toString();
-        },
-        parse: (s) => {
-            const percent = Number(s);
-            return Number.isNaN(percent) ? null : percent;
-        },
-        validateInput: (s) => DECIMAL_PATTERN.test(s),
-        // Defer clamping to blur to allow typing multi-digit values like "25" without immediate clamp when "2" is typed
-        transformOnBlur: true,
-        transform: (percent) => {
-            const clamped = Math.min(Math.max(percent, 1), 100);
-            const normalized = Number((clamped / 100).toFixed(2));
-            return [normalized, clamped.toString()];
-        },
-    });
-
     const firstTileToleranceInput = useEditableInput({
         value: firstTileTolerance,
         onChange: onFirstTileToleranceChange,
@@ -107,6 +101,27 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
         transformOnBlur: true,
         transform: (percent) => {
             const clamped = Math.min(Math.max(percent, 5), 50);
+            const normalized = Number((clamped / 100).toFixed(2));
+            return [normalized, clamped.toString()];
+        },
+    });
+
+    const tileToleranceInput = useEditableInput({
+        value: tileTolerance,
+        onChange: onTileToleranceChange,
+        format: (v) => {
+            const percent = Number((v * 100).toFixed(0));
+            return percent.toString();
+        },
+        parse: (s) => {
+            const percent = Number(s);
+            return Number.isNaN(percent) ? null : percent;
+        },
+        validateInput: (s) => DECIMAL_PATTERN.test(s),
+        // Defer clamping to blur to allow typing multi-digit values like "25" without immediate clamp when "2" is typed
+        transformOnBlur: true,
+        transform: (percent) => {
+            const clamped = Math.min(Math.max(percent, 1), 100);
             const normalized = Number((clamped / 100).toFixed(2));
             return [normalized, clamped.toString()];
         },
@@ -212,11 +227,28 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                     </p>
                 </fieldset>
 
-                {/* Step Delta, Grid Gap, 1st Tile Tolerance & Tile Tolerance */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {/* Step Delta Settings */}
+                <div className="grid gap-4 sm:grid-cols-3">
                     <label className="text-sm text-gray-300">
                         <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
-                            Step delta (steps)
+                            1st Tile Interim Step
+                        </span>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={firstTileInterimStepDeltaInput.displayValue}
+                            onFocus={firstTileInterimStepDeltaInput.onFocus}
+                            onBlur={firstTileInterimStepDeltaInput.onBlur}
+                            onChange={firstTileInterimStepDeltaInput.onChange}
+                            disabled={disabled}
+                            className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Interim step delta for first tile (uses home as expected center, followed by full step)"
+                        />
+                    </label>
+                    <label className="text-sm text-gray-300">
+                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                            Step Delta
                         </span>
                         <input
                             type="text"
@@ -228,6 +260,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                             onChange={stepDeltaInput.onChange}
                             disabled={disabled}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Motor steps for full X/Y step tests"
                         />
                     </label>
                     <label className="text-sm text-gray-300">
@@ -246,9 +279,13 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                         />
                     </label>
+                </div>
+
+                {/* Tolerance Settings */}
+                <div className="grid gap-4 sm:grid-cols-2">
                     <label className="text-sm text-gray-300">
                         <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
-                            1st Tile tolerance (%)
+                            1st Tile Tolerance (%)
                         </span>
                         <input
                             type="text"
@@ -260,24 +297,24 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                             onChange={firstTileToleranceInput.onChange}
                             disabled={disabled}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                            title="Larger tolerance for first tile detection when no prior measurements exist"
+                            title="Tolerance for first tile detection (home and interim step tests)"
                         />
                     </label>
                     <label className="text-sm text-gray-300">
                         <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
-                            Tile tolerance (%)
+                            Tile Tolerance (%)
                         </span>
                         <input
                             type="text"
                             inputMode="numeric"
                             pattern="[0-9]*"
-                            value={maxBlobDistanceInput.displayValue}
-                            onFocus={maxBlobDistanceInput.onFocus}
-                            onBlur={maxBlobDistanceInput.onBlur}
-                            onChange={maxBlobDistanceInput.onChange}
+                            value={tileToleranceInput.displayValue}
+                            onFocus={tileToleranceInput.onFocus}
+                            onBlur={tileToleranceInput.onBlur}
+                            onChange={tileToleranceInput.onChange}
                             disabled={disabled}
                             className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                            title="Maximum distance from expected position to accept a detected blob (shown as green circle)"
+                            title="Tolerance for full step tests and subsequent tiles"
                         />
                     </label>
                 </div>

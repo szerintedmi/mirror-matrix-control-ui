@@ -81,16 +81,18 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         onArrayRotationChange={onArrayRotationChange}
                         stagingPosition={stagingPosition}
                         onStagingPositionChange={onStagingPositionChange}
+                        firstTileInterimStepDelta={runnerSettings.firstTileInterimStepDelta}
+                        onFirstTileInterimStepDeltaChange={(v) =>
+                            updateSetting('firstTileInterimStepDelta', v)
+                        }
                         deltaSteps={runnerSettings.deltaSteps}
                         onDeltaStepsChange={(v) => updateSetting('deltaSteps', v)}
                         gridGapNormalized={runnerSettings.gridGapNormalized}
                         onGridGapNormalizedChange={(v) => updateSetting('gridGapNormalized', v)}
-                        maxBlobDistanceThreshold={runnerSettings.maxBlobDistanceThreshold}
-                        onMaxBlobDistanceThresholdChange={(v) =>
-                            updateSetting('maxBlobDistanceThreshold', v)
-                        }
                         firstTileTolerance={runnerSettings.firstTileTolerance}
                         onFirstTileToleranceChange={(v) => updateSetting('firstTileTolerance', v)}
+                        tileTolerance={runnerSettings.tileTolerance}
+                        onTileToleranceChange={(v) => updateSetting('tileTolerance', v)}
                         disabled={isCalibrationActive}
                     />
 

@@ -29,6 +29,7 @@ interface CalibrationStatusBarProps {
 const getNextStepHint = (
     currentKind: CalibrationStepKind | null,
     progress: { completed: number; total: number },
+    isFirstTile: boolean,
 ): string | null => {
     if (!currentKind) return null;
 
@@ -38,9 +39,13 @@ const getNextStepHint = (
         case 'stage-all':
             return progress.total > 0 ? 'Measure first tile' : 'Align grid';
         case 'measure-home':
-            return 'X axis step test';
+            return isFirstTile ? 'X interim step' : 'X step test';
+        case 'step-test-x-interim':
+            return 'X step test';
         case 'step-test-x':
-            return 'Y axis step test';
+            return isFirstTile ? 'Y interim step' : 'Y step test';
+        case 'step-test-y-interim':
+            return 'Y step test';
         case 'step-test-y':
             return progress.completed + 1 < progress.total ? 'Next tile' : 'Align grid';
         case 'align-grid':
@@ -76,9 +81,14 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
     const currentStepLabel = stepState?.step?.label ?? null;
     const stepStatus = stepState?.status ?? null;
 
+    // First tile has interim steps, subsequent tiles skip directly to full steps
+    const isFirstTile = progress.completed === 0;
+
     // Next step hint (only in step mode when waiting)
     const nextStepHint =
-        mode === 'step' && isAwaitingAdvance ? getNextStepHint(currentStepKind, progress) : null;
+        mode === 'step' && isAwaitingAdvance
+            ? getNextStepHint(currentStepKind, progress, isFirstTile)
+            : null;
 
     // Phase display for non-active states
     const phaseLabel = phase.charAt(0).toUpperCase() + phase.slice(1);

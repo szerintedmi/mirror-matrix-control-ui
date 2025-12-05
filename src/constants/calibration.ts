@@ -65,17 +65,26 @@ export interface CalibrationRunnerSettings {
     sampleTimeoutMs: number;
     maxDetectionRetries: number;
     retryDelayMs: number;
-    /** Maximum distance (normalized 0-1) from expected position to accept a blob. */
-    maxBlobDistanceThreshold: number;
     /** Tolerance radius (normalized 0-1) for first tile detection when no prior measurements exist. */
     firstTileTolerance: number;
+    /** Tolerance radius (normalized 0-1) from expected position to accept a blob (for subsequent tiles). */
+    tileTolerance: number;
+    /**
+     * Interim step delta for first tile X/Y step tests (before we have measured perStep ratios).
+     * Smaller than normal deltaSteps since we use home position as expected center.
+     * After this interim step, the full deltaSteps step test follows.
+     */
+    firstTileInterimStepDelta: number;
 }
-
-/** Default max blob distance threshold (15% of frame dimension). */
-export const DEFAULT_MAX_BLOB_DISTANCE_THRESHOLD = 0.15;
 
 /** Default first tile tolerance - larger radius for initial detection (25% of frame dimension). */
 export const DEFAULT_FIRST_TILE_TOLERANCE = 0.25;
+
+/** Default tile tolerance (15% of frame dimension). */
+export const DEFAULT_TILE_TOLERANCE = 0.15;
+
+/** Default interim step delta for first tile X/Y tests (smaller since we use home as expected center). */
+export const DEFAULT_FIRST_TILE_INTERIM_STEP_DELTA = 300;
 
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 1200,
@@ -83,6 +92,7 @@ export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     sampleTimeoutMs: 1_500,
     maxDetectionRetries: 5,
     retryDelayMs: 150,
-    maxBlobDistanceThreshold: DEFAULT_MAX_BLOB_DISTANCE_THRESHOLD,
     firstTileTolerance: DEFAULT_FIRST_TILE_TOLERANCE,
+    tileTolerance: DEFAULT_TILE_TOLERANCE,
+    firstTileInterimStepDelta: DEFAULT_FIRST_TILE_INTERIM_STEP_DELTA,
 };

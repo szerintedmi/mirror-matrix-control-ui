@@ -70,6 +70,10 @@ describe('CalibrationRunner axis directions', () => {
             .map((call) => call.positionSteps);
 
         expect(xPositions[0]).toBe(MOTOR_MAX_POSITION_STEPS);
+        // First tile uses interim step first, then full step
+        expect(xPositions).toContain(
+            -DEFAULT_CALIBRATION_RUNNER_SETTINGS.firstTileInterimStepDelta,
+        );
         expect(xPositions).toContain(-DEFAULT_CALIBRATION_RUNNER_SETTINGS.deltaSteps);
     });
 
@@ -82,6 +86,8 @@ describe('CalibrationRunner axis directions', () => {
             .map((call) => call.positionSteps);
 
         expect(xPositions[0]).toBe(MOTOR_MIN_POSITION_STEPS);
+        // First tile uses interim step first, then full step
+        expect(xPositions).toContain(DEFAULT_CALIBRATION_RUNNER_SETTINGS.firstTileInterimStepDelta);
         expect(xPositions).toContain(DEFAULT_CALIBRATION_RUNNER_SETTINGS.deltaSteps);
     });
 });

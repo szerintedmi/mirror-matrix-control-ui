@@ -152,7 +152,9 @@ export type CalibrationStepKind =
     | 'home-all'
     | 'stage-all'
     | 'measure-home'
+    | 'step-test-x-interim'
     | 'step-test-x'
+    | 'step-test-y-interim'
     | 'step-test-y'
     | 'align-grid';
 
@@ -698,7 +700,7 @@ export class CalibrationRunner {
         const expectedPosition = rawCoords(expectedPositionCoord);
         const homeTolerance = isFirstTile
             ? this.settings.firstTileTolerance
-            : this.settings.maxBlobDistanceThreshold;
+            : this.settings.tileTolerance;
 
         // Show expected position circle BEFORE moving
         console.log('[CalibrationRunner] Home expected position (view 0-1):', expectedPosition);
@@ -756,30 +758,101 @@ export class CalibrationRunner {
         // PAUSE - User sees: expected circle + home measurement result + grid calculation
         await this.completeStep('completed');
 
-        // === X STEP TEST ===
+        // === STEP TESTS ===
         const xMotor = tile.assignment.x;
         const yMotor = tile.assignment.y;
-        const xDelta = xMotor
-            ? getAxisStepDelta('x', this.settings.deltaSteps, this.arrayRotation)
-            : null;
-        const yDelta = yMotor
-            ? getAxisStepDelta('y', this.settings.deltaSteps, this.arrayRotation)
-            : null;
         const stepTestWarnings: string[] = [];
         let xStepResult: AxisStepTestResult | null = null;
         let yStepResult: AxisStepTestResult | null = null;
 
-        if (xMotor && xDelta !== null) {
+        // For first tile: run interim step first (small delta, home as center) to get perStep estimate,
+        // then run full step using that estimate. For subsequent tiles: run full step only.
+        if (xMotor) {
+            // Non-null assertion: getAxisStepDelta always returns number for valid axis 'x'
+            const xFullDelta = getAxisStepDelta('x', this.settings.deltaSteps, this.arrayRotation)!;
+            let xInterimPerStep: number | null = null;
+
+            // === X INTERIM STEP TEST (first tile only) ===
+            if (isFirstTile) {
+                const xInterimDelta = getAxisStepDelta(
+                    'x',
+                    this.settings.firstTileInterimStepDelta,
+                    this.arrayRotation,
+                )!;
+
+                this.beginStep({
+                    kind: 'step-test-x-interim',
+                    label: `X interim step R${tile.row}C${tile.col}`,
+                    tile: tileAddress,
+                });
+
+                // Use home position as expected center (no prior measurements)
+                const xInterimExpected = {
+                    x: centeredToView(homeMeasurement.x),
+                    y: centeredToView(homeMeasurement.y),
+                };
+                console.log(
+                    '[CalibrationRunner] X interim step expected (view 0-1):',
+                    xInterimExpected,
+                    '(first tile - using home as center)',
+                );
+                this.onExpectedPositionChange?.(xInterimExpected, this.settings.firstTileTolerance);
+
+                this.logCommand(
+                    'Jogging X axis for interim step test',
+                    { deltaSteps: xInterimDelta, isInterim: true },
+                    tileAddress,
+                    measureGroup,
+                );
+                await this.moveAxisToPosition(xMotor, xInterimDelta, measureGroup);
+
+                const xInterimResult = await this.captureMeasurementWithRetries(
+                    xInterimExpected,
+                    this.settings.firstTileTolerance,
+                );
+
+                if (xInterimResult.measurement) {
+                    const interimStepResult = computeAxisStepTestResult(
+                        homeMeasurement,
+                        xInterimResult.measurement,
+                        'x',
+                        xInterimDelta,
+                    );
+                    xInterimPerStep = interimStepResult.perStep;
+                    this.logCommand(
+                        'Captured X interim step measurement',
+                        {
+                            displacement: interimStepResult.displacement,
+                            perStep: xInterimPerStep,
+                        },
+                        tileAddress,
+                        measureGroup,
+                    );
+                } else if (xInterimResult.error) {
+                    const warning = `X interim step: ${xInterimResult.error}`;
+                    stepTestWarnings.push(warning);
+                    this.onTileError?.(tile.row, tile.col, warning);
+                }
+
+                // PAUSE - User sees interim X result
+                await this.completeStep('completed');
+            }
+
+            // === X FULL STEP TEST ===
+            // (moves directly from interim position to full position - no need to return to home)
             this.beginStep({
                 kind: 'step-test-x',
                 label: `X step test R${tile.row}C${tile.col}`,
                 tile: tileAddress,
             });
 
-            // Calculate and show expected position BEFORE moving
-            const estimatedXDisplacement = this.estimateExpectedDisplacement('x', xDelta);
+            // Calculate expected position using interim perStep (first tile) or prior measurements
+            const xDisplacementEstimate =
+                xInterimPerStep !== null
+                    ? xFullDelta * xInterimPerStep
+                    : this.estimateExpectedDisplacement('x', xFullDelta);
             const xExpected = {
-                x: centeredToView(homeMeasurement.x + estimatedXDisplacement),
+                x: centeredToView(homeMeasurement.x + xDisplacementEstimate),
                 y: centeredToView(homeMeasurement.y),
             };
             console.log(
@@ -787,29 +860,30 @@ export class CalibrationRunner {
                 xExpected,
                 'from home (centered):',
                 { x: homeMeasurement.x, y: homeMeasurement.y },
-                'estimated X displacement:',
-                estimatedXDisplacement,
+                'estimated displacement:',
+                xDisplacementEstimate,
             );
-            this.onExpectedPositionChange?.(xExpected, this.settings.maxBlobDistanceThreshold);
+            this.onExpectedPositionChange?.(xExpected, this.settings.tileTolerance);
 
-            // Move to X jog position (circle already visible)
             this.logCommand(
                 'Jogging X axis for step test',
-                { deltaSteps: xDelta },
+                { deltaSteps: xFullDelta },
                 tileAddress,
                 measureGroup,
             );
-            await this.moveAxisToPosition(xMotor, xDelta, measureGroup);
+            await this.moveAxisToPosition(xMotor, xFullDelta, measureGroup);
 
-            // Capture X measurement
-            const xCaptureResult = await this.captureMeasurementWithRetries(xExpected);
+            const xCaptureResult = await this.captureMeasurementWithRetries(
+                xExpected,
+                this.settings.tileTolerance,
+            );
 
             if (xCaptureResult.measurement) {
                 xStepResult = computeAxisStepTestResult(
                     homeMeasurement,
                     xCaptureResult.measurement,
                     'x',
-                    xDelta,
+                    xFullDelta,
                 );
                 this.logCommand(
                     'Captured X step test measurement',
@@ -827,59 +901,138 @@ export class CalibrationRunner {
                 this.onTileError?.(tile.row, tile.col, warning);
             }
 
-            // Stay at X jog position - user sees X result at the jogged position
-            // X will be moved back when Y step starts (or when tile moves aside)
-
             // PAUSE - User sees X result
             await this.completeStep('completed');
         }
 
-        // === Y STEP TEST ===
-        if (yMotor && yDelta !== null) {
+        // === Y STEP TESTS ===
+        if (yMotor) {
+            // Non-null assertion: getAxisStepDelta always returns number for valid axis 'y'
+            const yFullDelta = getAxisStepDelta('y', this.settings.deltaSteps, this.arrayRotation)!;
+            let yInterimPerStep: number | null = null;
+
+            // === Y INTERIM STEP TEST (first tile only) ===
+            if (isFirstTile) {
+                const yInterimDelta = getAxisStepDelta(
+                    'y',
+                    this.settings.firstTileInterimStepDelta,
+                    this.arrayRotation,
+                )!;
+
+                this.beginStep({
+                    kind: 'step-test-y-interim',
+                    label: `Y interim step R${tile.row}C${tile.col}`,
+                    tile: tileAddress,
+                });
+
+                // Use home position as expected center
+                const yInterimExpected = {
+                    x: centeredToView(homeMeasurement.x),
+                    y: centeredToView(homeMeasurement.y),
+                };
+                console.log(
+                    '[CalibrationRunner] Y interim step expected (view 0-1):',
+                    yInterimExpected,
+                    '(first tile - using home as center)',
+                );
+                this.onExpectedPositionChange?.(yInterimExpected, this.settings.firstTileTolerance);
+
+                // Move Y to interim position (and X back to home)
+                this.logCommand(
+                    'Jogging Y axis for interim step test',
+                    { deltaSteps: yInterimDelta, isInterim: true },
+                    tileAddress,
+                    measureGroup,
+                );
+                await Promise.all([
+                    this.moveAxisToPosition(yMotor, yInterimDelta, measureGroup),
+                    xMotor ? this.moveAxisToPosition(xMotor, 0, measureGroup) : Promise.resolve(),
+                ]);
+
+                const yInterimResult = await this.captureMeasurementWithRetries(
+                    yInterimExpected,
+                    this.settings.firstTileTolerance,
+                );
+
+                if (yInterimResult.measurement) {
+                    const interimStepResult = computeAxisStepTestResult(
+                        homeMeasurement,
+                        yInterimResult.measurement,
+                        'y',
+                        yInterimDelta,
+                    );
+                    yInterimPerStep = interimStepResult.perStep;
+                    this.logCommand(
+                        'Captured Y interim step measurement',
+                        {
+                            displacement: interimStepResult.displacement,
+                            perStep: yInterimPerStep,
+                        },
+                        tileAddress,
+                        measureGroup,
+                    );
+                } else if (yInterimResult.error) {
+                    const warning = `Y interim step: ${yInterimResult.error}`;
+                    stepTestWarnings.push(warning);
+                    this.onTileError?.(tile.row, tile.col, warning);
+                }
+
+                // PAUSE - User sees interim Y result
+                await this.completeStep('completed');
+            }
+
+            // === Y FULL STEP TEST ===
+            // (moves directly from interim position to full position - no need to return to home)
             this.beginStep({
                 kind: 'step-test-y',
                 label: `Y step test R${tile.row}C${tile.col}`,
                 tile: tileAddress,
             });
 
-            // Calculate and show expected position BEFORE moving
-            const estimatedYDisplacement = this.estimateExpectedDisplacement('y', yDelta);
+            // Calculate expected position using interim perStep (first tile) or prior measurements
+            const yDisplacementEstimate =
+                yInterimPerStep !== null
+                    ? yFullDelta * yInterimPerStep
+                    : this.estimateExpectedDisplacement('y', yFullDelta);
             const yExpected = {
                 x: centeredToView(homeMeasurement.x),
-                y: centeredToView(homeMeasurement.y + estimatedYDisplacement),
+                y: centeredToView(homeMeasurement.y + yDisplacementEstimate),
             };
             console.log(
                 '[CalibrationRunner] Y step test expected (view 0-1):',
                 yExpected,
                 'from home (centered):',
                 { x: homeMeasurement.x, y: homeMeasurement.y },
-                'estimated Y displacement:',
-                estimatedYDisplacement,
+                'estimated displacement:',
+                yDisplacementEstimate,
             );
-            this.onExpectedPositionChange?.(yExpected, this.settings.maxBlobDistanceThreshold);
+            this.onExpectedPositionChange?.(yExpected, this.settings.tileTolerance);
 
             // Move to Y jog position (and X back to home in parallel)
             this.logCommand(
                 'Jogging Y axis for step test',
-                { deltaSteps: yDelta },
+                { deltaSteps: yFullDelta },
                 tileAddress,
                 measureGroup,
             );
             await Promise.all([
-                this.moveAxisToPosition(yMotor, yDelta, measureGroup),
+                this.moveAxisToPosition(yMotor, yFullDelta, measureGroup),
                 // Move X back to home position in parallel (if X motor exists and was jogged)
                 xMotor ? this.moveAxisToPosition(xMotor, 0, measureGroup) : Promise.resolve(),
             ]);
 
             // Capture Y measurement
-            const yCaptureResult = await this.captureMeasurementWithRetries(yExpected);
+            const yCaptureResult = await this.captureMeasurementWithRetries(
+                yExpected,
+                this.settings.tileTolerance,
+            );
 
             if (yCaptureResult.measurement) {
                 yStepResult = computeAxisStepTestResult(
                     homeMeasurement,
                     yCaptureResult.measurement,
                     'y',
-                    yDelta,
+                    yFullDelta,
                 );
                 this.logCommand(
                     'Captured Y step test measurement',
@@ -915,7 +1068,7 @@ export class CalibrationRunner {
             return;
         }
 
-        // === FINALIZE TILE (only if Y step test was skipped) ===
+        // === FINALIZE TILE (only if Y motor doesn't exist) ===
         this.finalizeTileMeasurement(
             tile,
             tileAddress,
@@ -1108,7 +1261,7 @@ export class CalibrationRunner {
         measurement: BlobMeasurement | null;
         error?: string;
     }> {
-        const maxDistance = maxDistanceOverride ?? this.settings.maxBlobDistanceThreshold;
+        const maxDistance = maxDistanceOverride ?? this.settings.tileTolerance;
         let lastError: string | undefined;
         for (let attempt = 0; attempt < this.settings.maxDetectionRetries; attempt += 1) {
             await this.checkContinue();
