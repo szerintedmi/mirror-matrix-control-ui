@@ -20,6 +20,7 @@ import { STEP_EPSILON } from '@/utils/calibrationMath';
 
 import { computeLiveTileBounds } from './boundsComputation';
 import { RobustMaxSizingStrategy, type TileEntry } from './math/blueprintStrategies';
+import { computeMedian } from './math/robustStatistics';
 
 // =============================================================================
 // TYPES
@@ -182,16 +183,12 @@ export function computeGridBlueprint(
         return { blueprint: null, outlierAnalysis: emptyAnalysis };
     }
 
-    // Get camera dimensions from first measurement for isotropic conversion
-    const firstMeasurement = measuredTiles[0].homeMeasurement;
-    const sourceWidth = firstMeasurement.sourceWidth ?? 1920;
-    const sourceHeight = firstMeasurement.sourceHeight ?? 1080;
-    const avgDim = (sourceWidth + sourceHeight) / 2;
+    // Get camera dimensions
+    const firstMeasurement = measuredTiles[0]?.homeMeasurement;
+    const sourceWidth = firstMeasurement?.sourceWidth ?? 1920;
+    const sourceHeight = firstMeasurement?.sourceHeight ?? 1080;
 
-    // Isotropic conversion factors: multiply centered deltas by these to get
-    // centered values that produce uniform pixel spacing
-    const isoFactorX = avgDim / sourceWidth;
-    const isoFactorY = avgDim / sourceHeight;
+    // Spacing for offset computation (Centered Coords)
 
     // Compute tile size using robust max (excluding outliers) or regular max
     const robustEnabled = config.robustTileSize?.enabled ?? true;
@@ -240,54 +237,107 @@ export function computeGridBlueprint(
         };
     }
 
-    const tileWidth = tileSize;
-    const tileHeight = tileSize;
+    let tileWidth = tileSize;
+    let tileHeight = tileSize;
 
-    // Calculate gap from normalized setting (allow negative values for overlap)
+    // Compute pitch (spacing) from measured centroids directly in Centered Coordinates
+    // We do NOT use isotropic scaling here because we want the grid to match the camera's
+    // centered coordinate space directly.
+    const deltasX: number[] = [];
+    const deltasY: number[] = [];
+
+    // Create lookup by row-col for reliable adjacency checks
+    const tileMapByRowCol = new Map<string, BlobMeasurement>();
+    for (const entry of measuredTiles) {
+        tileMapByRowCol.set(`${entry.tile.row}-${entry.tile.col}`, entry.homeMeasurement);
+    }
+
+    // Collect horizontal and vertical deltas (raw centered coords)
+    for (const entry of measuredTiles) {
+        const { row, col } = entry.tile;
+
+        // Check right neighbor (X pitch)
+        const rightMeas = tileMapByRowCol.get(`${row}-${col + 1}`);
+        if (rightMeas) {
+            // Use axis-specific delta for pitch calculation.
+            // Euclidean distance inflates pitch when tiles are slightly misaligned.
+            const dx = rightMeas.x - entry.homeMeasurement.x;
+            deltasX.push(Math.abs(dx));
+        }
+
+        // Check bottom neighbor (Y pitch)
+        const downMeas = tileMapByRowCol.get(`${row + 1}-${col}`);
+        if (downMeas) {
+            const dy = downMeas.y - entry.homeMeasurement.y;
+            deltasY.push(Math.abs(dy));
+        }
+    }
+
+    let gapX: number;
+    let gapY: number;
+
+    // Config fallback / Fixed Gap
     const clampedGap = Math.max(
         GRID_GAP_MIN_NORMALIZED,
         Math.min(GRID_GAP_MAX_NORMALIZED, config.gridGapNormalized),
     );
-    const normalizedGap = clampedGap * 2; // Convert to centered coordinate scale
-    const gapX = normalizedGap;
-    const gapY = normalizedGap;
+    const normalizedGap = clampedGap * 2;
 
-    // Base spacing in centered coords (stored in blueprint for reference)
-    const baseSpacing = tileWidth + gapX;
-    const halfTile = tileWidth / 2;
+    // We enforce the Configured Gap (stable)
+    // and derive the Tile Size from the measured Pitch.
+    // This allows the visual tile to shrink/grow to fit the pitch perfectly
+    // without the gap jittering due to blob size noise.
+    gapX = normalizedGap;
+    gapY = normalizedGap;
 
-    // Isotropic spacing: converts to centered coords that produce same pixel distance
-    const spacingXCentered = baseSpacing * isoFactorX;
-    const spacingYCentered = baseSpacing * isoFactorY;
-    const halfTileXCentered = halfTile * isoFactorX;
-    const halfTileYCentered = halfTile * isoFactorY;
+    let computedTileWidth = tileWidth; // Fallback to max blob size
+    let computedTileHeight = tileHeight; // Fallback to max blob size
 
-    // Total grid dimensions in isotropic centered coords
-    const totalWidth =
-        config.gridSize.cols * tileWidth * isoFactorX +
-        (config.gridSize.cols - 1) * gapX * isoFactorX;
-    const totalHeight =
-        config.gridSize.rows * tileHeight * isoFactorY +
-        (config.gridSize.rows - 1) * gapY * isoFactorY;
+    // Use computed pitch if available
+    if (deltasX.length > 0) {
+        const medianPitchX = computeMedian(deltasX);
+        // Pitch = Width + Gap  =>  Width = Pitch - Gap
+        computedTileWidth = medianPitchX - gapX;
+    }
 
-    // Compute origin from minimum tile positions using isotropic spacing
-    let minOriginX = Number.POSITIVE_INFINITY;
-    let minOriginY = Number.POSITIVE_INFINITY;
+    if (deltasY.length > 0) {
+        const medianPitchY = computeMedian(deltasY);
+        computedTileHeight = medianPitchY - gapY;
+    }
+
+    // If we only have single tile or no deltas, we stick to the MaxBlobSize logic (fallback)
+    // implicitly via initialization of computedTileWidth/Height above.
+
+    const baseSpacingX = computedTileWidth + gapX;
+    const baseSpacingY = computedTileHeight + gapY;
+
+    // Update blueprint with computed dimensions
+    tileWidth = computedTileWidth;
+    tileHeight = computedTileHeight;
+    const halfTileX = tileWidth / 2;
+    const halfTileY = tileHeight / 2;
+
+    // Dimensions in Centered Coords
+    const totalWidth = config.gridSize.cols * baseSpacingX - gapX; // (cols-1)*gap + cols*width = cols*(width+gap) - gap
+    const totalHeight = config.gridSize.rows * baseSpacingY - gapY;
+
+    // Compute origin using median of implied origins
+    const originCandidatesX: number[] = [];
+    const originCandidatesY: number[] = [];
 
     for (const entry of measuredTiles) {
         const measurement = entry.homeMeasurement;
-        const candidateX = measurement.x - (entry.tile.col * spacingXCentered + halfTileXCentered);
-        const candidateY = measurement.y - (entry.tile.row * spacingYCentered + halfTileYCentered);
-        if (candidateX < minOriginX) {
-            minOriginX = candidateX;
-        }
-        if (candidateY < minOriginY) {
-            minOriginY = candidateY;
-        }
+        // The implied origin for this tile is: measurement - (offset_to_origin)
+        // Offset = col * pitch + halfTile (using axis-specific half-tile values)
+        const impliedOriginX = measurement.x - (entry.tile.col * baseSpacingX + halfTileX);
+        const impliedOriginY = measurement.y - (entry.tile.row * baseSpacingY + halfTileY);
+
+        originCandidatesX.push(impliedOriginX);
+        originCandidatesY.push(impliedOriginY);
     }
 
-    let originX = Number.isFinite(minOriginX) ? minOriginX : 0;
-    let originY = Number.isFinite(minOriginY) ? minOriginY : 0;
+    const originX = originCandidatesX.length > 0 ? computeMedian(originCandidatesX) : 0;
+    const originY = originCandidatesY.length > 0 ? computeMedian(originCandidatesY) : 0;
 
     // Center the grid
     const cameraOriginOffset = {
@@ -295,8 +345,9 @@ export function computeGridBlueprint(
         y: originY + totalHeight / 2,
     };
 
-    originX -= cameraOriginOffset.x;
-    originY -= cameraOriginOffset.y;
+    // Store origin relative to camera center
+    const finalOriginX = originX - cameraOriginOffset.x;
+    const finalOriginY = originY - cameraOriginOffset.y;
 
     const blueprint: CalibrationGridBlueprint = {
         adjustedTileFootprint: {
@@ -304,9 +355,8 @@ export function computeGridBlueprint(
             height: tileHeight,
         },
         tileGap: { x: gapX, y: gapY },
-        gridOrigin: { x: originX, y: originY },
+        gridOrigin: { x: finalOriginX, y: finalOriginY },
         cameraOriginOffset,
-        // Store camera dimensions for isotropic spacing calculations
         sourceWidth,
         sourceHeight,
     };
@@ -321,8 +371,6 @@ export function computeGridBlueprint(
 /**
  * Compute the full calibration run summary.
  * Calculates grid blueprint and home offsets for each tile.
- *
- * Uses isotropic spacing conversion to ensure uniform pixel spacing across both axes.
  *
  * @param tileResults - Map of tile key to calibration result
  * @param config - Summary configuration
@@ -350,26 +398,20 @@ export function computeCalibrationSummary(
         config,
     );
 
-    // Get camera dimensions for isotropic conversion (must match computeGridBlueprint)
     const firstMeasurement = measuredTiles[0]?.homeMeasurement;
     const sourceWidth = firstMeasurement?.sourceWidth ?? 1920;
     const sourceHeight = firstMeasurement?.sourceHeight ?? 1080;
-    const avgDim = (sourceWidth + sourceHeight) / 2;
 
-    // Isotropic conversion factors
-    const isoFactorX = avgDim / sourceWidth;
-    const isoFactorY = avgDim / sourceHeight;
-
-    // Calculate isotropic spacing for offset computation
-    const baseSpacing = gridBlueprint
+    // Spacing for offset computation (Centered Coords)
+    const baseSpacingX = gridBlueprint
         ? gridBlueprint.adjustedTileFootprint.width + gridBlueprint.tileGap.x
         : 0;
-    const spacingXCentered = baseSpacing * isoFactorX;
-    const spacingYCentered = baseSpacing * isoFactorY;
+    const baseSpacingY = gridBlueprint
+        ? gridBlueprint.adjustedTileFootprint.height + gridBlueprint.tileGap.y
+        : 0;
 
-    const halfTile = gridBlueprint ? gridBlueprint.adjustedTileFootprint.width / 2 : 0;
-    const halfTileXCentered = halfTile * isoFactorX;
-    const halfTileYCentered = halfTile * isoFactorY;
+    const halfTileX = gridBlueprint ? gridBlueprint.adjustedTileFootprint.width / 2 : 0;
+    const halfTileY = gridBlueprint ? gridBlueprint.adjustedTileFootprint.height / 2 : 0;
 
     // Process each tile result
     const summaryTiles: CalibrationSnapshot['tiles'] = {};
@@ -402,19 +444,17 @@ export function computeCalibrationSummary(
 
         const stepScale = result.stepScale ?? buildStepScale(result.stepToDisplacement);
 
-        // Compute footprint bounds centered on ORIGINAL home measurement (not recentered).
-        // This ensures the teal footprint square aligns with the yellow home dot in the overlay,
-        // since both use the original (non-recentered) coordinate space for rendering.
+        // Compute footprint using ORIGINAL home measurement coords (not recentered)
         const footprintBounds =
             result.homeMeasurement && gridBlueprint
                 ? {
                       x: {
-                          min: result.homeMeasurement.x - halfTileXCentered,
-                          max: result.homeMeasurement.x + halfTileXCentered,
+                          min: result.homeMeasurement.x - halfTileX,
+                          max: result.homeMeasurement.x + halfTileX,
                       },
                       y: {
-                          min: result.homeMeasurement.y - halfTileYCentered,
-                          max: result.homeMeasurement.y + halfTileYCentered,
+                          min: result.homeMeasurement.y - halfTileY,
+                          max: result.homeMeasurement.y + halfTileY,
                       },
                   }
                 : (result.footprintBounds ?? null);
@@ -427,18 +467,15 @@ export function computeCalibrationSummary(
             stepScale: stepScale ?? undefined,
         };
 
-        // Calculate offset from ideal grid position (homeOffset/adjustedHome for profile storage)
-        // Only computed and stored for completed tiles.
+        // Calculate offset from ideal grid position
         if (result.status !== 'completed' || !normalizedMeasurement || !gridBlueprint) {
             summaryTiles[key] = tileSummary;
             continue;
         }
 
         const tile = result.tile;
-        const adjustedCenterX =
-            gridBlueprint.gridOrigin.x + tile.col * spacingXCentered + halfTileXCentered;
-        const adjustedCenterY =
-            gridBlueprint.gridOrigin.y + tile.row * spacingYCentered + halfTileYCentered;
+        const adjustedCenterX = gridBlueprint.gridOrigin.x + tile.col * baseSpacingX + halfTileX;
+        const adjustedCenterY = gridBlueprint.gridOrigin.y + tile.row * baseSpacingY + halfTileY;
 
         const dx = normalizedMeasurement.x - adjustedCenterX;
         const dy = normalizedMeasurement.y - adjustedCenterY;
