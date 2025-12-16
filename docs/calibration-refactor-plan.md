@@ -31,6 +31,8 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 
 - [x] **Consolidated duplicate code**: `computeMedian` implementations unified in `robustStatistics.ts`
 
+- [x] **Canonical calibration snapshot**: `CalibrationSnapshot` type defined, `summaryComputation` returns it, golden fixture and round-trip tests in place. Bug fixes: pitch uses axis-specific deltas, origin uses separate halfTileX/halfTileY.
+
 ### In Progress
 
 - [ ] No active work; next item will move here when pulled from roadmap.
@@ -57,22 +59,20 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
        - **Delta averaging heuristic**: Accept the current average-based `viewportDeltaToIsotropic`/`isotropicDeltaToViewport` for square-ish deltas; plan to add axis-specific variants to avoid ambiguity and document the trade-off.
        - **Clamping semantics**: Only viewport→isotropic conversion clamps to [0,1]; document this behaviour in the kernel comments to make the intent explicit.
 
-2. [ ] **Canonical calibration snapshot** (medium effort, high gain)
+2. [x] **Canonical calibration snapshot** (medium effort, high gain)
    - Define `CalibrationSnapshot` type (per-tile: adjustedHome, perStep, motorReachBounds, footprintBounds, camera meta, blueprint).
    - Make `summaryComputation` return exactly this; `calibrationProfileStorage` becomes serialize/deserialize only.
    - Tests: snapshot golden fixtures; storage round-trip.
    - Starting point: [`../src/services/calibration/summaryComputation.ts`](../src/services/calibration/summaryComputation.ts)
-   - Progress: Snapshot type added to `types.ts`, summary now returns it (camera meta + motorReachBounds + footprintBounds + step scales), runner aligned to snapshot shape, profile->summary conversion carries camera resolution; footprint bounds now come from blueprint, motor reach bounds derive from step tests, and step scales are computed from per-step displacement. Added coverage: summary test asserts motorReach/footprint/stepScale wiring; storage test round-trips `profile → summary` preserving bounds and camera metadata. Normalization helpers now delegate to the coord kernel so overlays share the same math. Golden fixtures still a nice-to-have once we freeze a reference run.
-   - **Review (post-implementation)**:
-     - `CalibrationSnapshot` type in `types.ts` is well-structured: includes `CalibrationSnapshotCameraMeta`, `CalibrationSnapshotTile`, grid blueprint, step settings, and outlier analysis.
-     - `CalibrationRunSummary` is now a type alias to `CalibrationSnapshot`—single source of truth achieved.
-     - `summaryComputation.ts` returns the snapshot shape directly with `camera` meta populated from first measurement.
-     - `calibrationProfileStorage.ts` `profileToRunSummary` correctly maps stored profile to snapshot, including camera resolution.
-     - `calibrationRunner.ts` aligned to use the snapshot type alias.
-     - `normalization.ts` now delegates to coords kernel—overlays share the same math.
-     - Golden fixture test added (`snapshotGolden.test.ts`); storage round-trip test added.
-     - All 397 tests pass.
-     - ~~**Regression: `footprintBounds` not centered on physical home**~~: Fixed—`summaryComputation.ts` now shifts `footprintBounds` by `homeOffset (dx, dy)` after computing it, so the teal blueprint square centers on the actual home position.
+   - **Status: Complete.**
+     - `CalibrationSnapshot` type in `types.ts` with `CalibrationSnapshotCameraMeta`, `CalibrationSnapshotTile`, grid blueprint, step settings, outlier analysis.
+     - `CalibrationRunSummary` is a type alias to `CalibrationSnapshot`—single source of truth.
+     - `summaryComputation.ts` returns snapshot shape; `profileToRunSummary` maps stored profile to snapshot.
+     - Golden fixture test (`snapshotGolden.test.ts`) and storage round-trip tests in place.
+     - `normalization.ts` delegates to coords kernel so overlays share math.
+   - **Bug fixes applied:**
+     - Pitch calculation now uses axis-specific deltas (`Math.abs(dx)` / `Math.abs(dy)`) instead of Euclidean distance—prevents ~10-15% inflation when tiles are slightly misaligned.
+     - Origin computation uses separate `halfTileX` / `halfTileY` values instead of single `halfTile = tileWidth/2` for both axes—fixes systematic Y-axis offset when width ≠ height.
 
 3. [ ] **Pure math isolation (remaining)** (medium effort, medium gain)
    - Move expected position, step tests, bounds math into `/calibration/math/*` with no IO.
