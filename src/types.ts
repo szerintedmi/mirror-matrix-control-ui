@@ -262,6 +262,48 @@ export interface CalibrationGridBlueprint {
     sourceHeight?: number;
 }
 
+export interface CalibrationSnapshotCameraMeta {
+    sourceWidth: number;
+    sourceHeight: number;
+}
+
+export interface CalibrationSnapshotTile {
+    tile: { row: number; col: number; key: string };
+    status: 'measuring' | 'completed' | 'failed' | 'skipped';
+    error?: string;
+    warnings?: string[];
+    homeMeasurement?: BlobMeasurement;
+    homeOffset?: { dx: number; dy: number };
+    adjustedHome?: { x: number; y: number };
+    stepToDisplacement?: { x: number | null; y: number | null };
+    sizeDeltaAtStepTest?: number | null;
+    motorReachBounds?: CalibrationProfileBounds | null;
+    /**
+     * Legacy alias kept for compatibility while migrating to explicit motorReachBounds.
+     * Prefer reading motorReachBounds going forward.
+     */
+    inferredBounds?: CalibrationProfileBounds | null;
+    footprintBounds?: CalibrationProfileBounds | null;
+    stepScale?: { x: number | null; y: number | null };
+}
+
+export interface CalibrationSnapshot {
+    gridBlueprint: CalibrationGridBlueprint | null;
+    camera?: CalibrationSnapshotCameraMeta | null;
+    stepTestSettings: { deltaSteps: number };
+    tiles: Record<string, CalibrationSnapshotTile>;
+    outlierAnalysis?: {
+        enabled: boolean;
+        outlierTileKeys: string[];
+        outlierCount: number;
+        median: number;
+        mad: number;
+        nMad: number;
+        upperThreshold: number;
+        computedTileSize: number;
+    };
+}
+
 export interface BlobMeasurementStats {
     sampleCount: number;
     thresholds: {
@@ -356,6 +398,9 @@ export interface TileCalibrationResults {
         y: number | null;
     };
     sizeDeltaAtStepTest: number | null;
+    motorReachBounds?: CalibrationProfileBounds | null;
+    footprintBounds?: CalibrationProfileBounds | null;
+    stepScale?: { x: number | null; y: number | null };
     axes: {
         x: TileAxisCalibration;
         y: TileAxisCalibration;

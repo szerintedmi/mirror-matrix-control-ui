@@ -9,6 +9,7 @@ export {
     computeAxisBounds,
     computeTileBounds,
     computeLiveTileBounds,
+    computeBlueprintFootprintBounds,
 } from './boundsComputation';
 
 export {
@@ -43,6 +44,7 @@ export {
     type TileCalibrationResult,
     type SummaryConfig,
     type CalibrationRunSummary,
+    type OutlierAnalysis,
     // Functions
     computeGridBlueprint,
     computeCalibrationSummary,

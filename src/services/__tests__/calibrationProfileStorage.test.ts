@@ -12,6 +12,7 @@ import {
     loadCalibrationProfiles,
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
+    profileToRunSummary,
     saveCalibrationProfile,
 } from '../calibrationProfileStorage';
 
@@ -475,6 +476,25 @@ describe('calibrationProfileStorage', () => {
             );
             expect(invalidResult.profile).toBeNull();
             expect(invalidResult.error).toContain('schema version');
+        });
+
+        it('round-trips profile to summary and preserves bounds + camera meta', () => {
+            const saved = saveCalibrationProfile(storage, {
+                name: 'Round trip',
+                runnerState,
+                gridSnapshot: snapshot,
+            });
+            expect(saved).not.toBeNull();
+
+            const summary = profileToRunSummary(saved!);
+            expect(summary.camera).toEqual({ sourceWidth: 1920, sourceHeight: 1080 });
+            expect(summary.stepTestSettings.deltaSteps).toBe(saved!.stepTestSettings.deltaSteps);
+
+            const tile = summary.tiles['0-0'];
+            expect(tile.motorReachBounds).not.toBeNull();
+            expect(tile.footprintBounds).not.toBeNull();
+            expect(tile.stepScale?.x).toBeCloseTo(saved!.tiles['0-0'].axes.x.stepScale ?? 0, 8);
+            expect(tile.stepScale?.y).toBeCloseTo(saved!.tiles['0-0'].axes.y.stepScale ?? 0, 8);
         });
     });
 });

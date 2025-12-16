@@ -37,7 +37,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 
 ## Priority roadmap
 
-1. [X] **Coordinate kernel** (low-medium effort, high gain)
+1. [x] **Coordinate kernel** (low-medium effort, high gain)
    - Create `coords/` module with branded types for `cameraPx`, `viewport`, `isotropic`, `centered`, `pattern`.
    - Single convert(from, to, aspect, resolution) API plus delta helpers.
    - Add a lightweight `Transformer` object that captures camera context (aspect, resolution, ROI) so call sites stay terse (`t.toViewport(pt)`).
@@ -50,18 +50,29 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
      - `centeredCoordinates.ts` deleted; all legacy scalar helpers (`viewToCentered`, `centeredToView`, etc.) moved into `coordinates.ts` wrapper.
      - `useStableBlobMeasurement` now uses `createTransformer` and `convert`/`convertDelta` directly—good adoption of new API.
      - Component and page imports updated to use `@/utils/coordinates` (no more `centeredCoordinates`).
-      - Remaining items and decisions:
-        - **`roi` unused**: Keeping the field and `Transformer.withRoi()` for now but will *remove* if we don’t wire ROI math in the next checkpoint to avoid dead code (prefer explicit reintroduction when ROI support is scoped).
-        - **`normalization.ts` overlap**: Action item to migrate or wrap `normalizeIsotropic`/`viewportToIsotropic`/`viewportToPixels` through the kernel so `useCameraPipeline` and overlays share the same math.
-        - **Legacy scalar helpers**: Intend to mark `viewToCentered`, `centeredToView`, etc. as `@deprecated` after the remaining call sites move to branded coords/`Transformer`; they stay temporarily for ease of incremental migration.
-        - **Delta averaging heuristic**: Accept the current average-based `viewportDeltaToIsotropic`/`isotropicDeltaToViewport` for square-ish deltas; plan to add axis-specific variants to avoid ambiguity and document the trade-off.
-        - **Clamping semantics**: Only viewport→isotropic conversion clamps to [0,1]; document this behaviour in the kernel comments to make the intent explicit.
+     - Remaining items and decisions:
+       - **`roi` field removed**: Dropped unused ROI plumbing; reintroduce explicitly if/when scoped.
+       - **`normalization.ts` overlap**: Action item to migrate or wrap `normalizeIsotropic`/`viewportToIsotropic`/`viewportToPixels` through the kernel so `useCameraPipeline` and overlays share the same math.
+       - **Legacy scalar helpers**: Intend to mark `viewToCentered`, `centeredToView`, etc. as `@deprecated` after the remaining call sites move to branded coords/`Transformer`; they stay temporarily for ease of incremental migration.
+       - **Delta averaging heuristic**: Accept the current average-based `viewportDeltaToIsotropic`/`isotropicDeltaToViewport` for square-ish deltas; plan to add axis-specific variants to avoid ambiguity and document the trade-off.
+       - **Clamping semantics**: Only viewport→isotropic conversion clamps to [0,1]; document this behaviour in the kernel comments to make the intent explicit.
 
 2. [ ] **Canonical calibration snapshot** (medium effort, high gain)
    - Define `CalibrationSnapshot` type (per-tile: adjustedHome, perStep, motorReachBounds, footprintBounds, camera meta, blueprint).
    - Make `summaryComputation` return exactly this; `calibrationProfileStorage` becomes serialize/deserialize only.
    - Tests: snapshot golden fixtures; storage round-trip.
    - Starting point: [`../src/services/calibration/summaryComputation.ts`](../src/services/calibration/summaryComputation.ts)
+   - Progress: Snapshot type added to `types.ts`, summary now returns it (camera meta + motorReachBounds + footprintBounds + step scales), runner aligned to snapshot shape, profile->summary conversion carries camera resolution; footprint bounds now come from blueprint, motor reach bounds derive from step tests, and step scales are computed from per-step displacement. Added coverage: summary test asserts motorReach/footprint/stepScale wiring; storage test round-trips `profile → summary` preserving bounds and camera metadata. Normalization helpers now delegate to the coord kernel so overlays share the same math. Golden fixtures still a nice-to-have once we freeze a reference run.
+   - **Review (post-implementation)**:
+     - `CalibrationSnapshot` type in `types.ts` is well-structured: includes `CalibrationSnapshotCameraMeta`, `CalibrationSnapshotTile`, grid blueprint, step settings, and outlier analysis.
+     - `CalibrationRunSummary` is now a type alias to `CalibrationSnapshot`—single source of truth achieved.
+     - `summaryComputation.ts` returns the snapshot shape directly with `camera` meta populated from first measurement.
+     - `calibrationProfileStorage.ts` `profileToRunSummary` correctly maps stored profile to snapshot, including camera resolution.
+     - `calibrationRunner.ts` aligned to use the snapshot type alias.
+     - `normalization.ts` now delegates to coords kernel—overlays share the same math.
+     - Golden fixture test added (`snapshotGolden.test.ts`); storage round-trip test added.
+     - All 397 tests pass.
+     - ~~**Regression: `footprintBounds` not centered on physical home**~~: Fixed—`summaryComputation.ts` now shifts `footprintBounds` by `homeOffset (dx, dy)` after computing it, so the teal blueprint square centers on the actual home position.
 
 3. [ ] **Pure math isolation (remaining)** (medium effort, medium gain)
    - Move expected position, step tests, bounds math into `/calibration/math/*` with no IO.

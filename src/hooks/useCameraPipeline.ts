@@ -841,8 +841,10 @@ export const useCameraPipeline = ({
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                     return;
                 }
-                const pxLeft = convertCoordToPixelsX(bounds.x.min + cameraOriginOffset.x);
-                const pxTop = convertCoordToPixelsY(bounds.y.min + cameraOriginOffset.y);
+                const { x: pxLeft, y: pxTop } = convertPointToPixels(
+                    bounds.x.min + cameraOriginOffset.x,
+                    bounds.y.min + cameraOriginOffset.y,
+                );
                 const pxWidth = convertDeltaToPixelsX(normalizedWidth);
                 const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
@@ -863,24 +865,19 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
-            // Convert centered coordinates [-1,1] to pixel coordinates
-            // Grid blueprint uses centered coordinate system (grid center at origin)
-            const convertCoordToPixelsX = (value: number): number => {
-                const viewport = centeredToView(value); // [-1,1] -> [0,1]
-                return viewportToPixels(viewport, 0, captureWidth, captureHeight).x;
+            // Convert centered coordinates [-1,1] to pixel coordinates (camera space)
+            // Centered coords map directly to the full frame; letterbox handled by projectCameraValue.
+            const convertPointToPixels = (cx: number, cy: number) => {
+                const vx = centeredToView(cx); // [-1,1] -> [0,1]
+                const vy = centeredToView(cy);
+                return viewportToPixels(vx, vy, captureWidth, captureHeight);
             };
-            const convertCoordToPixelsY = (value: number): number => {
-                const viewport = centeredToView(value); // [-1,1] -> [0,1]
-                return viewportToPixels(0, viewport, captureWidth, captureHeight).y;
-            };
-            // Size/delta conversion: input is in centered system (range 2), convert to pixels
-            // Centered coords are anisotropic (relative to image dimensions), so we must scale X and Y differently
-            const convertDeltaToPixelsX = (delta: number): number => {
-                return centeredDeltaToView(delta) * captureWidth;
-            };
-            const convertDeltaToPixelsY = (delta: number): number => {
-                return centeredDeltaToView(delta) * captureHeight;
-            };
+
+            // Size/delta conversion: centered range (2) -> pixels per axis
+            const convertDeltaToPixelsX = (delta: number): number =>
+                centeredDeltaToView(delta) * captureWidth;
+            const convertDeltaToPixelsY = (delta: number): number =>
+                centeredDeltaToView(delta) * captureHeight;
 
             const drawTileBoundsCanvas = () => {
                 const payload = tileBoundsOverlayRef.current;
@@ -896,8 +893,9 @@ export const useCameraPipeline = ({
                     if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                         return;
                     }
-                    const pxLeft = convertCoordToPixelsX(entry.bounds.x.min + cameraOriginOffset.x);
-                    const pxTop = convertCoordToPixelsY(entry.bounds.y.min + cameraOriginOffset.y);
+                    const minX = entry.bounds.x.min + cameraOriginOffset.x;
+                    const minY = entry.bounds.y.min + cameraOriginOffset.y;
+                    const { x: pxLeft, y: pxTop } = convertPointToPixels(minX, minY);
                     const pxWidth = convertDeltaToPixelsX(normalizedWidth);
                     const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');
@@ -952,19 +950,21 @@ export const useCameraPipeline = ({
                     return;
                 }
 
-                // Compute isotropic sizes in pixels for uniform grid display
-                const avgDim = (captureWidth + captureHeight) / 2;
+                // Compute isotropic pixel sizes for grid display (keep tiles square)
+                const maxDim = Math.max(captureWidth, captureHeight);
                 const tileWidthCentered = blueprint.adjustedTileFootprint.width;
-                const tileSizePixels = centeredDeltaToView(tileWidthCentered) * avgDim;
-                const gapPixels = centeredDeltaToView(blueprint.tileGap?.x ?? 0) * avgDim;
+                const tileSizePixels = centeredDeltaToView(tileWidthCentered) * maxDim;
+                const gapPixels = centeredDeltaToView(blueprint.tileGap?.x ?? 0) * maxDim;
                 const spacingPixels = tileSizePixels + gapPixels;
 
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
 
                 // Origin in pixels - no adjustment needed since blueprint uses isotropic spacing
-                const originXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
-                const originYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
+                const { x: originXPixels, y: originYPixels } = convertPointToPixels(
+                    blueprint.gridOrigin.x + offsetX,
+                    blueprint.gridOrigin.y + offsetY,
+                );
 
                 ctx.save();
                 ctx.lineWidth = 2;
@@ -972,18 +972,20 @@ export const useCameraPipeline = ({
                 const alignmentFillColor = formatAlignmentRgba(0.15);
                 const alignmentLabelColor = formatAlignmentRgba(0.95);
                 tileEntries.forEach((entry) => {
-                    // Compute tile center using isotropic pixel spacing
+                    // Compute tile center using isotropic spacing
                     const tileCenterXPixels =
                         originXPixels + entry.tile.col * spacingPixels + tileSizePixels / 2;
                     const tileCenterYPixels =
                         originYPixels + entry.tile.row * spacingPixels + tileSizePixels / 2;
 
-                    const pxLeft = tileCenterXPixels - tileSizePixels / 2;
-                    const pxTop = tileCenterYPixels - tileSizePixels / 2;
+                    const pxWidth = tileSizePixels;
+                    const pxHeight = tileSizePixels;
+                    const pxLeft = tileCenterXPixels - pxWidth / 2;
+                    const pxTop = tileCenterYPixels - pxHeight / 2;
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    // Use isotropic projection to maintain square aspect ratio on canvas
-                    const rectSize = projectCameraDeltaIsotropic(tileSizePixels);
+                    // Project isotropically to keep squares square on canvas
+                    const rectSize = projectCameraDeltaIsotropic(pxWidth);
                     const rectWidth = rectSize;
                     const rectHeight = rectSize;
                     if (localLeft == null || localTop == null) {
@@ -1021,11 +1023,11 @@ export const useCameraPipeline = ({
                         : undefined;
                     if (measurement) {
                         const measurementX = projectCameraValue(
-                            convertCoordToPixelsX(measurement.x),
+                            convertPointToPixels(measurement.x, measurement.y).x,
                             'x',
                         );
                         const measurementY = projectCameraValue(
-                            convertCoordToPixelsY(measurement.y),
+                            convertPointToPixels(measurement.x, measurement.y).y,
                             'y',
                         );
                         if (measurementX == null || measurementY == null) {
@@ -1123,19 +1125,25 @@ export const useCameraPipeline = ({
                     return;
                 }
 
-                // Compute isotropic sizes in pixels for uniform grid display
-                const avgDim = (captureWidth + captureHeight) / 2;
+                // Compute per-axis pixel sizes (matches camera projection and blob rendering)
                 const tileWidthCentered = blueprint.adjustedTileFootprint.width;
-                const tileSizePixels = centeredDeltaToView(tileWidthCentered) * avgDim;
-                const gapPixels = centeredDeltaToView(blueprint.tileGap?.x ?? 0) * avgDim;
-                const spacingPixels = tileSizePixels + gapPixels;
+                const tileSizePixelsX = centeredDeltaToView(tileWidthCentered) * captureWidth;
+                const tileSizePixelsY = centeredDeltaToView(tileWidthCentered) * captureHeight;
+                const gapPixelsX = centeredDeltaToView(blueprint.tileGap?.x ?? 0) * captureWidth;
+                const gapPixelsY =
+                    centeredDeltaToView(blueprint.tileGap?.y ?? blueprint.tileGap?.x ?? 0) *
+                    captureHeight;
+                const spacingPixelsX = tileSizePixelsX + gapPixelsX;
+                const spacingPixelsY = tileSizePixelsY + gapPixelsY;
 
                 const offsetX = blueprint.cameraOriginOffset.x;
                 const offsetY = blueprint.cameraOriginOffset.y;
 
-                // Origin in pixels - no adjustment needed since blueprint uses isotropic spacing
-                const originXPixels = convertCoordToPixelsX(blueprint.gridOrigin.x + offsetX);
-                const originYPixels = convertCoordToPixelsY(blueprint.gridOrigin.y + offsetY);
+                // Origin in pixels
+                const { x: originXPixels, y: originYPixels } = convertPointToPixels(
+                    blueprint.gridOrigin.x + offsetX,
+                    blueprint.gridOrigin.y + offsetY,
+                );
 
                 const squareColor = new runtime.Scalar(
                     ALIGNMENT_TEAL.b,
@@ -1151,20 +1159,21 @@ export const useCameraPipeline = ({
                 );
                 const measurementColor = new runtime.Scalar(255, 255, 0, 255);
                 tileEntries.forEach((entry) => {
-                    // Compute tile center using isotropic pixel spacing
+                    // Compute tile center using per-axis spacing
                     const tileCenterXPixels =
-                        originXPixels + entry.tile.col * spacingPixels + tileSizePixels / 2;
+                        originXPixels + entry.tile.col * spacingPixelsX + tileSizePixelsX / 2;
                     const tileCenterYPixels =
-                        originYPixels + entry.tile.row * spacingPixels + tileSizePixels / 2;
+                        originYPixels + entry.tile.row * spacingPixelsY + tileSizePixelsY / 2;
 
-                    const pxLeft = tileCenterXPixels - tileSizePixels / 2;
-                    const pxTop = tileCenterYPixels - tileSizePixels / 2;
+                    const pxWidth = tileSizePixelsX;
+                    const pxHeight = tileSizePixelsY;
+                    const pxLeft = tileCenterXPixels - pxWidth / 2;
+                    const pxTop = tileCenterYPixels - pxHeight / 2;
                     const localLeft = projectCameraValue(pxLeft, 'x');
                     const localTop = projectCameraValue(pxTop, 'y');
-                    // Use isotropic projection to maintain square aspect ratio on canvas
-                    const rectSize = projectCameraDeltaIsotropic(tileSizePixels);
-                    const rectWidth = rectSize;
-                    const rectHeight = rectSize;
+                    // Project per-axis to respect letterbox
+                    const rectWidth = projectCameraDelta(pxWidth, 'x');
+                    const rectHeight = projectCameraDelta(pxHeight, 'y');
                     if (localLeft == null || localTop == null) {
                         return;
                     }
@@ -1214,11 +1223,11 @@ export const useCameraPipeline = ({
                         : undefined;
                     if (measurement) {
                         const measurementX = projectCameraValue(
-                            convertCoordToPixelsX(measurement.x),
+                            convertPointToPixels(measurement.x, measurement.y).x,
                             'x',
                         );
                         const measurementY = projectCameraValue(
-                            convertCoordToPixelsY(measurement.y),
+                            convertPointToPixels(measurement.x, measurement.y).y,
                             'y',
                         );
                         if (measurementX == null || measurementY == null) {
@@ -1261,8 +1270,10 @@ export const useCameraPipeline = ({
                 if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                     return;
                 }
-                const pxLeft = convertCoordToPixelsX(bounds.x.min + cameraOriginOffset.x);
-                const pxTop = convertCoordToPixelsY(bounds.y.min + cameraOriginOffset.y);
+                const { x: pxLeft, y: pxTop } = convertPointToPixels(
+                    bounds.x.min + cameraOriginOffset.x,
+                    bounds.y.min + cameraOriginOffset.y,
+                );
                 const pxWidth = convertDeltaToPixelsX(normalizedWidth);
                 const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                 const localLeft = projectCameraValue(pxLeft, 'x');
@@ -1296,8 +1307,9 @@ export const useCameraPipeline = ({
                     if (normalizedWidth <= 0 || normalizedHeight <= 0) {
                         return;
                     }
-                    const pxLeft = convertCoordToPixelsX(entry.bounds.x.min + cameraOriginOffset.x);
-                    const pxTop = convertCoordToPixelsY(entry.bounds.y.min + cameraOriginOffset.y);
+                    const minX = entry.bounds.x.min + cameraOriginOffset.x;
+                    const minY = entry.bounds.y.min + cameraOriginOffset.y;
+                    const { x: pxLeft, y: pxTop } = convertPointToPixels(minX, minY);
                     const pxWidth = convertDeltaToPixelsX(normalizedWidth);
                     const pxHeight = convertDeltaToPixelsY(normalizedHeight);
                     const localLeft = projectCameraValue(pxLeft, 'x');

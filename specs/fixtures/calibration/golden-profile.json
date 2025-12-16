@@ -1,0 +1,527 @@
+{
+    "type": "mirror.calibration.profile",
+    "version": 1,
+    "profile": {
+        "id": "2634b6b9-d513-4faa-a973-cd14bd370c85",
+        "schemaVersion": 3,
+        "name": "4x4 spotlight",
+        "createdAt": "2025-12-05T23:29:59.129Z",
+        "updatedAt": "2025-12-05T23:29:59.129Z",
+        "arrayRotation": 0,
+        "gridSize": {
+            "rows": 2,
+            "cols": 2
+        },
+        "gridBlueprint": {
+            "adjustedTileFootprint": {
+                "width": 0.11542705297470093,
+                "height": 0.11542705297470093
+            },
+            "tileGap": {
+                "x": 0,
+                "y": 0
+            },
+            "gridOrigin": {
+                "x": -0.0901773851364851,
+                "y": -0.1603153513537513
+            },
+            "cameraOriginOffset": {
+                "x": -0.047778777219355084,
+                "y": 0.1444440560208427
+            },
+            "sourceWidth": 1280,
+            "sourceHeight": 720
+        },
+        "stepTestSettings": {
+            "deltaSteps": 1200
+        },
+        "gridStateFingerprint": {
+            "hash": "fnv1a-747457cf",
+            "snapshot": {
+                "version": 1,
+                "gridSize": {
+                    "rows": 2,
+                    "cols": 2
+                },
+                "assignments": {
+                    "0-0": {
+                        "x": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 5
+                        },
+                        "y": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 4
+                        }
+                    },
+                    "0-1": {
+                        "x": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 7
+                        },
+                        "y": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 6
+                        }
+                    },
+                    "1-0": {
+                        "x": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 1
+                        },
+                        "y": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 0
+                        }
+                    },
+                    "1-1": {
+                        "x": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 3
+                        },
+                        "y": {
+                            "nodeMac": "6cc8405dd17c",
+                            "motorIndex": 2
+                        }
+                    }
+                }
+            }
+        },
+        "calibrationCameraAspect": 1.7777777777777777,
+        "calibrationCameraResolution": {
+            "width": 1280,
+            "height": 720
+        },
+        "calibrationSpace": {
+            "blobStats": {
+                "minDiameter": 0.10149985551834106,
+                "maxDiameter": 0.11542705297470093,
+                "medianDiameter": 0.10469961166381836,
+                "nMad": 0.0036063645923137683,
+                "sampleCount": 4
+            },
+            "globalBounds": {
+                "x": {
+                    "min": -0.25477401819080125,
+                    "max": 0.35049803648143996
+                },
+                "y": {
+                    "min": -0.6257584396335814,
+                    "max": 0.6207662016153337
+                }
+            }
+        },
+        "tiles": {
+            "0-0": {
+                "key": "0-0",
+                "row": 0,
+                "col": 0,
+                "status": "completed",
+                "error": null,
+                "adjustedHome": {
+                    "x": -0.04508869256824255,
+                    "y": -0.08015767567687565,
+                    "stepsX": 0,
+                    "stepsY": 0
+                },
+                "homeOffset": {
+                    "dx": 0,
+                    "dy": 0,
+                    "stepsX": 0,
+                    "stepsY": 0
+                },
+                "homeMeasurement": {
+                    "x": -0.04508869256824255,
+                    "y": -0.08015767567687565,
+                    "size": 0.10303444862365722,
+                    "response": 0,
+                    "capturedAt": 3740805.100000143,
+                    "sourceWidth": 1280,
+                    "sourceHeight": 720,
+                    "stats": {
+                        "sampleCount": 5,
+                        "thresholds": {
+                            "minSamples": 5,
+                            "maxMedianDeviationPt": 0.01
+                        },
+                        "median": {
+                            "x": -0.04508869256824255,
+                            "y": -0.08015767567687565,
+                            "size": 0.10303444862365722
+                        },
+                        "nMad": {
+                            "x": 0.00005542556762705188,
+                            "y": 0.00023640701293957015,
+                            "size": 0.0003581276392936789
+                        },
+                        "passed": true
+                    }
+                },
+                "stepToDisplacement": {
+                    "x": -0.0003296556075414021,
+                    "y": -0.000584103231076841
+                },
+                "sizeDeltaAtStepTest": -0.0013208031654357924,
+                "motorReachBounds": {
+                    "x": {
+                        "min": -0.44067542161792506,
+                        "max": 0.35049803648143996
+                    },
+                    "y": {
+                        "min": -0.7810815529690849,
+                        "max": 0.6207662016153337
+                    }
+                },
+                "footprintBounds": {
+                    "x": {
+                        "min": -0.0901773851364851,
+                        "max": 0
+                    },
+                    "y": {
+                        "min": -0.1603153513537513,
+                        "max": 0
+                    }
+                },
+                "stepScale": {
+                    "x": -3033.46879932691,
+                    "y": -1712.0261398938335
+                },
+                "axes": {
+                    "x": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -3033.46879932691
+                    },
+                    "y": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -1712.0261398938335
+                    }
+                },
+                "inferredBounds": {
+                    "x": {
+                        "min": -0.44067542161792506,
+                        "max": 0.35049803648143996
+                    },
+                    "y": {
+                        "min": -0.7810815529690849,
+                        "max": 0.6207662016153337
+                    }
+                }
+            },
+            "0-1": {
+                "key": "0-1",
+                "row": 0,
+                "col": 1,
+                "status": "completed",
+                "error": null,
+                "adjustedHome": {
+                    "x": 0.04508869256824255,
+                    "y": -0.08015767567687565,
+                    "stepsX": 230.04608538525912,
+                    "stepsY": 55.07831608429177
+                },
+                "homeOffset": {
+                    "dx": 0.07473908253014094,
+                    "dy": 0.03245205349392366,
+                    "stepsX": -230.04608538525912,
+                    "stepsY": -55.07831608429177
+                },
+                "homeMeasurement": {
+                    "x": 0.1198277750983835,
+                    "y": -0.04770562218295199,
+                    "size": 0.10149985551834106,
+                    "response": 0,
+                    "capturedAt": 3746115.5,
+                    "sourceWidth": 1280,
+                    "sourceHeight": 720,
+                    "stats": {
+                        "sampleCount": 5,
+                        "thresholds": {
+                            "minSamples": 5,
+                            "maxMedianDeviationPt": 0.01
+                        },
+                        "median": {
+                            "x": 0.1198277750983835,
+                            "y": -0.04770562218295199,
+                            "size": 0.10149985551834106
+                        },
+                        "nMad": {
+                            "x": 0.000009402551651198498,
+                            "y": 0.00003820719401088486,
+                            "size": 0.000023258943557735142
+                        },
+                        "passed": true
+                    }
+                },
+                "stepToDisplacement": {
+                    "x": -0.0003248874346415202,
+                    "y": -0.00058919835973669
+                },
+                "sizeDeltaAtStepTest": 0.0040179252624511705,
+                "motorReachBounds": {
+                    "x": {
+                        "min": -0.2700371464714407,
+                        "max": 0.5096926966682077
+                    },
+                    "y": {
+                        "min": -0.7547436538669798,
+                        "max": 0.659332409501076
+                    }
+                },
+                "footprintBounds": {
+                    "x": {
+                        "min": 0,
+                        "max": 0.0901773851364851
+                    },
+                    "y": {
+                        "min": -0.1603153513537513,
+                        "max": 0
+                    }
+                },
+                "stepScale": {
+                    "x": -3077.989153699948,
+                    "y": -1697.2212896975739
+                },
+                "axes": {
+                    "x": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -3077.989153699948
+                    },
+                    "y": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -1697.2212896975739
+                    }
+                },
+                "inferredBounds": {
+                    "x": {
+                        "min": -0.2700371464714407,
+                        "max": 0.5096926966682077
+                    },
+                    "y": {
+                        "min": -0.7547436538669798,
+                        "max": 0.659332409501076
+                    }
+                }
+            },
+            "1-0": {
+                "key": "1-0",
+                "row": 1,
+                "col": 0,
+                "status": "completed",
+                "error": null,
+                "adjustedHome": {
+                    "x": -0.04508869256824255,
+                    "y": 0.08015767567687565,
+                    "stepsX": 188.03496704278268,
+                    "stepsY": 70.13941253309969
+                },
+                "homeOffset": {
+                    "dx": 0.06272985935211184,
+                    "dy": 0.04382181498739446,
+                    "stepsX": -188.03496704278268,
+                    "stepsY": -70.13941253309969
+                },
+                "homeMeasurement": {
+                    "x": 0.01764116678386929,
+                    "y": 0.12397949066427011,
+                    "size": 0.11542705297470093,
+                    "response": 0,
+                    "capturedAt": 3749745.600000143,
+                    "sourceWidth": 1280,
+                    "sourceHeight": 720,
+                    "stats": {
+                        "sampleCount": 5,
+                        "thresholds": {
+                            "minSamples": 5,
+                            "maxMedianDeviationPt": 0.01
+                        },
+                        "median": {
+                            "x": 0.01764116678386929,
+                            "y": 0.12397949066427011,
+                            "size": 0.11542705297470093
+                        },
+                        "nMad": {
+                            "x": 0.00003389867305768783,
+                            "y": 0.0005712226867675781,
+                            "size": 0.00021675355911253234
+                        },
+                        "passed": true
+                    }
+                },
+                "stepToDisplacement": {
+                    "x": -0.00033360741535822544,
+                    "y": -0.0006247816085815429
+                },
+                "sizeDeltaAtStepTest": 0.0006606161594390758,
+                "motorReachBounds": {
+                    "x": {
+                        "min": -0.38268773164600123,
+                        "max": 0.4179700652137398
+                    },
+                    "y": {
+                        "min": -0.6257584396335814,
+                        "max": 0.8737174209621217
+                    }
+                },
+                "footprintBounds": {
+                    "x": {
+                        "min": -0.0901773851364851,
+                        "max": 0
+                    },
+                    "y": {
+                        "min": 0,
+                        "max": 0.1603153513537513
+                    }
+                },
+                "stepScale": {
+                    "x": -2997.5352883754294,
+                    "y": -1600.5592774574857
+                },
+                "axes": {
+                    "x": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -2997.5352883754294
+                    },
+                    "y": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -1600.5592774574857
+                    }
+                },
+                "inferredBounds": {
+                    "x": {
+                        "min": -0.38268773164600123,
+                        "max": 0.4179700652137398
+                    },
+                    "y": {
+                        "min": -0.6257584396335814,
+                        "max": 0.8737174209621217
+                    }
+                }
+            },
+            "1-1": {
+                "key": "1-1",
+                "row": 1,
+                "col": 1,
+                "status": "completed",
+                "error": null,
+                "adjustedHome": {
+                    "x": 0.04508869256824255,
+                    "y": 0.08015767567687565,
+                    "stepsX": 253.3595274150061,
+                    "stepsY": 20.631008587541736
+                },
+                "homeOffset": {
+                    "dx": 0.0802554685622453,
+                    "dy": 0.01281180183092745,
+                    "stepsX": -253.3595274150061,
+                    "stepsY": -20.631008587541736
+                },
+                "homeMeasurement": {
+                    "x": 0.12534416113048785,
+                    "y": 0.0929694775078031,
+                    "size": 0.1063647747039795,
+                    "response": 0,
+                    "capturedAt": 3753732.2000000477,
+                    "sourceWidth": 1280,
+                    "sourceHeight": 720,
+                    "stats": {
+                        "sampleCount": 5,
+                        "thresholds": {
+                            "minSamples": 5,
+                            "maxMedianDeviationPt": 0.01
+                        },
+                        "median": {
+                            "x": 0.12534416113048785,
+                            "y": 0.0929694775078031,
+                            "size": 0.1063647747039795
+                        },
+                        "nMad": {
+                            "x": 0.000040968260765207365,
+                            "y": 0.00007867665608735663,
+                            "size": 0.00011597658634184967
+                        },
+                        "passed": true
+                    }
+                },
+                "stepToDisplacement": {
+                    "x": -0.0003167651494344076,
+                    "y": -0.000620997358251501
+                },
+                "sizeDeltaAtStepTest": -0.00012509226799011647,
+                "motorReachBounds": {
+                    "x": {
+                        "min": -0.25477401819080125,
+                        "max": 0.505462340451777
+                    },
+                    "y": {
+                        "min": -0.6522273523939981,
+                        "max": 0.8381663074096044
+                    }
+                },
+                "footprintBounds": {
+                    "x": {
+                        "min": 0,
+                        "max": 0.0901773851364851
+                    },
+                    "y": {
+                        "min": 0,
+                        "max": 0.1603153513537513
+                    }
+                },
+                "stepScale": {
+                    "x": -3156.9129425554734,
+                    "y": -1610.3128084403295
+                },
+                "axes": {
+                    "x": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -3156.9129425554734
+                    },
+                    "y": {
+                        "stepRange": {
+                            "minSteps": -1200,
+                            "maxSteps": 1200
+                        },
+                        "stepScale": -1610.3128084403295
+                    }
+                },
+                "inferredBounds": {
+                    "x": {
+                        "min": -0.25477401819080125,
+                        "max": 0.505462340451777
+                    },
+                    "y": {
+                        "min": -0.6522273523939981,
+                        "max": 0.8381663074096044
+                    }
+                }
+            }
+        },
+        "metrics": {
+            "totalTiles": 4,
+            "completedTiles": 4,
+            "failedTiles": 0,
+            "skippedTiles": 0
+        }
+    }
+}

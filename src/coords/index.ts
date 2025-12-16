@@ -1,5 +1,4 @@
 import { clamp01 } from '@/constants/calibration';
-import type { NormalizedRoi } from '@/types';
 
 // =============================================================================
 // TYPES
@@ -36,7 +35,6 @@ export type AnyCoord = CameraPixels | ViewportCoord | IsotropicCoord | CenteredC
 export interface ConvertContext {
     width: number;
     height: number;
-    roi?: NormalizedRoi | null;
 }
 
 // =============================================================================
@@ -77,7 +75,10 @@ const toViewport = (coord: AnyCoord, from: CoordSpace, ctx: ConvertContext): Vie
             const maxDim = Math.max(ctx.width, ctx.height);
             const offsetX = (maxDim - ctx.width) / 2;
             const offsetY = (maxDim - ctx.height) / 2;
-            return asViewport((c.x * maxDim - offsetX) / ctx.width, (c.y * maxDim - offsetY) / ctx.height);
+            return asViewport(
+                (c.x * maxDim - offsetX) / ctx.width,
+                (c.y * maxDim - offsetY) / ctx.height,
+            );
         }
         default:
             return coord as never;
@@ -185,10 +186,6 @@ export class Transformer {
 
     constructor(ctx: ConvertContext) {
         this.ctx = ctx;
-    }
-
-    withRoi(roi: NormalizedRoi | null): Transformer {
-        return new Transformer({ ...this.ctx, roi: roi ?? null });
     }
 
     toViewport(coord: AnyCoord, from: CoordSpace = 'camera'): ViewportCoord {

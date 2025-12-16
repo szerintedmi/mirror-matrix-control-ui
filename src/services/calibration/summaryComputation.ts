@@ -10,7 +10,13 @@ import {
     GRID_GAP_MAX_NORMALIZED,
     type RobustTileSizeConfig,
 } from '@/constants/calibration';
-import type { BlobMeasurement, CalibrationGridBlueprint, CalibrationProfileBounds } from '@/types';
+import type {
+    BlobMeasurement,
+    CalibrationGridBlueprint,
+    CalibrationProfileBounds,
+    CalibrationSnapshot,
+} from '@/types';
+import { STEP_EPSILON } from '@/utils/calibrationMath';
 
 import { computeLiveTileBounds } from './boundsComputation';
 import { RobustMaxSizingStrategy, type TileEntry } from './math/blueprintStrategies';
@@ -37,8 +43,13 @@ export interface TileCalibrationResult {
     adjustedHome?: { x: number; y: number };
     stepToDisplacement?: { x: number | null; y: number | null };
     sizeDeltaAtStepTest?: number | null;
+    stepScale?: { x: number | null; y: number | null };
     /** Motor-range bounds computed from step tests (for live display during calibration) */
     inferredBounds?: CalibrationProfileBounds | null;
+    /** Preferred explicit field for motor range; mirrors inferredBounds for now. */
+    motorReachBounds?: CalibrationProfileBounds | null;
+    /** Footprint bounds derived from blueprint (if available) */
+    footprintBounds?: CalibrationProfileBounds | null;
 }
 
 /** Configuration for summary computation */
@@ -73,15 +84,7 @@ export interface OutlierAnalysis {
 }
 
 /** Full calibration run summary */
-export interface CalibrationRunSummary {
-    gridBlueprint: CalibrationGridBlueprint | null;
-    stepTestSettings: {
-        deltaSteps: number;
-    };
-    tiles: Record<string, TileCalibrationResult>;
-    /** Outlier analysis results (present when robust tile sizing is enabled) */
-    outlierAnalysis?: OutlierAnalysis;
-}
+export type CalibrationRunSummary = CalibrationSnapshot;
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -111,6 +114,27 @@ function recenterMeasurement(
         stats: recenteredStats,
     };
 }
+
+const computeStepScaleFromDisplacement = (perStep: number | null | undefined): number | null => {
+    if (perStep == null || Math.abs(perStep) < STEP_EPSILON) {
+        return null;
+    }
+    return 1 / perStep;
+};
+
+const buildStepScale = (
+    stepToDisplacement: TileCalibrationResult['stepToDisplacement'] | undefined,
+): { x: number | null; y: number | null } | null => {
+    if (!stepToDisplacement) {
+        return null;
+    }
+    const x = computeStepScaleFromDisplacement(stepToDisplacement.x);
+    const y = computeStepScaleFromDisplacement(stepToDisplacement.y);
+    if (x === null && y === null) {
+        return null;
+    }
+    return { x, y };
+};
 
 // =============================================================================
 // GRID BLUEPRINT COMPUTATION
@@ -348,7 +372,14 @@ export function computeCalibrationSummary(
     const halfTileYCentered = halfTile * isoFactorY;
 
     // Process each tile result
-    const summaryTiles: Record<string, TileCalibrationResult> = {};
+    const summaryTiles: CalibrationSnapshot['tiles'] = {};
+
+    const cameraMeta: CalibrationSnapshot['camera'] = firstMeasurement
+        ? {
+              sourceWidth,
+              sourceHeight,
+          }
+        : null;
 
     for (const [key, result] of tileResults.entries()) {
         // Recenter measurement if we have a grid blueprint
@@ -361,14 +392,48 @@ export function computeCalibrationSummary(
             ? { ...result, homeMeasurement: normalizedMeasurement }
             : result;
 
-        // Skip offset calculation for incomplete tiles
+        const motorReachBounds =
+            normalizedMeasurement && result.stepToDisplacement
+                ? computeLiveTileBounds(
+                      { x: normalizedMeasurement.x, y: normalizedMeasurement.y },
+                      result.stepToDisplacement,
+                  )
+                : (result.motorReachBounds ?? result.inferredBounds ?? null);
+
+        const stepScale = result.stepScale ?? buildStepScale(result.stepToDisplacement);
+
+        // Compute footprint bounds centered on ORIGINAL home measurement (not recentered).
+        // This ensures the teal footprint square aligns with the yellow home dot in the overlay,
+        // since both use the original (non-recentered) coordinate space for rendering.
+        const footprintBounds =
+            result.homeMeasurement && gridBlueprint
+                ? {
+                      x: {
+                          min: result.homeMeasurement.x - halfTileXCentered,
+                          max: result.homeMeasurement.x + halfTileXCentered,
+                      },
+                      y: {
+                          min: result.homeMeasurement.y - halfTileYCentered,
+                          max: result.homeMeasurement.y + halfTileYCentered,
+                      },
+                  }
+                : (result.footprintBounds ?? null);
+
+        tileSummary = {
+            ...tileSummary,
+            motorReachBounds,
+            inferredBounds: motorReachBounds ?? undefined,
+            footprintBounds,
+            stepScale: stepScale ?? undefined,
+        };
+
+        // Calculate offset from ideal grid position (homeOffset/adjustedHome for profile storage)
+        // Only computed and stored for completed tiles.
         if (result.status !== 'completed' || !normalizedMeasurement || !gridBlueprint) {
             summaryTiles[key] = tileSummary;
             continue;
         }
 
-        // Calculate home offset (difference from ideal grid position)
-        // Uses isotropic spacing to ensure uniform pixel spacing
         const tile = result.tile;
         const adjustedCenterX =
             gridBlueprint.gridOrigin.x + tile.col * spacingXCentered + halfTileXCentered;
@@ -378,22 +443,10 @@ export function computeCalibrationSummary(
         const dx = normalizedMeasurement.x - adjustedCenterX;
         const dy = normalizedMeasurement.y - adjustedCenterY;
 
-        // Compute inferred bounds for live display during calibration
-        // Uses normalized home measurement (recentered) so bounds are relative to grid origin
-        // This matches how homeMeasurement is stored in the summary
-        const inferredBounds =
-            normalizedMeasurement && result.stepToDisplacement
-                ? computeLiveTileBounds(
-                      { x: normalizedMeasurement.x, y: normalizedMeasurement.y },
-                      result.stepToDisplacement,
-                  )
-                : null;
-
         tileSummary = {
             ...tileSummary,
             homeOffset: { dx, dy },
             adjustedHome: { x: adjustedCenterX, y: adjustedCenterY },
-            inferredBounds,
         };
 
         summaryTiles[key] = tileSummary;
@@ -401,6 +454,7 @@ export function computeCalibrationSummary(
 
     return {
         gridBlueprint,
+        camera: cameraMeta,
         stepTestSettings: {
             deltaSteps: config.deltaSteps,
         },

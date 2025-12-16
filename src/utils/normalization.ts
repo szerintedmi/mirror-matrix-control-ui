@@ -1,4 +1,7 @@
-import { clamp01 } from '@/constants/calibration';
+import { createTransformer, asCameraPixels, asIsotropic, asViewport } from '@/coords';
+
+const getTransformer = (sourceWidth: number, sourceHeight: number) =>
+    createTransformer({ width: sourceWidth, height: sourceHeight });
 
 /**
  * Normalizes coordinates isotropically based on the maximum dimension of the source.
@@ -12,14 +15,9 @@ export const normalizeIsotropic = (
     sourceWidth: number,
     sourceHeight: number,
 ): { x: number; y: number } => {
-    const maxDim = Math.max(sourceWidth, sourceHeight);
-    const offsetX = (maxDim - sourceWidth) / 2;
-    const offsetY = (maxDim - sourceHeight) / 2;
-
-    return {
-        x: clamp01((x + offsetX) / maxDim),
-        y: clamp01((y + offsetY) / maxDim),
-    };
+    const t = getTransformer(sourceWidth, sourceHeight);
+    const isotropic = t.toIsotropic(asCameraPixels(x, y), 'camera');
+    return { x: isotropic.x, y: isotropic.y };
 };
 
 /**
@@ -31,14 +29,9 @@ export const denormalizeIsotropic = (
     sourceWidth: number,
     sourceHeight: number,
 ): { x: number; y: number } => {
-    const maxDim = Math.max(sourceWidth, sourceHeight);
-    const offsetX = (maxDim - sourceWidth) / 2;
-    const offsetY = (maxDim - sourceHeight) / 2;
-
-    return {
-        x: normalizedX * maxDim - offsetX,
-        y: normalizedY * maxDim - offsetY,
-    };
+    const t = getTransformer(sourceWidth, sourceHeight);
+    const pixels = t.toCamera(asIsotropic(normalizedX, normalizedY), 'isotropic');
+    return { x: pixels.x, y: pixels.y };
 };
 
 /**
@@ -79,18 +72,9 @@ export const viewportToIsotropic = (
     sourceWidth: number,
     sourceHeight: number,
 ): { x: number; y: number } => {
-    const maxDim = Math.max(sourceWidth, sourceHeight);
-    const offsetX = (maxDim - sourceWidth) / 2;
-    const offsetY = (maxDim - sourceHeight) / 2;
-
-    // viewport [0,1] → pixel → isotropic
-    const pixelX = viewportX * sourceWidth;
-    const pixelY = viewportY * sourceHeight;
-
-    return {
-        x: clamp01((pixelX + offsetX) / maxDim),
-        y: clamp01((pixelY + offsetY) / maxDim),
-    };
+    const t = getTransformer(sourceWidth, sourceHeight);
+    const iso = t.toIsotropic(asViewport(viewportX, viewportY), 'viewport');
+    return { x: iso.x, y: iso.y };
 };
 
 /**
@@ -117,10 +101,11 @@ export const viewportToPixels = (
     viewportY: number,
     sourceWidth: number,
     sourceHeight: number,
-): { x: number; y: number } => ({
-    x: viewportX * sourceWidth,
-    y: viewportY * sourceHeight,
-});
+): { x: number; y: number } => {
+    const t = getTransformer(sourceWidth, sourceHeight);
+    const px = t.toCamera(asViewport(viewportX, viewportY), 'viewport');
+    return { x: px.x, y: px.y };
+};
 
 /**
  * Converts viewport delta directly to pixel delta.
@@ -142,18 +127,9 @@ export const isotropicToViewport = (
     sourceWidth: number,
     sourceHeight: number,
 ): { x: number; y: number } => {
-    const maxDim = Math.max(sourceWidth, sourceHeight);
-    const offsetX = (maxDim - sourceWidth) / 2;
-    const offsetY = (maxDim - sourceHeight) / 2;
-
-    // isotropic → pixel → viewport
-    const pixelX = isoX * maxDim - offsetX;
-    const pixelY = isoY * maxDim - offsetY;
-
-    return {
-        x: pixelX / sourceWidth,
-        y: pixelY / sourceHeight,
-    };
+    const t = getTransformer(sourceWidth, sourceHeight);
+    const viewport = t.toViewport(asIsotropic(isoX, isoY), 'isotropic');
+    return { x: viewport.x, y: viewport.y };
 };
 
 /**

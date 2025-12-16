@@ -7,7 +7,11 @@
  */
 
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
-import type { CalibrationProfileBounds, CalibrationTilePosition } from '@/types';
+import type {
+    CalibrationGridBlueprint,
+    CalibrationProfileBounds,
+    CalibrationTilePosition,
+} from '@/types';
 import { STEP_EPSILON, clampNormalized } from '@/utils/calibrationMath';
 
 /**
@@ -102,3 +106,49 @@ export function computeLiveTileBounds(
         y: boundsY,
     };
 }
+
+/**
+ * Compute the footprint bounds of a tile using the grid blueprint.
+ * Converts tile footprint and gap into isotropic centered coordinates so
+ * downstream consumers (planner, overlays) see consistent ranges.
+ */
+export const computeBlueprintFootprintBounds = (
+    blueprint: CalibrationGridBlueprint,
+    row: number,
+    col: number,
+): CalibrationProfileBounds => {
+    const sourceWidth = blueprint.sourceWidth ?? 1920;
+    const sourceHeight = blueprint.sourceHeight ?? 1080;
+    const avgDim = (sourceWidth + sourceHeight) / 2;
+
+    const isoFactorX = avgDim / sourceWidth;
+    const isoFactorY = avgDim / sourceHeight;
+
+    const tileWidth = blueprint.adjustedTileFootprint.width;
+    const tileHeight = blueprint.adjustedTileFootprint.height;
+    const gapX = blueprint.tileGap?.x ?? 0;
+    const gapY = blueprint.tileGap?.y ?? gapX;
+
+    const baseSpacingX = tileWidth + gapX;
+    const baseSpacingY = tileHeight + gapY;
+
+    const spacingXCentered = baseSpacingX * isoFactorX;
+    const spacingYCentered = baseSpacingY * isoFactorY;
+
+    const tileSizeXCentered = tileWidth * isoFactorX;
+    const tileSizeYCentered = tileHeight * isoFactorY;
+
+    const minX = blueprint.gridOrigin.x + col * spacingXCentered;
+    const minY = blueprint.gridOrigin.y + row * spacingYCentered;
+
+    return {
+        x: {
+            min: minX,
+            max: minX + tileSizeXCentered,
+        },
+        y: {
+            min: minY,
+            max: minY + tileSizeYCentered,
+        },
+    };
+};

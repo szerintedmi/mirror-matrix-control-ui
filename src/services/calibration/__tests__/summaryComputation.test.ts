@@ -241,5 +241,42 @@ describe('summaryComputation', () => {
                 expect(result.tiles[key].homeOffset).toBeDefined();
             }
         });
+
+        it('populates motor reach, footprint bounds, and step scales', () => {
+            const tileResults = new Map<string, TileCalibrationResult>();
+            const measurement = createMeasurement(0.1, -0.05, 0.2);
+            tileResults.set('0-0', {
+                tile: { row: 0, col: 0, key: '0-0' },
+                status: 'completed',
+                homeMeasurement: {
+                    ...measurement,
+                    sourceWidth: 1600,
+                    sourceHeight: 1200,
+                },
+                stepToDisplacement: { x: 0.001, y: -0.002 },
+            });
+
+            const result = computeCalibrationSummary(tileResults, {
+                gridSize: { rows: 1, cols: 1 },
+                gridGapNormalized: 0,
+                deltaSteps: 50,
+            });
+
+            const tile = result.tiles['0-0'];
+            expect(tile.motorReachBounds).not.toBeNull();
+            expect(tile.motorReachBounds!.x.min).toBeLessThan(tile.motorReachBounds!.x.max);
+            expect(tile.motorReachBounds!.y.min).toBeLessThan(tile.motorReachBounds!.y.max);
+
+            // Footprint should be centered on the original home measurement (0.1, -0.05)
+            expect(tile.footprintBounds).not.toBeNull();
+            const footprintCenterX =
+                (tile.footprintBounds!.x.min + tile.footprintBounds!.x.max) / 2;
+            const footprintCenterY =
+                (tile.footprintBounds!.y.min + tile.footprintBounds!.y.max) / 2;
+            expect(footprintCenterX).toBeCloseTo(0.1); // homeMeasurement.x
+            expect(footprintCenterY).toBeCloseTo(-0.05); // homeMeasurement.y
+
+            expect(tile.stepScale).toEqual({ x: 1000, y: -500 });
+        });
     });
 });

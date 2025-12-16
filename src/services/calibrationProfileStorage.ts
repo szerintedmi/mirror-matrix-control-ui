@@ -1,5 +1,5 @@
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
-import { computeTileBounds } from '@/services/calibration';
+import { computeBlueprintFootprintBounds, computeTileBounds } from '@/services/calibration';
 import { computeMedian } from '@/services/calibration/math/robustStatistics';
 import type {
     CalibrationRunSummary,
@@ -258,6 +258,20 @@ const buildTileEntry = (
     );
     const homeOffsetSource = summaryTile?.homeOffset ?? tile.metrics?.homeOffset ?? null;
     const homeOffset = buildVectorFromOffset(homeOffsetSource ?? null, stepToDisplacement);
+    const axes = {
+        x: computeAxisCalibration(stepToDisplacement.x, Boolean(tile.assignment.x)),
+        y: computeAxisCalibration(stepToDisplacement.y, Boolean(tile.assignment.y)),
+    };
+    const motorReachBounds =
+        summaryTile?.motorReachBounds ??
+        summaryTile?.inferredBounds ??
+        computeTileBounds(adjustedHome, stepToDisplacement);
+    const footprintBounds = summaryTile?.footprintBounds ?? null;
+    const stepScaleFromAxes =
+        axes.x.stepScale !== null || axes.y.stepScale !== null
+            ? { x: axes.x.stepScale, y: axes.y.stepScale }
+            : null;
+    const stepScale = summaryTile?.stepScale ?? stepScaleFromAxes;
     return {
         key: tile.tile.key,
         row: tile.tile.row,
@@ -270,55 +284,11 @@ const buildTileEntry = (
         stepToDisplacement,
         sizeDeltaAtStepTest:
             summaryTile?.sizeDeltaAtStepTest ?? tile.metrics?.sizeDeltaAtStepTest ?? null,
-        axes: {
-            x: computeAxisCalibration(stepToDisplacement.x, Boolean(tile.assignment.x)),
-            y: computeAxisCalibration(stepToDisplacement.y, Boolean(tile.assignment.y)),
-        },
-        inferredBounds:
-            summaryTile?.inferredBounds ?? computeTileBounds(adjustedHome, stepToDisplacement),
-    };
-};
-
-const computeBlueprintFootprintBounds = (
-    blueprint: CalibrationGridBlueprint,
-    row: number,
-    col: number,
-): CalibrationProfileBounds => {
-    // Get camera dimensions for isotropic conversion (with sensible defaults)
-    const sourceWidth = blueprint.sourceWidth ?? 1920;
-    const sourceHeight = blueprint.sourceHeight ?? 1080;
-    const avgDim = (sourceWidth + sourceHeight) / 2;
-
-    // Isotropic conversion factors: multiply centered deltas by these to get
-    // centered values that produce uniform pixel spacing
-    const isoFactorX = avgDim / sourceWidth;
-    const isoFactorY = avgDim / sourceHeight;
-
-    // Base tile size and gap in centered coords
-    const tileWidth = blueprint.adjustedTileFootprint.width;
-    const tileHeight = blueprint.adjustedTileFootprint.height;
-    const gapX = blueprint.tileGap?.x ?? 0;
-
-    // Isotropic spacing in centered coords
-    const baseSpacing = tileWidth + gapX;
-    const spacingXCentered = baseSpacing * isoFactorX;
-    const spacingYCentered = baseSpacing * isoFactorY;
-
-    // Isotropic tile size in centered coords
-    const tileSizeXCentered = tileWidth * isoFactorX;
-    const tileSizeYCentered = tileHeight * isoFactorY;
-
-    const minX = blueprint.gridOrigin.x + col * spacingXCentered;
-    const minY = blueprint.gridOrigin.y + row * spacingYCentered;
-    return {
-        x: {
-            min: minX,
-            max: minX + tileSizeXCentered,
-        },
-        y: {
-            min: minY,
-            max: minY + tileSizeYCentered,
-        },
+        motorReachBounds,
+        footprintBounds,
+        stepScale: stepScale ?? undefined,
+        axes,
+        inferredBounds: motorReachBounds ?? null,
     };
 };
 
@@ -347,8 +317,12 @@ const buildProfileTiles = (
     Object.values(tiles).forEach((tile) => {
         const summaryTile = summaryTiles?.[tile.tile.key];
         const entry = buildTileEntry(tile, summaryTile);
+        const blueprintFootprint = gridBlueprint
+            ? computeBlueprintFootprintBounds(gridBlueprint, tile.tile.row, tile.tile.col)
+            : null;
+        entry.footprintBounds = entry.footprintBounds ?? blueprintFootprint;
         entry.inferredBounds = mergeWithBlueprintFootprint(
-            entry.inferredBounds,
+            entry.motorReachBounds ?? entry.inferredBounds,
             gridBlueprint,
             tile.tile.row,
             tile.tile.col,
@@ -364,8 +338,16 @@ const buildProfileTiles = (
                     assignment: { x: null, y: null },
                 };
                 const entry = buildTileEntry(fallback, summaryTile);
+                const blueprintFootprint = gridBlueprint
+                    ? computeBlueprintFootprintBounds(
+                          gridBlueprint,
+                          summaryTile.tile.row,
+                          summaryTile.tile.col,
+                      )
+                    : null;
+                entry.footprintBounds = entry.footprintBounds ?? blueprintFootprint;
                 entry.inferredBounds = mergeWithBlueprintFootprint(
-                    entry.inferredBounds,
+                    entry.motorReachBounds ?? entry.inferredBounds,
                     gridBlueprint,
                     summaryTile.tile.row,
                     summaryTile.tile.col,
@@ -380,6 +362,19 @@ const buildProfileTiles = (
 const deriveCalibrationCameraMetadata = (
     summary: CalibrationRunSummary,
 ): { aspect: number | null; resolution: CalibrationCameraResolution | null } => {
+    const camera = summary.camera;
+    if (
+        camera &&
+        isPositiveFiniteNumber(camera.sourceWidth) &&
+        isPositiveFiniteNumber(camera.sourceHeight)
+    ) {
+        const width = camera.sourceWidth;
+        const height = camera.sourceHeight;
+        return {
+            aspect: width / height,
+            resolution: { width, height },
+        };
+    }
     for (const tile of Object.values(summary.tiles)) {
         const measurement = tile.homeMeasurement;
         if (
@@ -848,8 +843,15 @@ export const profileToRunSummary = (profile: CalibrationProfile): CalibrationRun
         if (typeof entry.sizeDeltaAtStepTest === 'number') {
             result.sizeDeltaAtStepTest = entry.sizeDeltaAtStepTest;
         }
-        if (entry.inferredBounds) {
+        if (entry.motorReachBounds) {
+            result.motorReachBounds = entry.motorReachBounds;
+            result.inferredBounds = entry.motorReachBounds;
+        } else if (entry.inferredBounds) {
+            result.motorReachBounds = entry.inferredBounds;
             result.inferredBounds = entry.inferredBounds;
+        }
+        if (entry.footprintBounds) {
+            result.footprintBounds = entry.footprintBounds;
         }
         const stepScale = {
             x: entry.axes.x.stepScale ?? null,
@@ -862,6 +864,13 @@ export const profileToRunSummary = (profile: CalibrationProfile): CalibrationRun
     });
     return {
         gridBlueprint: profile.gridBlueprint,
+        camera:
+            profile.calibrationCameraResolution && profile.calibrationCameraResolution.width > 0
+                ? {
+                      sourceWidth: profile.calibrationCameraResolution.width,
+                      sourceHeight: profile.calibrationCameraResolution.height,
+                  }
+                : null,
         stepTestSettings: profile.stepTestSettings,
         tiles,
     };
