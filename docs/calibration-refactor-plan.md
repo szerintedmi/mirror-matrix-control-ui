@@ -40,45 +40,58 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 ## Priority roadmap
 
 1. [x] **Coordinate kernel** (low-medium effort, high gain)
-   - Create `coords/` module with branded types for `cameraPx`, `viewport`, `isotropic`, `centered`, `pattern`.
-   - Single convert(from, to, aspect, resolution) API plus delta helpers.
-   - Add a lightweight `Transformer` object that captures camera context (aspect, resolution, ROI) so call sites stay terse (`t.toViewport(pt)`).
-   - Migrate scattered helpers (`centeredToView`, `isotropicDeltaToViewport`, etc.) to wrappers over this kernel.
-   - Tests: conversion round-trips and known pixel/aspect fixtures.
-   - Starting point: [`../src/utils/coordinates.ts`](../src/utils/coordinates.ts)
-   - Progress: Kernel in place (`src/coords/index.ts`) with convert/Transformer/delta helpers, wrapped legacy helpers in [`src/utils/coordinates.ts`](../src/utils/coordinates.ts), removed `src/utils/centeredCoordinates.ts`, and migrated call sites to the wrapper; call-site cleanup to adopt `Transformer` directly still pending.
-   - **Review (post-migration)**:
-     - Kernel (`src/coords/index.ts`) is solid: hub-and-spoke via viewport, branded types, `Transformer` class, and comprehensive tests (394 tests pass).
-     - `centeredCoordinates.ts` deleted; all legacy scalar helpers (`viewToCentered`, `centeredToView`, etc.) moved into `coordinates.ts` wrapper.
-     - `useStableBlobMeasurement` now uses `createTransformer` and `convert`/`convertDelta` directly—good adoption of new API.
-     - Component and page imports updated to use `@/utils/coordinates` (no more `centeredCoordinates`).
-     - Remaining items and decisions:
-       - **`roi` field removed**: Dropped unused ROI plumbing; reintroduce explicitly if/when scoped.
-       - **`normalization.ts` overlap**: Action item to migrate or wrap `normalizeIsotropic`/`viewportToIsotropic`/`viewportToPixels` through the kernel so `useCameraPipeline` and overlays share the same math.
-       - **Legacy scalar helpers**: Intend to mark `viewToCentered`, `centeredToView`, etc. as `@deprecated` after the remaining call sites move to branded coords/`Transformer`; they stay temporarily for ease of incremental migration.
-       - **Delta averaging heuristic**: Accept the current average-based `viewportDeltaToIsotropic`/`isotropicDeltaToViewport` for square-ish deltas; plan to add axis-specific variants to avoid ambiguity and document the trade-off.
-       - **Clamping semantics**: Only viewport→isotropic conversion clamps to [0,1]; document this behaviour in the kernel comments to make the intent explicit.
+
+- Create `coords/` module with branded types for `cameraPx`, `viewport`, `isotropic`, `centered`, `pattern`.
+- Single convert(from, to, aspect, resolution) API plus delta helpers.
+- Add a lightweight `Transformer` object that captures camera context (aspect, resolution, ROI) so call sites stay terse (`t.toViewport(pt)`).
+- Migrate scattered helpers (`centeredToView`, `isotropicDeltaToViewport`, etc.) to wrappers over this kernel.
+- Tests: conversion round-trips and known pixel/aspect fixtures.
+- Starting point: [`../src/utils/coordinates.ts`](../src/utils/coordinates.ts)
+- Progress: Kernel in place (`src/coords/index.ts`) with convert/Transformer/delta helpers, wrapped legacy helpers in [`src/utils/coordinates.ts`](../src/utils/coordinates.ts), removed `src/utils/centeredCoordinates.ts`, and migrated call sites to the wrapper; call-site cleanup to adopt `Transformer` directly still pending.
+- **Review (post-migration)**:
+  - Kernel (`src/coords/index.ts`) is solid: hub-and-spoke via viewport, branded types, `Transformer` class, and comprehensive tests (394 tests pass).
+  - `centeredCoordinates.ts` deleted; all legacy scalar helpers (`viewToCentered`, `centeredToView`, etc.) moved into `coordinates.ts` wrapper.
+  - `useStableBlobMeasurement` now uses `createTransformer` and `convert`/`convertDelta` directly—good adoption of new API.
+  - Component and page imports updated to use `@/utils/coordinates` (no more `centeredCoordinates`).
+  - Remaining items and decisions:
+    - **`roi` field removed**: Dropped unused ROI plumbing; reintroduce explicitly if/when scoped.
+    - **`normalization.ts` overlap**: Action item to migrate or wrap `normalizeIsotropic`/`viewportToIsotropic`/`viewportToPixels` through the kernel so `useCameraPipeline` and overlays share the same math.
+    - **Legacy scalar helpers**: Intend to mark `viewToCentered`, `centeredToView`, etc. as `@deprecated` after the remaining call sites move to branded coords/`Transformer`; they stay temporarily for ease of incremental migration.
+    - **Delta averaging heuristic**: Accept the current average-based `viewportDeltaToIsotropic`/`isotropicDeltaToViewport` for square-ish deltas; plan to add axis-specific variants to avoid ambiguity and document the trade-off.
+    - **Clamping semantics**: Only viewport→isotropic conversion clamps to [0,1]; document this behaviour in the kernel comments to make the intent explicit.
 
 2. [x] **Canonical calibration snapshot** (medium effort, high gain)
-   - Define `CalibrationSnapshot` type (per-tile: adjustedHome, perStep, motorReachBounds, footprintBounds, camera meta, blueprint).
-   - Make `summaryComputation` return exactly this; `calibrationProfileStorage` becomes serialize/deserialize only.
-   - Tests: snapshot golden fixtures; storage round-trip.
-   - Starting point: [`../src/services/calibration/summaryComputation.ts`](../src/services/calibration/summaryComputation.ts)
-   - **Status: Complete.**
-     - `CalibrationSnapshot` type in `types.ts` with `CalibrationSnapshotCameraMeta`, `CalibrationSnapshotTile`, grid blueprint, step settings, outlier analysis.
-     - `CalibrationRunSummary` is a type alias to `CalibrationSnapshot`—single source of truth.
-     - `summaryComputation.ts` returns snapshot shape; `profileToRunSummary` maps stored profile to snapshot.
-     - Golden fixture test (`snapshotGolden.test.ts`) and storage round-trip tests in place.
-     - `normalization.ts` delegates to coords kernel so overlays share math.
-   - **Bug fixes applied:**
-     - Pitch calculation now uses axis-specific deltas (`Math.abs(dx)` / `Math.abs(dy)`) instead of Euclidean distance—prevents ~10-15% inflation when tiles are slightly misaligned.
-     - Origin computation uses separate `halfTileX` / `halfTileY` values instead of single `halfTile = tileWidth/2` for both axes—fixes systematic Y-axis offset when width ≠ height.
 
-3. [ ] **Pure math isolation (remaining)** (medium effort, medium gain)
+- Define `CalibrationSnapshot` type (per-tile: adjustedHome, perStep, motorReachBounds, footprintBounds, camera meta, blueprint).
+- Make `summaryComputation` return exactly this; `calibrationProfileStorage` becomes serialize/deserialize only.
+- Tests: snapshot golden fixtures; storage round-trip.
+- Starting point: [`../src/services/calibration/summaryComputation.ts`](../src/services/calibration/summaryComputation.ts)
+- **Status: Complete.**
+  - `CalibrationSnapshot` type in `types.ts` with `CalibrationSnapshotCameraMeta`, `CalibrationSnapshotTile`, grid blueprint, step settings, outlier analysis.
+  - `CalibrationRunSummary` is a type alias to `CalibrationSnapshot`—single source of truth.
+  - `summaryComputation.ts` returns snapshot shape; `profileToRunSummary` maps stored profile to snapshot.
+  - Golden fixture test (`snapshotGolden.test.ts`) and storage round-trip tests in place.
+  - `normalization.ts` delegates to coords kernel so overlays share math.
+- **Bug fixes applied:**
+  - Pitch calculation now uses axis-specific deltas (`Math.abs(dx)` / `Math.abs(dy)`) instead of Euclidean distance—prevents ~10-15% inflation when tiles are slightly misaligned.
+  - Origin computation uses separate `halfTileX` / `halfTileY` values instead of single `halfTile = tileWidth/2` for both axes—fixes systematic Y-axis offset when width ≠ height.
+
+3. [x] **Pure math isolation (remaining)** (medium effort, medium gain)
    - Move expected position, step tests, bounds math into `/calibration/math/*` with no IO.
    - Ensure functions consume/produce typed coordinate space values.
    - Tests: unit tests per function with edge cases and aspect coverage.
    - Starting point: [`../src/services/calibration/expectedPosition.ts`](../src/services/calibration/expectedPosition.ts)
+   - **Status: Complete.**
+     - Moved 4 modules to `/math/`: `boundsComputation.ts`, `stagingCalculations.ts`, `stepTestCalculations.ts`, `expectedPosition.ts`
+     - Moved corresponding test files to `/math/__tests__/`
+     - Extracted grid blueprint math from `summaryComputation.ts` into new `gridBlueprintMath.ts`:
+       - `computeStepScaleFromDisplacement`, `buildStepScale` - step scale conversion
+       - `computeAxisPitch` - median of axis deltas
+       - `computeImpliedOrigin`, `computeGridOrigin`, `computeCameraOriginOffset` - grid origin calculation
+       - `computeHomeOffset`, `computeAdjustedCenter` - home offset and adjusted position
+     - Internal math functions stay with plain `number`/`Point` for simplicity. Boundary functions now use branded types. Added module-level coordinate space contract to `gridBlueprintMath.ts` documenting that all `CenteredPoint` values are in Centered Coordinates [-1, 1]. Boundary functions (`computeImpliedOrigin`, `computeHomeOffset`) accept `CenteredPoint` (alias for `CenteredCoord`) to catch coordinate space mixing at compile time.
+     - core calibration math is now IO-free under `src/services/calibration/math/`, with tests colocated.
+     - All tests pass (29 tests for gridBlueprintMath after cleanup)
 
 4. [ ] **Generator-based script + executor skeleton** (medium effort, high gain)
    - Define `CalibrationCommand` intents (MOVE, MEASURE, LOG, SAVE_TILE, PAUSE_POINT, ABORT).

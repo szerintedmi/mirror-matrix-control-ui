@@ -10,7 +10,7 @@ export {
     computeTileBounds,
     computeLiveTileBounds,
     computeBlueprintFootprintBounds,
-} from './boundsComputation';
+} from './math/boundsComputation';
 
 export {
     // Types
@@ -23,7 +23,7 @@ export {
     computeFirstTileExpected,
     computeExpectedFromGrid,
     computeExpectedBlobPosition,
-} from './expectedPosition';
+} from './math/expectedPosition';
 
 export {
     // Types
@@ -37,7 +37,7 @@ export {
     computePoseTargets,
     computeNearestCornerTarget,
     computeDistributedAxisTarget,
-} from './stagingCalculations';
+} from './math/stagingCalculations';
 
 export {
     // Types
@@ -61,4 +61,4 @@ export {
     computeAverageSizeDelta,
     computeAlignmentTargetSteps,
     combineStepTestResults,
-} from './stepTestCalculations';
+} from './math/stepTestCalculations';

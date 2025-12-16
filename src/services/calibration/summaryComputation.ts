@@ -10,17 +10,25 @@ import {
     GRID_GAP_MAX_NORMALIZED,
     type RobustTileSizeConfig,
 } from '@/constants/calibration';
+import { asCentered } from '@/coords';
 import type {
     BlobMeasurement,
     CalibrationGridBlueprint,
     CalibrationProfileBounds,
     CalibrationSnapshot,
 } from '@/types';
-import { STEP_EPSILON } from '@/utils/calibrationMath';
 
-import { computeLiveTileBounds } from './boundsComputation';
 import { RobustMaxSizingStrategy, type TileEntry } from './math/blueprintStrategies';
-import { computeMedian } from './math/robustStatistics';
+import { computeLiveTileBounds } from './math/boundsComputation';
+import {
+    buildStepScale,
+    computeAxisPitch,
+    computeGridOrigin,
+    computeImpliedOrigin,
+    computeCameraOriginOffset,
+    computeHomeOffset,
+    computeAdjustedCenter,
+} from './math/gridBlueprintMath';
 
 // =============================================================================
 // TYPES
@@ -115,27 +123,6 @@ function recenterMeasurement(
         stats: recenteredStats,
     };
 }
-
-const computeStepScaleFromDisplacement = (perStep: number | null | undefined): number | null => {
-    if (perStep == null || Math.abs(perStep) < STEP_EPSILON) {
-        return null;
-    }
-    return 1 / perStep;
-};
-
-const buildStepScale = (
-    stepToDisplacement: TileCalibrationResult['stepToDisplacement'] | undefined,
-): { x: number | null; y: number | null } | null => {
-    if (!stepToDisplacement) {
-        return null;
-    }
-    const x = computeStepScaleFromDisplacement(stepToDisplacement.x);
-    const y = computeStepScaleFromDisplacement(stepToDisplacement.y);
-    if (x === null && y === null) {
-        return null;
-    }
-    return { x, y };
-};
 
 // =============================================================================
 // GRID BLUEPRINT COMPUTATION
@@ -293,16 +280,16 @@ export function computeGridBlueprint(
     let computedTileWidth = tileWidth; // Fallback to max blob size
     let computedTileHeight = tileHeight; // Fallback to max blob size
 
-    // Use computed pitch if available
-    if (deltasX.length > 0) {
-        const medianPitchX = computeMedian(deltasX);
-        // Pitch = Width + Gap  =>  Width = Pitch - Gap
-        computedTileWidth = medianPitchX - gapX;
+    // Use computed pitch if available (via extracted math function)
+    const pitchX = computeAxisPitch(deltasX);
+    const pitchY = computeAxisPitch(deltasY);
+
+    if (pitchX > 0) {
+        computedTileWidth = pitchX - gapX;
     }
 
-    if (deltasY.length > 0) {
-        const medianPitchY = computeMedian(deltasY);
-        computedTileHeight = medianPitchY - gapY;
+    if (pitchY > 0) {
+        computedTileHeight = pitchY - gapY;
     }
 
     // If we only have single tile or no deltas, we stick to the MaxBlobSize logic (fallback)
@@ -321,29 +308,28 @@ export function computeGridBlueprint(
     const totalWidth = config.gridSize.cols * baseSpacingX - gapX; // (cols-1)*gap + cols*width = cols*(width+gap) - gap
     const totalHeight = config.gridSize.rows * baseSpacingY - gapY;
 
-    // Compute origin using median of implied origins
-    const originCandidatesX: number[] = [];
-    const originCandidatesY: number[] = [];
+    // Compute origin using median of implied origins (via extracted math functions)
+    const spacing = { spacingX: baseSpacingX, spacingY: baseSpacingY };
+    const halfTile = { x: halfTileX, y: halfTileY };
 
-    for (const entry of measuredTiles) {
-        const measurement = entry.homeMeasurement;
-        // The implied origin for this tile is: measurement - (offset_to_origin)
-        // Offset = col * pitch + halfTile (using axis-specific half-tile values)
-        const impliedOriginX = measurement.x - (entry.tile.col * baseSpacingX + halfTileX);
-        const impliedOriginY = measurement.y - (entry.tile.row * baseSpacingY + halfTileY);
+    const impliedOrigins = measuredTiles.map((entry) =>
+        computeImpliedOrigin(
+            asCentered(entry.homeMeasurement.x, entry.homeMeasurement.y),
+            { row: entry.tile.row, col: entry.tile.col },
+            spacing,
+            halfTile,
+        ),
+    );
 
-        originCandidatesX.push(impliedOriginX);
-        originCandidatesY.push(impliedOriginY);
-    }
+    const gridOrigin = computeGridOrigin(impliedOrigins);
+    const originX = gridOrigin.x;
+    const originY = gridOrigin.y;
 
-    const originX = originCandidatesX.length > 0 ? computeMedian(originCandidatesX) : 0;
-    const originY = originCandidatesY.length > 0 ? computeMedian(originCandidatesY) : 0;
-
-    // Center the grid
-    const cameraOriginOffset = {
-        x: originX + totalWidth / 2,
-        y: originY + totalHeight / 2,
-    };
+    // Center the grid (via extracted math function)
+    const cameraOriginOffset = computeCameraOriginOffset(gridOrigin, {
+        width: totalWidth,
+        height: totalHeight,
+    });
 
     // Store origin relative to camera center
     const finalOriginX = originX - cameraOriginOffset.x;
@@ -473,17 +459,27 @@ export function computeCalibrationSummary(
             continue;
         }
 
+        // Compute adjusted center and home offset (via extracted math functions)
         const tile = result.tile;
-        const adjustedCenterX = gridBlueprint.gridOrigin.x + tile.col * baseSpacingX + halfTileX;
-        const adjustedCenterY = gridBlueprint.gridOrigin.y + tile.row * baseSpacingY + halfTileY;
+        const spacing = { spacingX: baseSpacingX, spacingY: baseSpacingY };
+        const halfTile = { x: halfTileX, y: halfTileY };
 
-        const dx = normalizedMeasurement.x - adjustedCenterX;
-        const dy = normalizedMeasurement.y - adjustedCenterY;
+        const adjustedCenter = computeAdjustedCenter(
+            gridBlueprint.gridOrigin,
+            { row: tile.row, col: tile.col },
+            spacing,
+            halfTile,
+        );
+
+        const homeOffset = computeHomeOffset(
+            asCentered(normalizedMeasurement.x, normalizedMeasurement.y),
+            adjustedCenter,
+        );
 
         tileSummary = {
             ...tileSummary,
-            homeOffset: { dx, dy },
-            adjustedHome: { x: adjustedCenterX, y: adjustedCenterY },
+            homeOffset,
+            adjustedHome: adjustedCenter,
         };
 
         summaryTiles[key] = tileSummary;

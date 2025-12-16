@@ -4,7 +4,7 @@ import { showCommandErrorToast } from '@/components/common/StyledToast';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import { useCommandFeedback } from '@/hooks/useCommandFeedback';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
-import { computePoseTargets, type StagingConfig } from '@/services/calibration/stagingCalculations';
+import { computePoseTargets, type StagingConfig } from '@/services/calibration';
 import type {
     CalibrationRunnerState,
     CalibrationRunSummary,
