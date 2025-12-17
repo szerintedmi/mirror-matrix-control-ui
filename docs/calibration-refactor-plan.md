@@ -35,7 +35,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 
 ### In Progress
 
-- [ ] No active work; next item will move here when pulled from roadmap.
+- [ ] **Item 4: Generator-based script + executor skeleton** — Defining command types, building executor, prototyping one-tile script.
 
 ## Priority roadmap
 
@@ -94,19 +94,118 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
      - All tests pass (29 tests for gridBlueprintMath after cleanup)
 
 4. [ ] **Generator-based script + executor skeleton** (medium effort, high gain)
-   - Define `CalibrationCommand` intents (MOVE, MEASURE, LOG, SAVE_TILE, PAUSE_POINT, ABORT).
-   - Implement a small executor that drives a generator, handles pause/resume/abort centrally, and owns retries/delays via config (not in the script).
-   - Executor exposes subscriptions (current command, progress, logs, snapshot updates) so React can consume via `useSyncExternalStore` / `useEffect`.
-   - Prototype a happy-path script for one tile to validate the pattern.
-   - Tests: deterministic stepper that feeds canned results into the generator and asserts emitted commands.
-   - Starting point: [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
 
-5. [ ] **Port runner to generator (with pose table folded in)** (higher effort, very high gain)
-   - Introduce pose table early: named poses (`home`, `aside`, `inspect-x`, `inspect-y`) mapping to per-axis targets factoring rotation/staging mode.
-   - Re-express sequence (home -> stage -> per-tile home/X/Y -> align) as a generator using math helpers and pose table.
-   - Executor owns retries/delays; script stays pure.
-   - Tests: replay existing runner scenarios with mocked motor/camera adapters; compare produced snapshot vs golden.
-   - Starting point: [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
+   **Goal:** Separate "what to do" (script) from "how to do it" (executor). The script becomes a pure generator yielding command intents; the executor drives it, handles IO, pause/resume/abort, and state emission.
+
+   **Current state analysis:**
+   - `CalibrationRunner` is ~1540 lines mixing IO, state management, orchestration, retries, and UI callbacks.
+   - Math already isolated in `/math/` modules (good foundation).
+   - React consumes via `useCalibrationController` hook which instantiates runner and passes callbacks.
+
+   **Command taxonomy** (IO commands vs state/events for a minimal executor surface):
+
+   ```typescript
+   // IO Commands - executor calls adapters, returns results to script
+   type IOCommand =
+     | { type: 'HOME_ALL'; macAddresses: string[] }
+     | { type: 'MOVE_AXIS'; motor: Motor; target: number }
+     | { type: 'MOVE_TILE_POSE'; tile: TileAddress; pose: 'home' | 'aside' }
+     | { type: 'CAPTURE'; expectedPosition?: Point; tolerance: number; label: string }
+     | { type: 'DELAY'; ms: number };
+
+   // State/Event Commands - executor applies to internal state, no adapter call
+   type StateCommand =
+     | { type: 'UPDATE_PHASE'; phase: CalibrationRunnerPhase }
+     | { type: 'UPDATE_TILE'; key: string; patch: Partial<TileRunState> }
+     | { type: 'CHECKPOINT'; step: CalibrationStepDescriptor } // pause point in step mode
+     | { type: 'LOG'; hint: string; metadata?: Record<string, unknown> };
+
+   type CalibrationCommand = IOCommand | StateCommand;
+   ```
+
+   Note: `MOVE_TILE_POSE` keeps tile+pose as the command shape so staging math (rotation handling, `computePoseTargets`) stays centralized. Reuses expectations from `calibrationRunnerDirections.test.ts`.
+
+   **Architecture:**
+   - `CalibrationScript` - Pure generator: `function* calibrationScript(config): Generator<CalibrationCommand, void, CommandResult>`
+   - `CalibrationExecutor` - Drives generator, owns AbortController, handles pause/resume gate, calls adapters, emits state.
+   - `CommandResult` - Union of results per command type (`BlobMeasurement | null` for CAPTURE, `void` for most others).
+
+   **Adapter boundary** (explicit interface for testability):
+
+   ```typescript
+   interface ExecutorAdapters {
+     motor: {
+       homeAll(macs: string[]): Promise<void>;
+       moveMotor(mac: string, motorId: number, steps: number): Promise<void>;
+     };
+     camera: {
+       capture(params: CaptureParams): Promise<BlobMeasurement | null>;
+     };
+     clock: {
+       delay(ms: number): Promise<void>;
+       now(): number;
+     };
+   }
+   ```
+
+   **Executor responsibilities:**
+   - Drive generator loop, passing results back via `generator.next(result)`
+   - Own `AbortController` for cancellation
+   - Pause/resume via single gate promise (not scattered)
+   - **Retry policy (CAPTURE only):** Motor moves throw on failure; only CAPTURE commands retry (configurable `maxRetries`, `retryDelayMs`). Errors map to `onTileError` for detection failures, `onCommandError` for motor failures.
+   - Delays after motor moves via `DELAY` command (script controls when, executor just waits)
+   - Maintain and emit `CalibrationRunnerState` to subscribers
+   - Step mode: wait at `CHECKPOINT` commands for `advance()` call
+
+   **Deliverables for this phase:**
+   1. `src/services/calibration/script/commands.ts` - Command type definitions + `ExecutorAdapters` interface
+   2. `src/services/calibration/script/adapters.ts` - Real adapter implementations (wrap `motorApi`, `captureMeasurement`)
+   3. `src/services/calibration/script/executor.ts` - Executor class (drives generator, pause/abort, state emission)
+   4. `src/services/calibration/script/script.ts` - Skeleton script (home all + one tile happy path)
+   5. `src/services/calibration/script/__tests__/script.test.ts` - Synchronous script tests (command sequence assertions)
+   6. `src/services/calibration/script/__tests__/executor.test.ts` - Async executor tests (fake adapters + deterministic timers for pause/resume/abort/retry)
+   7. Golden trace: record normalized trace from old runner for 1-tile scenario; assert new generator matches before flipping `useCalibrationController`
+
+   **Testing approach:**
+   - **Script tests (sync):** Step through generator with `generator.next(cannedResult)`, assert exact command sequence. No timers, no async.
+   - **Executor tests (async):** Fake adapters return scripted results; use `vi.useFakeTimers()` for deterministic delay/retry testing; validate pause/resume/abort behavior.
+   - **Golden trace bridge:** Run 1-tile scenario through old `CalibrationRunner`, normalize the command log to a trace format, then verify new script+executor produces equivalent trace.
+
+   **Starting point:** [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
+
+5. [ ] **Port full calibration sequence to generator** (higher effort, very high gain)
+
+   **Goal:** Migrate the complete calibration flow from imperative `CalibrationRunner` methods to the generator script built in phase 4.
+
+   **Sequence to port:**
+   1. `homeAllMotors()` → yield `HOME_ALL`
+   2. `stageAllTilesToSide()` → yield `MOVE_TILE_POSE(aside)` per tile (parallel in executor)
+   3. Per-tile measurement loop (`measureTile()`):
+      - `MOVE_TILE_POSE(home)` + `CAPTURE(home)` + `CHECKPOINT`
+      - Interim step test (first tile): `MOVE_AXIS` + `CAPTURE` + `CHECKPOINT`
+      - Full step test X: `MOVE_AXIS` + `CAPTURE` + `CHECKPOINT`
+      - Full step test Y: `MOVE_AXIS` + `CAPTURE` + `UPDATE_TILE` + `CHECKPOINT`
+      - `MOVE_TILE_POSE(aside)` to clear for next tile
+   4. Compute summary (pure math, no command)
+   5. `alignTilesToIdealGrid()` → yield `MOVE_AXIS` per tile axis based on `homeOffset`
+
+   **Pose handling:**
+   - Reuse `computePoseTargets(tile, pose, config)` from `stagingCalculations.ts`
+   - Step test positions computed inline using `getAxisStepDelta()` from `stepTestCalculations.ts`
+   - Executor calls `computePoseTargets` when handling `MOVE_TILE_POSE`
+
+   **Migration strategy:**
+   - Keep old `CalibrationRunner` functional during migration (strangle pattern)
+   - Extend skeleton script from phase 4 incrementally (one phase at a time)
+   - Golden trace assertions at each phase boundary
+   - Flip `useCalibrationController` to new executor once all phases pass
+
+   **Tests:**
+   - Replay existing `calibrationRunnerDirections.test.ts` scenarios with new script
+   - Compare produced `CalibrationSnapshot` vs golden fixtures from old runner
+   - Full command trace assertions for deterministic verification
+
+   **Starting point:** [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
 
 6. [ ] **Bounds semantics unification** (low effort, medium gain)
    - Keep two explicit kinds: `motorReachBounds` (step-based) and `footprintBounds` (blueprint).
