@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 
+import type { CalibrationRunSummary, CalibrationRunnerState } from '@/services/calibration/types';
 import {
     deleteCalibrationProfile,
     importCalibrationProfileFromJson,
@@ -9,7 +10,6 @@ import {
     profileToRunSummary,
     saveCalibrationProfile,
 } from '@/services/calibrationProfileStorage';
-import type { CalibrationRunSummary, CalibrationRunnerState } from '@/services/calibrationRunner';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type { ArrayRotation, CalibrationProfile, MirrorConfig } from '@/types';
 

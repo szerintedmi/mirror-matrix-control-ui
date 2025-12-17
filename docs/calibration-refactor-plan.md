@@ -33,9 +33,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 
 - [x] **Canonical calibration snapshot**: `CalibrationSnapshot` type defined, `summaryComputation` returns it, golden fixture and round-trip tests in place. Bug fixes: pitch uses axis-specific deltas, origin uses separate halfTileX/halfTileY.
 
-### In Progress
-
-- [x] **Item 4: Generator-based script + executor skeleton** — Command types, adapters, executor, skeleton script, and tests complete. Golden trace deferred to item 5.
+- [x] **Generator-based script + executor**: Items 4, 5, 5a complete. Full calibration migrated to generator-based architecture with `CalibrationExecutor`. Old `CalibrationRunner` deleted. Helper generators extracted (`measureHome*`, `runAxisStepTest*`, `transitionToNextTile*`, `alignTiles*`). 10 golden tests + E2E coverage.
 
 ## Priority roadmap
 
@@ -80,7 +78,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
    - Move expected position, step tests, bounds math into `/calibration/math/*` with no IO.
    - Ensure functions consume/produce typed coordinate space values.
    - Tests: unit tests per function with edge cases and aspect coverage.
-   - Starting point: [`../src/services/calibration/expectedPosition.ts`](../src/services/calibration/expectedPosition.ts)
+   - Starting point: [`../src/services/calibration/math/expectedPosition.ts`](../src/services/calibration/math/expectedPosition.ts)
    - **Status: Complete.**
      - Moved 4 modules to `/math/`: `boundsComputation.ts`, `stagingCalculations.ts`, `stepTestCalculations.ts`, `expectedPosition.ts`
      - Moved corresponding test files to `/math/__tests__/`
@@ -171,7 +169,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
    - **Executor tests (async):** Fake adapters return scripted results; use `vi.useFakeTimers()` for deterministic delay/retry testing; validate pause/resume/abort behavior.
    - **Golden trace bridge:** Run 1-tile scenario through old `CalibrationRunner`, normalize the command log to a trace format, then verify new script+executor produces equivalent trace.
 
-   **Starting point:** [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
+   **Starting point:** `src/services/calibration/script/` (old `calibrationRunner.ts` deleted)
 
    **Feedback / gaps (review):** _(addressed)_
    - ✓ Good: clear command vocabulary + explicit adapter boundary; executor is a plausible "IO kernel" for item 5.
@@ -181,45 +179,66 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
    - ✓ `activeTile` now derived from UPDATE_TILE patches (set when `measuring`, cleared when `completed`/`failed`/`skipped`).
    - Gap (deferred): no integration path yet (feature-flag/parallel wiring into `useCalibrationController`); skeleton exercised via unit tests only for now.
 
-5. [ ] **Port full calibration sequence to generator** (higher effort, very high gain)
+5. [x] **Port full calibration sequence to generator** (higher effort, very high gain)
 
-   **Goal:** Migrate the complete calibration flow from imperative `CalibrationRunner` methods to the generator script built in phase 4.
+   **Status: Complete.**
 
-   **Sequence to port:**
-   1. `homeAllMotors()` → yield `HOME_ALL`
-   2. `stageAllTilesToSide()` → yield `MOVE_TILE_POSE(aside)` per tile (parallel in executor)
-   3. Per-tile measurement loop (`measureTile()`):
-      - `MOVE_TILE_POSE(home)` + `CAPTURE(home)` + `CHECKPOINT`
-      - Interim step test (first tile): `MOVE_AXIS` + `CAPTURE` + `CHECKPOINT`
-      - Full step test X: `MOVE_AXIS` + `CAPTURE` + `CHECKPOINT`
-      - Full step test Y: `MOVE_AXIS` + `CAPTURE` + `UPDATE_TILE` + `CHECKPOINT`
-      - `MOVE_TILE_POSE(aside)` to clear for next tile
-   4. Compute summary (pure math, no command)
-   5. `alignTilesToIdealGrid()` → yield `MOVE_AXIS` per tile axis based on `homeOffset`
+   Full calibration flow migrated to generator-based script with CalibrationExecutor.
 
-   **Pose handling:**
-   - Reuse `computePoseTargets(tile, pose, config)` from `stagingCalculations.ts`
-   - Step test positions computed inline using `getAxisStepDelta()` from `stepTestCalculations.ts`
-   - Executor calls `computePoseTargets` when handling `MOVE_TILE_POSE`
+   **Completed:**
+   - Generator script (`script.ts`) yields command intents for full calibration sequence
+   - Executor drives generator, handles IO via adapters, manages pause/resume/abort
+   - Parallel move commands (`MOVE_TILES_BATCH`, `MOVE_AXES_BATCH`) for efficiency
+   - `AWAIT_DECISION` command + `submitDecision()` for user decisions on failures:
+     - `tile-failure` (home measurement): retry/skip/abort
+     - `step-test-failure` (X/Y jog measurement): retry/ignore/abort — ignore keeps home data, infers step values from first tile, marks tile as `partial`
+     - `command-failure` (motor commands): retry/skip/ignore/abort — options vary by context (measuring phase offers ignore, global commands only retry/abort)
+   - `UPDATE_EXPECTED_POSITION` command shows expected blob position before moves
+   - `UPDATE_PROGRESS` command for progress tracking
+   - `useCalibrationController` uses new executor (old runner deleted)
 
-   **Migration strategy:**
-   - Keep old `CalibrationRunner` functional during migration (strangle pattern)
-   - Extend skeleton script from phase 4 incrementally (one phase at a time)
-   - Golden trace assertions at each phase boundary
-   - Flip `useCalibrationController` to new executor once all phases pass
+   **Cleanup completed:**
+   - Types moved to `src/services/calibration/types.ts`
+   - Old `calibrationRunner.ts` deleted (~20 files updated with new imports)
+   - Golden trace tests (`golden.test.ts`) - 10 tests covering single/multi-tile scenarios + rotation handling
+   - E2E smoke test with mock MQTT connection
+   - Decision UI in `CalibrationStatusBar.tsx` with Retry/Skip/Ignore/Abort buttons per failure kind
+   - `partial` tile status for tiles with inferred step values (included in blueprint)
 
-   **Tests:**
-   - Replay existing `calibrationRunnerDirections.test.ts` scenarios with new script
-   - Compare produced `CalibrationSnapshot` vs golden fixtures from old runner
-   - Full command trace assertions for deterministic verification
+   **Architecture:**
 
-   **Starting point:** [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
+   ```
+   src/services/calibration/
+   ├── types.ts              # All calibration types
+   ├── script/
+   │   ├── script.ts         # Generator yielding commands
+   │   ├── executor.ts       # Runs script, handles adapters
+   │   ├── commands.ts       # Command type definitions
+   │   └── adapters.ts       # Motor/camera/clock adapters
+   ├── math/                 # Pure calculation functions
+   └── summaryComputation.ts # Blueprint/summary computation
+   ```
+
+   **Feedback / gaps (review):**
+   - ✓ Good: old `CalibrationRunner` removal is complete; `useCalibrationController` + status bar decision UI + unit/golden coverage form a coherent end-to-end slice.
+   - ✓ Bug fixed: added `skippedCount` to ScriptState; skip decision now increments `skippedCount` (not `failedCount`) and `updateProgress` uses correct counter.
+   - ✓ Rotation coverage: added golden tests for `arrayRotation: 180` verifying step test directions and stepToDisplacement output.
+   - ✓ Cleanup: removed duplicate overlay trigger from CAPTURE handler in executor; `UPDATE_EXPECTED_POSITION` is now the single pathway for overlay updates; `CAPTURE.expectedPosition` is only for blob selection validation.
+
+5a. [x] **Script generator refactor** (low effort, medium gain)
+
+- Extract helper generators: `measureHome*`, `runAxisStepTest*`, `transitionToNextTile*`, `alignTiles*`
+- DRY X/Y step test logic (~150 lines consolidated)
+- Use `yield*` delegation, keep in single file
+- Tests: existing golden tests (no new tests needed)
+- Starting point: [`../src/services/calibration/script/script.ts`](../src/services/calibration/script/script.ts)
+- **Status: Complete.** All 4 helper generators extracted. Main orchestrator uses `yield*` delegation. X/Y step test logic unified in `runAxisStepTest*`. All 468 tests pass.
 
 6. [ ] **Bounds semantics unification** (low effort, medium gain)
    - Keep two explicit kinds: `motorReachBounds` (step-based) and `footprintBounds` (blueprint).
    - Provide helper for union/intersection; remove hidden unions in storage.
    - Tests: bounds combination fixtures; ensure planner sees expected shape.
-   - Starting point: [`../src/services/calibration/boundsComputation.ts`](../src/services/calibration/boundsComputation.ts)
+   - Starting point: [`../src/services/calibration/math/boundsComputation.ts`](../src/services/calibration/math/boundsComputation.ts)
 
 7. [ ] **Planner split and space consistency (incl. Pattern Designer validation)** (medium effort, high gain)
    - Two passes: (a) validate points vs bounds in canonical space, (b) convert to steps using snapshot.

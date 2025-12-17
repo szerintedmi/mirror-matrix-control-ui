@@ -6,7 +6,7 @@ import type {
     CalibrationRunnerState,
     TileCalibrationResult,
     TileRunState,
-} from '@/services/calibrationRunner';
+} from '@/services/calibration/types';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type {
     ArrayRotation,

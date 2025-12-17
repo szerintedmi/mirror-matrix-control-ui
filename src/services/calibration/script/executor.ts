@@ -26,27 +26,30 @@ import type { CommandErrorContext } from '@/types/commandError';
 import { extractCommandErrorDetail } from '@/utils/commandErrors';
 
 import {
+    computePoseTargets,
+    clampSteps,
+    roundSteps,
+    type StagingConfig,
+} from '../math/stagingCalculations';
+import {
     type CalibrationRunnerPhase,
     type CalibrationRunnerState,
+    type CalibrationRunSummary,
     type CalibrationCommandLogEntry,
     type CalibrationStepState,
     type CalibrationStepDescriptor,
     type TileAddress,
     type TileRunState,
     createBaselineRunnerState,
-} from '../../calibrationRunner';
-import {
-    computePoseTargets,
-    clampSteps,
-    roundSteps,
-    type StagingConfig,
-} from '../math/stagingCalculations';
+} from '../types';
 
 import type {
     CalibrationCommand,
     CommandResult,
     ExecutorAdapters,
     CaptureCommand,
+    AwaitDecisionCommand,
+    DecisionOption,
 } from './commands';
 
 // =============================================================================
@@ -68,6 +71,17 @@ export interface ExecutorConfig {
 }
 
 /**
+ * Pending decision state for the UI to display.
+ */
+export interface PendingDecision {
+    kind: 'tile-failure' | 'step-test-failure' | 'command-failure';
+    /** Tile context, may be null for global commands like HOME_ALL */
+    tile: TileAddress | null;
+    error: string;
+    options: DecisionOption[];
+}
+
+/**
  * Callbacks for executor events.
  */
 export interface ExecutorCallbacks {
@@ -80,6 +94,8 @@ export interface ExecutorCallbacks {
         position: { x: number; y: number } | null,
         tolerance: number,
     ) => void;
+    /** Called when a decision is needed from the user */
+    onPendingDecision?: (decision: PendingDecision | null) => void;
 }
 
 /**
@@ -105,6 +121,33 @@ const isCommandFailure = (error: unknown): error is CommandFailure =>
     'kind' in error &&
     'command' in error &&
     typeof (error as CommandFailure).kind === 'string';
+
+/**
+ * Check if a command is a motor command (can fail due to hardware issues).
+ */
+const isMotorCommand = (command: CalibrationCommand): boolean =>
+    command.type === 'HOME_ALL' ||
+    command.type === 'MOVE_AXIS' ||
+    command.type === 'MOVE_AXES_BATCH' ||
+    command.type === 'MOVE_TILE_POSE' ||
+    command.type === 'MOVE_TILES_BATCH';
+
+/**
+ * Get tile context from a command if available.
+ */
+const getCommandTileContext = (command: CalibrationCommand): TileAddress | null => {
+    if (command.type === 'MOVE_TILE_POSE') {
+        return command.tile;
+    }
+    if (command.type === 'MOVE_TILES_BATCH' && command.moves.length === 1) {
+        return command.moves[0].tile;
+    }
+    if (command.type === 'MOVE_AXIS') {
+        // MOVE_AXIS doesn't have tile context directly, but caller can provide via active tile
+        return null;
+    }
+    return null;
+};
 
 // =============================================================================
 // EXECUTOR CLASS
@@ -140,8 +183,16 @@ export class CalibrationExecutor {
     private stepGateReject: ((err: Error) => void) | null = null;
     private activeStep: CalibrationStepState | null = null;
 
+    // Decision gate control
+    private pendingDecision: PendingDecision | null = null;
+    private decisionGateResolve: ((decision: DecisionOption) => void) | null = null;
+    private decisionGateReject: ((err: Error) => void) | null = null;
+
     // Axis position tracking
     private readonly axisPositions = new Map<string, number>();
+
+    // Tiles skipped due to command failures (to skip subsequent commands)
+    private readonly skippedTiles = new Set<string>();
 
     // Command log counter
     private commandLogCounter = 0;
@@ -215,6 +266,26 @@ export class CalibrationExecutor {
     }
 
     /**
+     * Get the current pending decision, if any.
+     */
+    getPendingDecision(): PendingDecision | null {
+        return this.pendingDecision;
+    }
+
+    /**
+     * Submit a decision to continue after AWAIT_DECISION command.
+     */
+    submitDecision(decision: DecisionOption): void {
+        if (this.decisionGateResolve) {
+            this.decisionGateResolve(decision);
+            this.decisionGateResolve = null;
+            this.decisionGateReject = null;
+            this.pendingDecision = null;
+            this.callbacks.onPendingDecision?.(null);
+        }
+    }
+
+    /**
      * Abort execution.
      */
     abort(): void {
@@ -228,6 +299,13 @@ export class CalibrationExecutor {
             this.stepGateReject(new ExecutorAbortError());
             this.stepGateResolve = null;
             this.stepGateReject = null;
+        }
+        if (this.decisionGateReject) {
+            this.decisionGateReject(new ExecutorAbortError());
+            this.decisionGateResolve = null;
+            this.decisionGateReject = null;
+            this.pendingDecision = null;
+            this.callbacks.onPendingDecision?.(null);
         }
     }
 
@@ -262,6 +340,36 @@ export class CalibrationExecutor {
                 break;
             }
 
+            // Motor commands get retry/skip/ignore/abort handling
+            if (isMotorCommand(command)) {
+                // Check if this command is for a tile that was already skipped
+                const tileContext = getCommandTileContext(command) ?? this.state.activeTile ?? null;
+                if (tileContext && this.skippedTiles.has(tileContext.key)) {
+                    // Skip commands for already-skipped tiles
+                    result = this.getSuccessResultForCommand(command);
+                    continue;
+                }
+
+                const motorResult = await this.executeMotorCommandWithRetry(command);
+                if (motorResult === 'abort') {
+                    this.updateState({ phase: 'aborted', activeTile: null, error: null });
+                    return;
+                }
+                if (motorResult === 'skip' && tileContext) {
+                    // Track skipped tile to skip subsequent commands
+                    this.skippedTiles.add(tileContext.key);
+                    // Mark tile as skipped in state
+                    this.executeUpdateTile(tileContext.key, {
+                        status: 'skipped',
+                        error: 'Motor command failed - skipped by user',
+                    });
+                }
+                // For 'success', 'skip', or 'ignore', continue with success result
+                // (skip has already marked the tile, ignore just proceeds)
+                result = this.getSuccessResultForCommand(command);
+                continue;
+            }
+
             try {
                 result = await this.executeCommand(command);
             } catch (error) {
@@ -285,6 +393,102 @@ export class CalibrationExecutor {
 
                 throw error;
             }
+        }
+    }
+
+    /**
+     * Execute a motor command with retry/skip/ignore/abort handling.
+     * Returns 'success', 'skip', 'ignore', or 'abort'.
+     */
+    private async executeMotorCommandWithRetry(
+        command: CalibrationCommand,
+    ): Promise<'success' | 'skip' | 'ignore' | 'abort'> {
+        while (true) {
+            // Check abort before each attempt
+            if (this.abortController.signal.aborted) {
+                return 'abort';
+            }
+
+            try {
+                await this.executeCommand(command);
+                return 'success';
+            } catch (error) {
+                if (error instanceof ExecutorAbortError) {
+                    return 'abort';
+                }
+
+                const errorMessage = error instanceof Error ? error.message : String(error);
+
+                // Emit structured error for toast display
+                if (isCommandFailure(error)) {
+                    const detail = extractCommandErrorDetail(error);
+                    this.callbacks.onCommandError?.({
+                        title: 'Calibration',
+                        totalCount: 1,
+                        errors: [detail],
+                    });
+                }
+
+                // Get tile context - from command or fall back to active tile
+                const tileContext = getCommandTileContext(command) ?? this.state.activeTile;
+
+                // Determine options based on whether we have tile context
+                // - With tile context during measuring: can ignore (keep home, infer) or skip
+                // - With tile context before measuring: can skip the tile
+                // - Without tile context (e.g., HOME_ALL): can only retry or abort
+                const inMeasuringPhase = this.state.phase === 'measuring';
+                const options: DecisionOption[] = tileContext
+                    ? inMeasuringPhase
+                        ? ['retry', 'ignore', 'skip', 'abort'] // During step test, ignore keeps home data
+                        : ['retry', 'skip', 'abort']
+                    : ['retry', 'abort'];
+
+                // Present decision to user
+                const decisionResult = await this.executeAwaitDecision({
+                    type: 'AWAIT_DECISION',
+                    kind: 'command-failure',
+                    tile: tileContext,
+                    error: `${command.type} failed: ${errorMessage}`,
+                    options,
+                });
+
+                const decision =
+                    decisionResult.type === 'AWAIT_DECISION' ? decisionResult.decision : 'abort';
+
+                if (decision === 'retry') {
+                    // Loop will retry
+                    continue;
+                }
+                if (decision === 'ignore') {
+                    // Continue as if command succeeded (motor may be in wrong position)
+                    return 'ignore';
+                }
+                if (decision === 'skip') {
+                    return 'skip';
+                }
+                // decision === 'abort'
+                return 'abort';
+            }
+        }
+    }
+
+    /**
+     * Get the success result for a command type.
+     */
+    private getSuccessResultForCommand(command: CalibrationCommand): CommandResult {
+        switch (command.type) {
+            case 'HOME_ALL':
+                return { type: 'HOME_ALL', success: true };
+            case 'MOVE_AXIS':
+                return { type: 'MOVE_AXIS', success: true };
+            case 'MOVE_AXES_BATCH':
+                return { type: 'MOVE_AXES_BATCH', success: true };
+            case 'MOVE_TILE_POSE':
+                return { type: 'MOVE_TILE_POSE', success: true };
+            case 'MOVE_TILES_BATCH':
+                return { type: 'MOVE_TILES_BATCH', success: true };
+            default:
+                return { type: 'LOG', success: true };
         }
     }
 
@@ -319,14 +523,23 @@ export class CalibrationExecutor {
             case 'MOVE_AXIS':
                 return this.executeMoveAxis(command.motor, command.target);
 
+            case 'MOVE_AXES_BATCH':
+                return this.executeMoveAxesBatch(command.moves);
+
             case 'MOVE_TILE_POSE':
                 return this.executeMoveTilePose(command.tile, command.pose);
+
+            case 'MOVE_TILES_BATCH':
+                return this.executeMoveTilesBatch(command.moves);
 
             case 'CAPTURE':
                 return this.executeCapture(command);
 
             case 'DELAY':
                 return this.executeDelay(command.ms);
+
+            case 'AWAIT_DECISION':
+                return this.executeAwaitDecision(command);
 
             case 'UPDATE_PHASE':
                 return this.executeUpdatePhase(command.phase);
@@ -339,6 +552,15 @@ export class CalibrationExecutor {
 
             case 'LOG':
                 return this.executeLog(command.hint, command.tile, command.group, command.metadata);
+
+            case 'UPDATE_SUMMARY':
+                return this.executeUpdateSummary(command.summary);
+
+            case 'UPDATE_EXPECTED_POSITION':
+                return this.executeUpdateExpectedPosition(command.position, command.tolerance);
+
+            case 'UPDATE_PROGRESS':
+                return this.executeUpdateProgress(command.progress);
         }
     }
 
@@ -370,6 +592,33 @@ export class CalibrationExecutor {
         await this.adapters.motor.moveMotor(motor.nodeMac, motor.motorIndex, clamped);
         this.axisPositions.set(axisKey, clamped);
         return { type: 'MOVE_AXIS', success: true };
+    }
+
+    private async executeMoveAxesBatch(
+        moves: Array<{ motor: { nodeMac: string; motorIndex: number }; target: number }>,
+    ): Promise<CommandResult> {
+        const allMoves: Promise<void>[] = [];
+
+        for (const { motor, target } of moves) {
+            const roundedTarget = roundSteps(target);
+            const clamped = clampSteps(roundedTarget);
+            const axisKey = `${motor.nodeMac}:${motor.motorIndex}`;
+
+            const current = this.axisPositions.get(axisKey);
+            if (current === clamped) {
+                // Already at target, skip move
+                continue;
+            }
+
+            allMoves.push(
+                this.adapters.motor.moveMotor(motor.nodeMac, motor.motorIndex, clamped).then(() => {
+                    this.axisPositions.set(axisKey, clamped);
+                }),
+            );
+        }
+
+        await Promise.all(allMoves);
+        return { type: 'MOVE_AXES_BATCH', success: true };
     }
 
     private async executeMoveTilePose(
@@ -424,14 +673,64 @@ export class CalibrationExecutor {
         return { type: 'MOVE_TILE_POSE', success: true };
     }
 
+    private async executeMoveTilesBatch(
+        moves: Array<{ tile: TileAddress; pose: 'home' | 'aside' }>,
+    ): Promise<CommandResult> {
+        const stagingConfig: StagingConfig = {
+            gridSize: this.config.gridSize,
+            arrayRotation: this.config.arrayRotation,
+            stagingPosition: this.config.stagingPosition,
+        };
+
+        // Collect all individual axis moves
+        const allMoves: Promise<void>[] = [];
+
+        for (const { tile, pose } of moves) {
+            const assignment = this.getTileAssignment(tile.key);
+            if (!assignment) {
+                continue;
+            }
+
+            const targets = computePoseTargets(
+                { row: tile.row, col: tile.col },
+                pose,
+                stagingConfig,
+            );
+
+            if (assignment.x) {
+                const xTarget = clampSteps(roundSteps(targets.x));
+                allMoves.push(
+                    this.adapters.motor
+                        .moveMotor(assignment.x.nodeMac, assignment.x.motorIndex, xTarget)
+                        .then(() => {
+                            const key = `${assignment.x!.nodeMac}:${assignment.x!.motorIndex}`;
+                            this.axisPositions.set(key, xTarget);
+                        }),
+                );
+            }
+            if (assignment.y) {
+                const yTarget = clampSteps(roundSteps(targets.y));
+                allMoves.push(
+                    this.adapters.motor
+                        .moveMotor(assignment.y.nodeMac, assignment.y.motorIndex, yTarget)
+                        .then(() => {
+                            const key = `${assignment.y!.nodeMac}:${assignment.y!.motorIndex}`;
+                            this.axisPositions.set(key, yTarget);
+                        }),
+                );
+            }
+        }
+
+        await Promise.all(allMoves);
+        return { type: 'MOVE_TILES_BATCH', success: true };
+    }
+
     private async executeCapture(command: CaptureCommand): Promise<CommandResult> {
         const { settings } = this.config;
         let lastError: string | undefined;
 
-        // Show expected position overlay
-        if (command.expectedPosition) {
-            this.callbacks.onExpectedPositionChange?.(command.expectedPosition, command.tolerance);
-        }
+        // Note: Expected position overlay is now controlled by UPDATE_EXPECTED_POSITION commands
+        // from the script. CAPTURE.expectedPosition is only used for blob selection validation.
 
         // Retry loop
         for (let attempt = 0; attempt < settings.maxDetectionRetries; attempt++) {
@@ -492,6 +791,31 @@ export class CalibrationExecutor {
         return { type: 'DELAY', success: true };
     }
 
+    private async executeAwaitDecision(command: AwaitDecisionCommand): Promise<CommandResult> {
+        // Set pending decision state
+        this.pendingDecision = {
+            kind: command.kind,
+            tile: command.tile,
+            error: command.error,
+            options: command.options,
+        };
+
+        // Notify UI
+        this.callbacks.onPendingDecision?.(this.pendingDecision);
+
+        // Wait for user decision
+        const decision = await new Promise<DecisionOption>((resolve, reject) => {
+            if (this.abortController.signal.aborted) {
+                reject(new ExecutorAbortError());
+                return;
+            }
+            this.decisionGateResolve = resolve;
+            this.decisionGateReject = reject;
+        });
+
+        return { type: 'AWAIT_DECISION', decision };
+    }
+
     // -------------------------------------------------------------------------
     // State Commands
     // -------------------------------------------------------------------------
@@ -538,8 +862,8 @@ export class CalibrationExecutor {
         };
         this.emitState();
 
-        // Emit tile error callback when a tile is marked as failed
-        if (patch.status === 'failed' && patch.error) {
+        // Emit tile error callback when a tile is marked as failed or skipped
+        if ((patch.status === 'failed' || patch.status === 'skipped') && patch.error) {
             this.callbacks.onTileError?.(current.tile.row, current.tile.col, patch.error);
         }
 
@@ -597,6 +921,29 @@ export class CalibrationExecutor {
         };
         this.callbacks.onCommandLog?.(entry);
         return { type: 'LOG', success: true };
+    }
+
+    private executeUpdateSummary(summary: CalibrationRunSummary): CommandResult {
+        this.updateState({ summary });
+        return { type: 'UPDATE_SUMMARY', success: true };
+    }
+
+    private executeUpdateExpectedPosition(
+        position: { x: number; y: number } | null,
+        tolerance: number,
+    ): CommandResult {
+        this.callbacks.onExpectedPositionChange?.(position, tolerance);
+        return { type: 'UPDATE_EXPECTED_POSITION', success: true };
+    }
+
+    private executeUpdateProgress(progress: {
+        completed: number;
+        failed: number;
+        skipped: number;
+        total: number;
+    }): CommandResult {
+        this.updateState({ progress });
+        return { type: 'UPDATE_PROGRESS', success: true };
     }
 
     // =========================================================================

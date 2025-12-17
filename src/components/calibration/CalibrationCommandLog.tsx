@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import CollapsibleSection from '@/components/common/CollapsibleSection';
-import type { CalibrationCommandLogEntry } from '@/services/calibrationRunner';
+import type { CalibrationCommandLogEntry } from '@/services/calibration/types';
 
 import { buildCommandLogGroups, formatLogTileLabel } from './commandLogUtils';
 

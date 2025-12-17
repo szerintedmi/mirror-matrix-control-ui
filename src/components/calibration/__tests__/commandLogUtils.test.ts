@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CalibrationCommandLogEntry } from '@/services/calibrationRunner';
+import type { CalibrationCommandLogEntry } from '@/services/calibration/types';
 
 import { buildCommandLogGroups, formatLogTileLabel, parseLogTileAddress } from '../commandLogUtils';
 

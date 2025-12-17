@@ -84,21 +84,36 @@ function createFakeAdapters() {
     };
 }
 
+/**
+ * Push multiple capture results to the fake camera adapter.
+ * For single tile: home + interim X + full X + interim Y + full Y = 5 captures
+ */
+function queueCaptureResults(
+    camera: ReturnType<typeof createFakeCameraAdapter>,
+    count: number,
+    measurement: BlobMeasurement = createMeasurement(0.5, 0.5, 0.1),
+) {
+    for (let i = 0; i < count; i++) {
+        camera.results.push({ measurement });
+    }
+}
+
 // =============================================================================
 // TESTS
 // =============================================================================
 
 describe('CalibrationExecutor', () => {
+    // Single tile needs 5 captures: home + interim X + full X + interim Y + full Y
+    const SINGLE_TILE_CAPTURES = 5;
+
     describe('basic execution', () => {
         it('runs script to completion with successful capture', async () => {
             const config = createTestConfig();
             const adapters = createFakeAdapters();
             const stateChanges: string[] = [];
 
-            // Queue successful capture result
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            // Queue successful capture results for all step tests
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onStateChange: (state) => stateChanges.push(state.phase),
@@ -118,9 +133,7 @@ describe('CalibrationExecutor', () => {
             const config = createTestConfig();
             const adapters = createFakeAdapters();
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {});
             await executor.run(calibrationScript);
@@ -129,25 +142,33 @@ describe('CalibrationExecutor', () => {
             const homeCommands = adapters.motor.commands.filter((c) => c.type === 'homeAll');
             expect(homeCommands.length).toBeGreaterThan(0);
 
-            // Should have move commands for staging and measuring
+            // Should have move commands for staging, measuring, and step tests
             const moveCommands = adapters.motor.commands.filter((c) => c.type === 'moveMotor');
             expect(moveCommands.length).toBeGreaterThan(0);
         });
 
-        it('transitions to error phase on capture failure', async () => {
+        it('completes with skipped tile when home capture fails and user skips', async () => {
             const config = createTestConfig();
             const adapters = createFakeAdapters();
 
-            // Queue failed capture results for all retries
+            // Queue failed capture results for all retries (only home capture)
             for (let i = 0; i < config.settings.maxDetectionRetries; i++) {
                 adapters.camera.results.push({ measurement: null });
             }
 
-            const executor = new CalibrationExecutor(config, adapters, {});
+            const executor = new CalibrationExecutor(config, adapters, {
+                onPendingDecision: (decision) => {
+                    if (decision) {
+                        // Defer to allow the promise to be set up
+                        setTimeout(() => executor.submitDecision('skip'), 0);
+                    }
+                },
+            });
             await executor.run(calibrationScript);
 
             const state = executor.getState();
-            expect(state.phase).toBe('error');
+            // With single tile skipped, still completes
+            expect(state.phase).toBe('completed');
         });
     });
 
@@ -162,21 +183,24 @@ describe('CalibrationExecutor', () => {
             });
             const adapters = createFakeAdapters();
 
-            // Fail twice, succeed on third
+            // Fail twice, succeed on third for home capture
             adapters.camera.results.push({ measurement: null });
             adapters.camera.results.push({ measurement: null });
             adapters.camera.results.push({
                 measurement: createMeasurement(0.5, 0.5, 0.1),
             });
+            // Queue remaining captures for step tests
+            queueCaptureResults(adapters.camera, 4);
 
             const executor = new CalibrationExecutor(config, adapters, {});
             await executor.run(calibrationScript);
 
             expect(executor.getState().phase).toBe('completed');
-            expect(adapters.camera.captureCount).toBe(3);
+            // 3 retries for home + 4 step test captures = 7 total
+            expect(adapters.camera.captureCount).toBe(7);
         });
 
-        it('fails after exhausting retries', async () => {
+        it('skips tile after exhausting retries when user skips', async () => {
             const config = createTestConfig({
                 settings: {
                     ...DEFAULT_CALIBRATION_RUNNER_SETTINGS,
@@ -186,14 +210,22 @@ describe('CalibrationExecutor', () => {
             });
             const adapters = createFakeAdapters();
 
-            // Fail all retries
+            // Fail all retries for home capture
             adapters.camera.results.push({ measurement: null });
             adapters.camera.results.push({ measurement: null });
 
-            const executor = new CalibrationExecutor(config, adapters, {});
+            const executor = new CalibrationExecutor(config, adapters, {
+                onPendingDecision: (decision) => {
+                    if (decision) {
+                        // Defer to allow the promise to be set up
+                        setTimeout(() => executor.submitDecision('skip'), 0);
+                    }
+                },
+            });
             await executor.run(calibrationScript);
 
-            expect(executor.getState().phase).toBe('error');
+            // Single tile skipped still completes
+            expect(executor.getState().phase).toBe('completed');
             expect(adapters.camera.captureCount).toBe(2);
         });
     });
@@ -205,9 +237,7 @@ describe('CalibrationExecutor', () => {
             const adapters = createFakeAdapters();
             const stepKinds: string[] = [];
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onStepStateChange: (state) => {
@@ -220,8 +250,17 @@ describe('CalibrationExecutor', () => {
 
             await executor.run(calibrationScript);
 
-            // Should have 3 checkpoints in skeleton script
-            expect(stepKinds).toEqual(['home-all', 'stage-all', 'measure-home']);
+            // Full script has checkpoints for home-all, stage-all, measure-home, step tests, and alignment
+            expect(stepKinds).toEqual([
+                'home-all',
+                'stage-all',
+                'measure-home',
+                'step-test-x-interim',
+                'step-test-x',
+                'step-test-y-interim',
+                'step-test-y',
+                'align-grid',
+            ]);
         });
 
         it('does not wait at checkpoints in auto mode', async () => {
@@ -229,9 +268,7 @@ describe('CalibrationExecutor', () => {
             const adapters = createFakeAdapters();
             let waitingCount = 0;
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onStepStateChange: (state) => {
@@ -252,9 +289,7 @@ describe('CalibrationExecutor', () => {
             const adapters = createFakeAdapters();
             const logEntries: string[] = [];
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onCommandLog: (entry) => logEntries.push(entry.hint),
@@ -373,9 +408,7 @@ describe('CalibrationExecutor', () => {
                     homeAllHandler.resolve = resolve;
                 });
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onStateChange: (state) => phases.push(state.phase),
@@ -414,9 +447,8 @@ describe('CalibrationExecutor', () => {
             const adapters = createFakeAdapters();
             const stepStates: Array<{ kind: string; status: string }> = [];
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            // Queue enough captures for all step tests
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onStepStateChange: (state) => {
@@ -435,6 +467,7 @@ describe('CalibrationExecutor', () => {
             expect(waitingSteps.length).toBeGreaterThan(0);
 
             // Advance through all checkpoints with delays
+            // Now we have 7 checkpoints: home-all, stage-all, measure-home, x-interim, x-full, y-interim, y-full
             for (let i = 0; i < 10; i++) {
                 executor.advance();
                 await new Promise((r) => setTimeout(r, 5));
@@ -446,7 +479,7 @@ describe('CalibrationExecutor', () => {
     });
 
     describe('callbacks', () => {
-        it('calls onTileError when tile is marked as failed', async () => {
+        it('calls onTileError when tile is skipped', async () => {
             const config = createTestConfig();
             const adapters = createFakeAdapters();
             const tileErrors: Array<{ row: number; col: number; message: string }> = [];
@@ -460,6 +493,12 @@ describe('CalibrationExecutor', () => {
                 onTileError: (row, col, message) => {
                     tileErrors.push({ row, col, message });
                 },
+                onPendingDecision: (decision) => {
+                    if (decision) {
+                        // Defer to allow the promise to be set up
+                        setTimeout(() => executor.submitDecision('skip'), 0);
+                    }
+                },
             });
 
             await executor.run(calibrationScript);
@@ -469,6 +508,33 @@ describe('CalibrationExecutor', () => {
             expect(tileErrors[0].col).toBe(0);
             expect(tileErrors[0].message).toContain('blob');
         });
+
+        it('calls onPendingDecision when awaiting decision', async () => {
+            const config = createTestConfig();
+            const adapters = createFakeAdapters();
+            const pendingDecisions: Array<{ kind: string; error: string }> = [];
+
+            // Fail all captures
+            for (let i = 0; i < config.settings.maxDetectionRetries; i++) {
+                adapters.camera.results.push({ measurement: null });
+            }
+
+            const executor = new CalibrationExecutor(config, adapters, {
+                onPendingDecision: (decision) => {
+                    if (decision) {
+                        pendingDecisions.push({ kind: decision.kind, error: decision.error });
+                        // Defer to allow the promise to be set up
+                        setTimeout(() => executor.submitDecision('skip'), 0);
+                    }
+                },
+            });
+
+            await executor.run(calibrationScript);
+
+            expect(pendingDecisions.length).toBe(1);
+            expect(pendingDecisions[0].kind).toBe('tile-failure');
+            expect(pendingDecisions[0].error).toContain('blob');
+        });
     });
 
     describe('state derivation', () => {
@@ -477,9 +543,7 @@ describe('CalibrationExecutor', () => {
             const adapters = createFakeAdapters();
             const activeTiles: Array<{ row: number; col: number } | null> = [];
 
-            adapters.camera.results.push({
-                measurement: createMeasurement(0.5, 0.5, 0.1),
-            });
+            queueCaptureResults(adapters.camera, SINGLE_TILE_CAPTURES);
 
             const executor = new CalibrationExecutor(config, adapters, {
                 onStateChange: (state) => {

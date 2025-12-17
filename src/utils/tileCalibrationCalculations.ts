@@ -1,6 +1,6 @@
 import { convertNormalizedToSteps } from '@/components/calibration/calibrationMetricsFormatters';
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
-import type { TileCalibrationResult, TileRunState } from '@/services/calibrationRunner';
+import type { TileCalibrationResult, TileRunState } from '@/services/calibration/types';
 
 /**
  * Input metrics extracted from TileRunState and TileCalibrationResult

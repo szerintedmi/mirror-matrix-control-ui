@@ -15,10 +15,11 @@ import type { BlobMeasurement, Motor } from '@/types';
 
 import type {
     CalibrationRunnerPhase,
+    CalibrationRunSummary,
     CalibrationStepDescriptor,
     TileAddress,
     TileRunState,
-} from '../../calibrationRunner';
+} from '../types';
 
 // =============================================================================
 // COMMAND TYPES
@@ -44,6 +45,16 @@ export interface MoveAxisCommand {
 }
 
 /**
+ * Move multiple motor axes in parallel.
+ * Used for alignment phase where multiple tiles need adjustment.
+ * Executor runs all moves concurrently with Promise.all().
+ */
+export interface MoveAxesBatchCommand {
+    type: 'MOVE_AXES_BATCH';
+    moves: Array<{ motor: Motor; target: number }>;
+}
+
+/**
  * Move a tile to a named pose (home or aside).
  * Executor computes actual step targets using computePoseTargets() and moves both axes.
  * This keeps rotation/staging math centralized in the executor.
@@ -52,6 +63,16 @@ export interface MoveTilePoseCommand {
     type: 'MOVE_TILE_POSE';
     tile: TileAddress;
     pose: 'home' | 'aside';
+}
+
+/**
+ * Move multiple tiles to poses in parallel.
+ * Used for staging (move all aside) and alignment phases.
+ * Executor runs all moves concurrently with Promise.all().
+ */
+export interface MoveTilesBatchCommand {
+    type: 'MOVE_TILES_BATCH';
+    moves: Array<{ tile: TileAddress; pose: 'home' | 'aside' }>;
 }
 
 /**
@@ -78,13 +99,42 @@ export interface DelayCommand {
     ms: number;
 }
 
+/**
+ * Decision options for user choices during calibration.
+ * - retry: Try the capture again
+ * - skip: Skip the entire tile (used for home measurement failures)
+ * - ignore: Keep partial data and infer missing values (used for step test failures)
+ * - abort: Stop calibration entirely
+ */
+export type DecisionOption = 'retry' | 'skip' | 'ignore' | 'abort';
+
+/**
+ * Await a user decision (e.g., after a tile failure).
+ * Executor pauses and emits state with decision options.
+ * UI shows buttons, user choice is fed back via executor.submitDecision().
+ */
+export interface AwaitDecisionCommand {
+    type: 'AWAIT_DECISION';
+    /** Kind of decision being requested */
+    kind: 'tile-failure' | 'step-test-failure' | 'command-failure';
+    /** Tile that failed (for UI context), may be null for global commands like HOME_ALL */
+    tile: TileAddress | null;
+    /** Error message describing the failure */
+    error: string;
+    /** Available decision options */
+    options: DecisionOption[];
+}
+
 /** IO commands that require adapter calls */
 export type IOCommand =
     | HomeAllCommand
     | MoveAxisCommand
+    | MoveAxesBatchCommand
     | MoveTilePoseCommand
+    | MoveTilesBatchCommand
     | CaptureCommand
-    | DelayCommand;
+    | DelayCommand
+    | AwaitDecisionCommand;
 
 // -----------------------------------------------------------------------------
 // State/Event Commands
@@ -130,8 +180,49 @@ export interface LogCommand {
     metadata?: Record<string, unknown>;
 }
 
+/**
+ * Update the calibration run summary (WIP blueprint, tile summaries).
+ * Used to display progressive results during calibration.
+ */
+export interface UpdateSummaryCommand {
+    type: 'UPDATE_SUMMARY';
+    summary: CalibrationRunSummary;
+}
+
+/**
+ * Update the expected blob position overlay.
+ * Non-blocking command to show the expected position before motor moves.
+ */
+export interface UpdateExpectedPositionCommand {
+    type: 'UPDATE_EXPECTED_POSITION';
+    /** Expected position in viewport coordinates (0-1), or null to clear */
+    position: { x: number; y: number } | null;
+    /** Tolerance radius for display */
+    tolerance: number;
+}
+
+/**
+ * Update the progress counters.
+ */
+export interface UpdateProgressCommand {
+    type: 'UPDATE_PROGRESS';
+    progress: {
+        completed: number;
+        failed: number;
+        skipped: number;
+        total: number;
+    };
+}
+
 /** State commands that update executor state without IO */
-export type StateCommand = UpdatePhaseCommand | UpdateTileCommand | CheckpointCommand | LogCommand;
+export type StateCommand =
+    | UpdatePhaseCommand
+    | UpdateTileCommand
+    | CheckpointCommand
+    | LogCommand
+    | UpdateSummaryCommand
+    | UpdateExpectedPositionCommand
+    | UpdateProgressCommand;
 
 // -----------------------------------------------------------------------------
 // Combined Command Type
@@ -151,13 +242,19 @@ export type CalibrationCommand = IOCommand | StateCommand;
 export type CommandResult =
     | { type: 'HOME_ALL'; success: true }
     | { type: 'MOVE_AXIS'; success: true }
+    | { type: 'MOVE_AXES_BATCH'; success: true }
     | { type: 'MOVE_TILE_POSE'; success: true }
+    | { type: 'MOVE_TILES_BATCH'; success: true }
     | { type: 'CAPTURE'; measurement: BlobMeasurement | null; error?: string }
     | { type: 'DELAY'; success: true }
+    | { type: 'AWAIT_DECISION'; decision: DecisionOption }
     | { type: 'UPDATE_PHASE'; success: true }
     | { type: 'UPDATE_TILE'; success: true }
     | { type: 'CHECKPOINT'; success: true }
-    | { type: 'LOG'; success: true };
+    | { type: 'LOG'; success: true }
+    | { type: 'UPDATE_SUMMARY'; success: true }
+    | { type: 'UPDATE_EXPECTED_POSITION'; success: true }
+    | { type: 'UPDATE_PROGRESS'; success: true };
 
 // =============================================================================
 // ADAPTER INTERFACES
@@ -240,9 +337,12 @@ export function isIOCommand(cmd: CalibrationCommand): cmd is IOCommand {
     return (
         cmd.type === 'HOME_ALL' ||
         cmd.type === 'MOVE_AXIS' ||
+        cmd.type === 'MOVE_AXES_BATCH' ||
         cmd.type === 'MOVE_TILE_POSE' ||
+        cmd.type === 'MOVE_TILES_BATCH' ||
         cmd.type === 'CAPTURE' ||
-        cmd.type === 'DELAY'
+        cmd.type === 'DELAY' ||
+        cmd.type === 'AWAIT_DECISION'
     );
 }
 
@@ -252,6 +352,9 @@ export function isStateCommand(cmd: CalibrationCommand): cmd is StateCommand {
         cmd.type === 'UPDATE_PHASE' ||
         cmd.type === 'UPDATE_TILE' ||
         cmd.type === 'CHECKPOINT' ||
-        cmd.type === 'LOG'
+        cmd.type === 'LOG' ||
+        cmd.type === 'UPDATE_SUMMARY' ||
+        cmd.type === 'UPDATE_EXPECTED_POSITION' ||
+        cmd.type === 'UPDATE_PROGRESS'
     );
 }

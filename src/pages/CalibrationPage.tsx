@@ -209,7 +209,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Only load once on mount
 
-    // Callback for CalibrationRunner to update expected position overlay before motor moves
+    // Callback for CalibrationExecutor to update expected position overlay before motor moves
     const handleExpectedPositionChange = useCallback(
         (position: { x: number; y: number } | null, tolerance: number) => {
             if (position) {

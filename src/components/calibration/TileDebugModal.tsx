@@ -2,7 +2,7 @@ import React from 'react';
 
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import Modal from '@/components/Modal';
-import type { TileCalibrationResult, TileRunState } from '@/services/calibrationRunner';
+import type { TileCalibrationResult, TileRunState } from '@/services/calibration/types';
 import type { Motor, MotorTelemetry } from '@/types';
 import { computeTileMetrics, getAxisAssignmentLabel } from '@/utils/tileCalibrationCalculations';
 import { generateTileFormulas } from '@/utils/tileCalibrationFormulas';

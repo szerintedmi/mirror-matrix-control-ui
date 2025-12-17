@@ -9,7 +9,7 @@ import type {
     CalibrationRunnerState,
     CalibrationRunSummary,
     TileRunState,
-} from '@/services/calibrationRunner';
+} from '@/services/calibration/types';
 import type { ArrayRotation, Motor, StagingPosition } from '@/types';
 import type { CommandErrorDetail } from '@/types/commandError';
 import { extractCommandErrorDetail } from '@/utils/commandErrors';

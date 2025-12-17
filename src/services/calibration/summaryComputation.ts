@@ -44,7 +44,7 @@ export interface TileAddress {
 /** Tile calibration result from measurement phase */
 export interface TileCalibrationResult {
     tile: TileAddress;
-    status: 'measuring' | 'completed' | 'failed' | 'skipped';
+    status: 'measuring' | 'completed' | 'partial' | 'failed' | 'skipped';
     error?: string;
     warnings?: string[];
     homeMeasurement?: BlobMeasurement;
@@ -367,10 +367,13 @@ export function computeCalibrationSummary(
     config: SummaryConfig,
 ): CalibrationRunSummary {
     // Filter to tiles with valid home measurements
+    // Include 'partial' tiles (step test failures with inferred values) since they have valid home measurements
     const measuredTiles = Array.from(tileResults.values())
         .filter(
             (entry): entry is TileCalibrationResult & { homeMeasurement: BlobMeasurement } =>
-                (entry.status === 'completed' || entry.status === 'measuring') &&
+                (entry.status === 'completed' ||
+                    entry.status === 'partial' ||
+                    entry.status === 'measuring') &&
                 entry.homeMeasurement !== undefined,
         )
         .map((entry) => ({

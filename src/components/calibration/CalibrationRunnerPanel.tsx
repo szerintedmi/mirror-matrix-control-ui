@@ -6,7 +6,7 @@ import CalibrationStatusBar from '@/components/calibration/CalibrationStatusBar'
 import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
 import MoveActionsDropdown from '@/components/calibration/MoveActionsDropdown';
 import type { CalibrationController } from '@/hooks/useCalibrationController';
-import type { CalibrationRunSummary, CalibrationStepState } from '@/services/calibrationRunner';
+import type { CalibrationRunSummary, CalibrationStepState } from '@/services/calibration/types';
 import type { ArrayRotation, StagingPosition } from '@/types';
 
 interface CalibrationRunnerPanelProps {
@@ -106,11 +106,13 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                         isActive={isCalibrationActive}
                         isPaused={isPaused}
                         detectionReady={detectionReady}
+                        pendingDecision={controller.pendingDecision}
                         onStart={onStart}
                         onPause={onPause}
                         onResume={onResume}
                         onAbort={onAbort}
                         onAdvance={onAdvance}
+                        onSubmitDecision={controller.submitDecision}
                     />
 
                     {/* Actions row */}

@@ -12,7 +12,7 @@ import {
     type BlobSelectionParams,
     type ExpectedBlobPositionInfo,
 } from '@/hooks/useStableBlobMeasurement';
-import type { CalibrationRunSummary, CaptureBlobMeasurement } from '@/services/calibrationRunner';
+import type { CalibrationRunSummary, CaptureBlobMeasurement } from '@/services/calibration/types';
 import type {
     BlobDetectorParams,
     DetectedBlob,

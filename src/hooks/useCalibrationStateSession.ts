@@ -4,7 +4,7 @@ import type {
     CalibrationRunSummary,
     CalibrationRunnerState,
     TileRunState,
-} from '@/services/calibrationRunner';
+} from '@/services/calibration/types';
 
 const SESSION_KEY = 'mirror:calibration:session-state';
 

@@ -1,4 +1,4 @@
-import type { CalibrationCommandLogEntry } from '@/services/calibrationRunner';
+import type { CalibrationCommandLogEntry } from '@/services/calibration/types';
 
 export interface CommandLogGroup {
     id: string;

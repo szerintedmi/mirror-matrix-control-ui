@@ -9,7 +9,7 @@ import {
     TILE_WARNING_TEXT_CLASS,
 } from '@/constants/calibrationUiThemes';
 import type { DriverView } from '@/context/StatusContext';
-import type { CalibrationRunSummary, TileRunState } from '@/services/calibrationRunner';
+import type { CalibrationRunSummary, TileRunState } from '@/services/calibration/types';
 import type { Motor, MotorTelemetry } from '@/types';
 
 interface TileStatusesPanelProps {
@@ -118,6 +118,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
             staged: 0,
             measuring: 0,
             completed: 0,
+            partial: 0,
             failed: 0,
             skipped: 0,
         };
@@ -131,6 +132,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
     const collapsedSummary = useMemo(() => {
         const parts: string[] = [];
         if (statusCounts.completed > 0) parts.push(`${statusCounts.completed} done`);
+        if (statusCounts.partial > 0) parts.push(`${statusCounts.partial} partial`);
         if (statusCounts.failed > 0) parts.push(`${statusCounts.failed} failed`);
         if (statusCounts.measuring > 0) parts.push(`${statusCounts.measuring} measuring`);
         if (statusCounts.staged > 0) parts.push(`${statusCounts.staged} staged`);

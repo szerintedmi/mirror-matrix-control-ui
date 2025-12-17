@@ -8,7 +8,7 @@
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 
 import type { CameraAdapter, CaptureParams, ClockAdapter, MotorAdapter } from './commands';
-import type { CaptureBlobMeasurement } from '../../calibrationRunner';
+import type { CaptureBlobMeasurement } from '../types';
 
 // =============================================================================
 // MOTOR ADAPTER

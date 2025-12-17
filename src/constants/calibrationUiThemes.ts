@@ -1,4 +1,4 @@
-import type { TileRunState } from '@/services/calibrationRunner';
+import type { TileRunState } from '@/services/calibration/types';
 
 /**
  * CSS class mappings for tile calibration status states.
@@ -6,6 +6,7 @@ import type { TileRunState } from '@/services/calibrationRunner';
  */
 export const TILE_STATUS_CLASSES: Record<TileRunState['status'], string> = {
     completed: 'border-emerald-600/60 bg-emerald-500/10 text-emerald-200',
+    partial: 'border-yellow-500/60 bg-yellow-500/10 text-yellow-100',
     measuring: 'border-sky-500/60 bg-sky-500/10 text-sky-100',
     failed: 'border-rose-600/60 bg-rose-500/10 text-rose-100',
     skipped: 'border-gray-800 bg-gray-900 text-gray-500',

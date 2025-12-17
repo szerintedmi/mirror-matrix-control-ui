@@ -16,7 +16,7 @@ import {
     saveCalibrationProfile,
 } from '../calibrationProfileStorage';
 
-import type { CalibrationRunSummary, CalibrationRunnerState } from '../calibrationRunner';
+import type { CalibrationRunSummary, CalibrationRunnerState } from '../calibration/types';
 import type { GridStateSnapshot } from '../gridStorage';
 
 class MemoryStorage implements Storage {

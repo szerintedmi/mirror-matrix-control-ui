@@ -1,7 +1,7 @@
 import React from 'react';
 
 import Modal from '@/components/Modal';
-import type { CalibrationRunSummary } from '@/services/calibrationRunner';
+import type { CalibrationRunSummary } from '@/services/calibration/types';
 
 import { formatDecimal, formatPercent } from './calibrationMetricsFormatters';
 

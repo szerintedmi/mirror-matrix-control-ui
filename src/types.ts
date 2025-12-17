@@ -269,7 +269,7 @@ export interface CalibrationSnapshotCameraMeta {
 
 export interface CalibrationSnapshotTile {
     tile: { row: number; col: number; key: string };
-    status: 'measuring' | 'completed' | 'failed' | 'skipped';
+    status: 'measuring' | 'completed' | 'partial' | 'failed' | 'skipped';
     error?: string;
     warnings?: string[];
     homeMeasurement?: BlobMeasurement;
@@ -344,6 +344,7 @@ export type CalibrationTileStatus =
     | 'staged'
     | 'measuring'
     | 'completed'
+    | 'partial'
     | 'failed'
     | 'skipped';
 

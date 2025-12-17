@@ -11,15 +11,18 @@ import {
 } from '@/constants/calibration';
 import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
+import { createAdapters } from '@/services/calibration/script/adapters';
+import type { DecisionOption } from '@/services/calibration/script/commands';
+import { CalibrationExecutor, type PendingDecision } from '@/services/calibration/script/executor';
+import { calibrationScript } from '@/services/calibration/script/script';
 import {
-    CalibrationRunner,
     type CalibrationCommandLogEntry,
     type CalibrationRunnerState,
     type CalibrationStepState,
     type TileRunState,
     type CaptureBlobMeasurement,
     createBaselineRunnerState,
-} from '@/services/calibrationRunner';
+} from '@/services/calibration/types';
 import type { ArrayRotation, MirrorConfig, NormalizedRoi, StagingPosition } from '@/types';
 
 const clampSetting = (value: number, min: number, max: number): number =>
@@ -73,11 +76,15 @@ export interface CalibrationController {
     runnerSettings: CalibrationRunnerSettings;
     commandLog: CalibrationCommandLogEntry[];
     stepState: CalibrationStepState | null;
+    /** Pending decision for retry/skip UI */
+    pendingDecision: PendingDecision | null;
 
     // Derived state
     tileEntries: TileRunState[];
     isActive: boolean;
     isAwaitingAdvance: boolean;
+    /** Whether a decision is pending from the user */
+    isAwaitingDecision: boolean;
     detectionReady: boolean;
 
     // Settings
@@ -98,6 +105,8 @@ export interface CalibrationController {
     reset: () => void;
     /** Advance to next step (step mode only) */
     advance: () => void;
+    /** Submit a decision for retry/skip/abort */
+    submitDecision: (decision: DecisionOption) => void;
 }
 
 export const useCalibrationController = ({
@@ -132,7 +141,8 @@ export const useCalibrationController = ({
     });
     const [stepState, setStepState] = useState<CalibrationStepState | null>(null);
     const [commandLog, setCommandLog] = useState<CalibrationCommandLogEntry[]>([]);
-    const runnerRef = useRef<CalibrationRunner | null>(null);
+    const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null);
+    const executorRef = useRef<CalibrationExecutor | null>(null);
 
     // Create accumulating error toast for tile errors
     const errorToastRef = useRef(createAccumulatingErrorToast('Calibration'));
@@ -161,20 +171,21 @@ export const useCalibrationController = ({
         setRunnerState(createBaselineRunnerState(gridSize, mirrorConfig));
         setStepState(null);
         setCommandLog([]);
+        setPendingDecision(null);
     }, [gridSize, mirrorConfig]);
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            runnerRef.current?.dispose();
-            runnerRef.current = null;
+            executorRef.current?.abort();
+            executorRef.current = null;
         };
     }, []);
 
     // Reset when grid/mirror config changes
     useEffect(() => {
-        runnerRef.current?.abort();
-        runnerRef.current = null;
+        executorRef.current?.abort();
+        executorRef.current = null;
         // eslint-disable-next-line react-hooks/set-state-in-effect
         resetState();
     }, [gridSize, mirrorConfig, resetState]);
@@ -191,36 +202,50 @@ export const useCalibrationController = ({
             }));
             return;
         }
-        runnerRef.current?.dispose();
-        runnerRef.current = null;
+        executorRef.current?.abort();
+        executorRef.current = null;
 
         // Clear any previous errors and create fresh toast manager
         errorToastRef.current.clear();
         errorToastRef.current = createAccumulatingErrorToast('Calibration');
 
-        const runner = new CalibrationRunner({
-            gridSize,
-            mirrorConfig,
-            motorApi,
-            captureMeasurement,
-            settings: runnerSettings,
-            arrayRotation,
-            stagingPosition,
-            roi,
-            mode,
-            onStateChange: setRunnerState,
-            onStepStateChange: setStepState,
-            onCommandLog: appendLogEntry,
-            onCommandError: showCommandErrorToast,
-            onTileError: (row, col, message) => {
-                errorToastRef.current.addError({ row, col, message });
+        // Create adapters for the executor
+        const adapters = createAdapters(motorApi, captureMeasurement);
+
+        // Create the executor with callbacks
+        const executor = new CalibrationExecutor(
+            {
+                gridSize,
+                mirrorConfig,
+                settings: runnerSettings,
+                arrayRotation,
+                stagingPosition,
+                roi,
+                mode,
             },
-            onExpectedPositionChange,
-        });
-        runnerRef.current = runner;
+            adapters,
+            {
+                onStateChange: setRunnerState,
+                onStepStateChange: setStepState,
+                onCommandLog: appendLogEntry,
+                onCommandError: showCommandErrorToast,
+                onTileError: (row, col, message) => {
+                    errorToastRef.current.addError({ row, col, message });
+                },
+                onExpectedPositionChange,
+                onPendingDecision: setPendingDecision,
+            },
+        );
+        executorRef.current = executor;
         setCommandLog([]);
         setStepState(null);
-        runner.start();
+        setPendingDecision(null);
+
+        // Run the calibration script
+        executor.run(calibrationScript).catch((err) => {
+            // Handle uncaught errors - executor already sets state to error/aborted
+            console.error('Calibration execution failed:', err);
+        });
     }, [
         appendLogEntry,
         arrayRotation,
@@ -237,25 +262,29 @@ export const useCalibrationController = ({
     ]);
 
     const pause = useCallback(() => {
-        runnerRef.current?.pause();
+        executorRef.current?.pause();
     }, []);
 
     const resume = useCallback(() => {
-        runnerRef.current?.resume();
+        executorRef.current?.resume();
     }, []);
 
     const abort = useCallback(() => {
-        runnerRef.current?.abort();
+        executorRef.current?.abort();
     }, []);
 
     const reset = useCallback(() => {
-        runnerRef.current?.dispose();
-        runnerRef.current = null;
+        executorRef.current?.abort();
+        executorRef.current = null;
         resetState();
     }, [resetState]);
 
     const advance = useCallback(() => {
-        runnerRef.current?.advanceStep();
+        executorRef.current?.advance();
+    }, []);
+
+    const submitDecision = useCallback((decision: DecisionOption) => {
+        executorRef.current?.submitDecision(decision);
     }, []);
 
     const tileEntries = useMemo(
@@ -275,6 +304,7 @@ export const useCalibrationController = ({
     );
 
     const isAwaitingAdvance = stepState?.status === 'waiting';
+    const isAwaitingDecision = pendingDecision !== null;
 
     // Track whether we've shown the outlier warning for current calibration
     const outlierToastShownRef = useRef(false);
@@ -333,9 +363,11 @@ export const useCalibrationController = ({
         runnerSettings,
         commandLog,
         stepState,
+        pendingDecision,
         tileEntries,
         isActive,
         isAwaitingAdvance,
+        isAwaitingDecision,
         detectionReady,
         updateSetting,
         mode,
@@ -346,6 +378,7 @@ export const useCalibrationController = ({
         abort,
         reset,
         advance,
+        submitDecision,
     };
 };
 

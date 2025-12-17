@@ -5,12 +5,13 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import { DEFAULT_CALIBRATION_RUNNER_SETTINGS } from '@/constants/calibration';
 import type { CalibrationController } from '@/hooks/useCalibrationController';
+import type { PendingDecision } from '@/services/calibration/script/executor';
 import type {
     CalibrationRunnerState,
     TileRunState,
     TileCalibrationMetrics,
     CalibrationRunSummary,
-} from '@/services/calibrationRunner';
+} from '@/services/calibration/types';
 import type { Motor } from '@/types';
 
 const nudgeMotorMock = vi.fn().mockResolvedValue({ direction: 1 });
@@ -98,17 +99,22 @@ const runnerState: CalibrationRunnerState = {
 
 const noop = () => {};
 
-const createMockController = (state: CalibrationRunnerState): CalibrationController => ({
+const createMockController = (
+    state: CalibrationRunnerState,
+    overrides: Partial<CalibrationController> = {},
+): CalibrationController => ({
     runnerState: state,
     runnerSettings: DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     commandLog: [],
     stepState: null,
+    pendingDecision: null,
     tileEntries: Object.values(state.tiles).sort((a, b) => {
         if (a.tile.row === b.tile.row) return a.tile.col - b.tile.col;
         return a.tile.row - b.tile.row;
     }),
     isActive: false,
     isAwaitingAdvance: false,
+    isAwaitingDecision: false,
     detectionReady: true,
     updateSetting: noop,
     mode: 'auto',
@@ -119,13 +125,21 @@ const createMockController = (state: CalibrationRunnerState): CalibrationControl
     abort: noop,
     reset: noop,
     advance: noop,
+    submitDecision: noop,
+    ...overrides,
 });
 
-const renderPanel = async (options: { runnerState?: CalibrationRunnerState } = {}) => {
+const renderPanel = async (
+    options: {
+        runnerState?: CalibrationRunnerState;
+        controllerOverrides?: Partial<CalibrationController>;
+        isCalibrationActive?: boolean;
+    } = {},
+) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const state = options.runnerState ?? runnerState;
-    const controller = createMockController(state);
+    const controller = createMockController(state, options.controllerOverrides);
     await act(async () => {
         const element = (
             <CalibrationRunnerPanel
@@ -135,7 +149,7 @@ const renderPanel = async (options: { runnerState?: CalibrationRunnerState } = {
                 onArrayRotationChange={noop}
                 stagingPosition="nearest-corner"
                 onStagingPositionChange={noop}
-                isCalibrationActive={false}
+                isCalibrationActive={options.isCalibrationActive ?? false}
                 stepState={null}
                 isAwaitingAdvance={false}
                 isPaused={false}
@@ -264,5 +278,85 @@ describe('CalibrationRunnerPanel homing actions', () => {
                 ],
             ]),
         );
+    });
+});
+
+describe('CalibrationRunnerPanel pending decision UI', () => {
+    it('shows decision buttons when pendingDecision is set', async () => {
+        const pendingDecision: PendingDecision = {
+            kind: 'tile-failure',
+            tile: { row: 1, col: 2, key: '1-2' },
+            error: 'Unable to detect blob at home position',
+            options: ['retry', 'skip', 'abort'],
+        };
+
+        const container = await renderPanel({
+            controllerOverrides: { pendingDecision, isActive: true },
+            isCalibrationActive: true,
+        });
+
+        // Should show the tile identifier
+        expect(container.textContent).toContain('[1,2]');
+        expect(container.textContent).toContain('failed');
+
+        // Should show the error message
+        expect(container.textContent).toContain('Unable to detect blob at home position');
+
+        // Should have all three decision buttons
+        const retryBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
+            btn.textContent?.includes('Retry'),
+        );
+        const skipBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
+            btn.textContent?.includes('Skip'),
+        );
+        const abortBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
+            btn.textContent?.includes('Abort'),
+        );
+
+        expect(retryBtn).toBeTruthy();
+        expect(skipBtn).toBeTruthy();
+        expect(abortBtn).toBeTruthy();
+    });
+
+    it('calls submitDecision when decision button is clicked', async () => {
+        const submitDecisionMock = vi.fn();
+        const pendingDecision: PendingDecision = {
+            kind: 'tile-failure',
+            tile: { row: 0, col: 0, key: '0-0' },
+            error: 'Detection failed',
+            options: ['retry', 'skip', 'abort'],
+        };
+
+        const container = await renderPanel({
+            controllerOverrides: {
+                pendingDecision,
+                isActive: true,
+                submitDecision: submitDecisionMock,
+            },
+            isCalibrationActive: true,
+        });
+
+        const skipBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
+            btn.textContent?.includes('Skip'),
+        );
+        expect(skipBtn).toBeTruthy();
+
+        await act(async () => {
+            skipBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+
+        expect(submitDecisionMock).toHaveBeenCalledWith('skip');
+    });
+
+    it('does not show decision banner when pendingDecision is null', async () => {
+        const container = await renderPanel({
+            controllerOverrides: { pendingDecision: null },
+        });
+
+        // Should not have retry/skip buttons in this context
+        const retryBtn = Array.from(container.querySelectorAll('button')).find(
+            (btn) => btn.textContent === 'Retry',
+        );
+        expect(retryBtn).toBeFalsy();
     });
 });

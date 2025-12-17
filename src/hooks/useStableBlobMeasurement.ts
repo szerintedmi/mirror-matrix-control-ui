@@ -8,7 +8,7 @@ import {
 } from '@/constants/calibration';
 import { asIsotropic, convert, convertDelta } from '@/coords';
 import { computeMedian } from '@/services/calibration/math/robustStatistics';
-import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
+import type { CaptureBlobMeasurement } from '@/services/calibration/types';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
 
 /** Parameters for blob selection when reading a sample. */

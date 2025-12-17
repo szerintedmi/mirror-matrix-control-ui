@@ -2,7 +2,7 @@ import React, { act, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-import type { CaptureBlobMeasurement } from '@/services/calibrationRunner';
+import type { CaptureBlobMeasurement } from '@/services/calibration/types';
 
 import {
     useStableBlobMeasurement,

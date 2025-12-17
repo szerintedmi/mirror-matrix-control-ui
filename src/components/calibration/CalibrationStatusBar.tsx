@@ -1,11 +1,13 @@
 import React from 'react';
 
 import type { CalibrationMode } from '@/hooks/useCalibrationController';
+import type { DecisionOption } from '@/services/calibration/script/commands';
+import type { PendingDecision } from '@/services/calibration/script/executor';
 import type {
     CalibrationRunnerState,
     CalibrationStepKind,
     CalibrationStepState,
-} from '@/services/calibrationRunner';
+} from '@/services/calibration/types';
 
 interface CalibrationStatusBarProps {
     runnerState: CalibrationRunnerState;
@@ -16,11 +18,15 @@ interface CalibrationStatusBarProps {
     isActive: boolean;
     isPaused: boolean;
     detectionReady: boolean;
+    /** Pending decision for user (retry/skip/abort) */
+    pendingDecision: PendingDecision | null;
     onStart: () => void;
     onPause: () => void;
     onResume: () => void;
     onAbort: () => void;
     onAdvance: () => void;
+    /** Submit a decision for retry/skip/abort */
+    onSubmitDecision: (decision: DecisionOption) => void;
 }
 
 /**
@@ -68,11 +74,13 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
     isActive,
     isPaused,
     detectionReady,
+    pendingDecision,
     onStart,
     onPause,
     onResume,
     onAbort,
     onAdvance,
+    onSubmitDecision,
 }) => {
     const { progress, activeTile, phase } = runnerState;
 
@@ -345,6 +353,66 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 <div className="mt-2 flex items-center gap-2 text-xs text-amber-300">
                     <span className="h-2 w-2 rounded-full bg-amber-400" />
                     <span>Calibration paused — press Resume to continue</span>
+                </div>
+            )}
+
+            {/* Pending decision banner */}
+            {pendingDecision && (
+                <div className="mt-3 rounded-md border border-amber-500/50 bg-amber-900/30 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                            <span className="text-sm font-medium text-amber-200">
+                                {pendingDecision.kind === 'command-failure'
+                                    ? pendingDecision.tile
+                                        ? `Command failed for [${pendingDecision.tile.row},${pendingDecision.tile.col}]`
+                                        : 'Command failed'
+                                    : pendingDecision.kind === 'step-test-failure'
+                                      ? `Step test failed for [${pendingDecision.tile!.row},${pendingDecision.tile!.col}]`
+                                      : `Tile [${pendingDecision.tile!.row},${pendingDecision.tile!.col}] failed`}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {pendingDecision.options.includes('retry') && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSubmitDecision('retry')}
+                                    className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-sky-500"
+                                >
+                                    Retry
+                                </button>
+                            )}
+                            {pendingDecision.options.includes('ignore') && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSubmitDecision('ignore')}
+                                    className="rounded-md bg-yellow-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-yellow-500"
+                                    title="Keep home measurement and infer step test values from first tile"
+                                >
+                                    Ignore
+                                </button>
+                            )}
+                            {pendingDecision.options.includes('skip') && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSubmitDecision('skip')}
+                                    className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-500"
+                                >
+                                    Skip Tile
+                                </button>
+                            )}
+                            {pendingDecision.options.includes('abort') && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSubmitDecision('abort')}
+                                    className="rounded-md bg-rose-600/80 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rose-500"
+                                >
+                                    Abort
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="mt-2 text-xs text-amber-300/80">{pendingDecision.error}</div>
                 </div>
             )}
 
