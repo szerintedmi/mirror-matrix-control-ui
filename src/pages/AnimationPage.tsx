@@ -190,15 +190,15 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
         const aspect = selectedCalibrationProfile.calibrationCameraAspect ?? 16 / 9;
         return Object.entries(selectedCalibrationProfile.tiles)
             .map(([id, tile]) => {
-                if (!tile.inferredBounds) {
+                if (!tile.combinedBounds) {
                     return null;
                 }
-                const yMin = tile.inferredBounds.y.min / aspect;
-                const yMax = tile.inferredBounds.y.max / aspect;
+                const yMin = tile.combinedBounds.y.min / aspect;
+                const yMax = tile.combinedBounds.y.max / aspect;
                 return {
                     id,
-                    xMin: tile.inferredBounds.x.min,
-                    xMax: tile.inferredBounds.x.max,
+                    xMin: tile.combinedBounds.x.min,
+                    xMax: tile.combinedBounds.x.max,
                     yMin,
                     yMax,
                 };

@@ -84,8 +84,6 @@ declare global {
 const ALIGNMENT_TEAL = { r: 16, g: 185, b: 129 } as const;
 const formatAlignmentRgba = (alpha: number): string =>
     `rgba(${ALIGNMENT_TEAL.r}, ${ALIGNMENT_TEAL.g}, ${ALIGNMENT_TEAL.b}, ${alpha})`;
-const GLOBAL_BOUNDS_RGBA = 'rgba(250, 204, 21, 0.9)';
-const GLOBAL_BOUNDS_DASH = [6, 6];
 const TILE_BOUNDS_COLORS = ['#fb7185', '#38bdf8', '#c084fc', '#facc15', '#4ade80', '#f472b6'];
 
 const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
@@ -108,11 +106,6 @@ export interface TileBoundsOverlayEntry {
 export interface OverlayCameraOriginOffset {
     x: number;
     y: number;
-}
-
-export interface GlobalBoundsOverlayPayload {
-    bounds: CalibrationProfileBounds;
-    cameraOriginOffset: OverlayCameraOriginOffset;
 }
 
 export interface TileBoundsOverlayPayload {
@@ -179,7 +172,6 @@ export interface CameraPipelineController {
     resetRoi: () => void;
     nativeBlobDetectorAvailable: boolean;
     setAlignmentOverlaySummary: (summary: CalibrationRunSummary | null) => void;
-    setGlobalBoundsOverlayBounds: (payload: GlobalBoundsOverlayPayload | null) => void;
     setTileBoundsOverlayEntries: (payload: TileBoundsOverlayPayload | null) => void;
     blobsOverlayEnabled: boolean;
     setBlobsOverlayEnabled: (enabled: boolean) => void;
@@ -244,7 +236,6 @@ export const useCameraPipeline = ({
     const alignmentOverlayVisibleRef = useRef<boolean>(Boolean(alignmentOverlayVisible));
     const blobsOverlayVisibleRef = useRef<boolean>(true);
     const overlayCvRef = useRef<CvRuntime | null>(null);
-    const globalBoundsRef = useRef<GlobalBoundsOverlayPayload | null>(null);
     const tileBoundsOverlayRef = useRef<TileBoundsOverlayPayload | null>(null);
     /** Expected blob position info for debug overlay (centered coords -1 to 1), or null if not set */
     const expectedBlobPositionRef = useRef<ExpectedBlobPositionInfo | null>(null);
@@ -284,23 +275,6 @@ export const useCameraPipeline = ({
     const setAlignmentOverlaySummary = useCallback((summary: CalibrationRunSummary | null) => {
         alignmentOverlaySummaryRef.current = summary;
     }, []);
-
-    const setGlobalBoundsOverlayBounds = useCallback(
-        (payload: GlobalBoundsOverlayPayload | null) => {
-            globalBoundsRef.current = payload;
-            if (import.meta.env?.DEV && payload) {
-                const { bounds, cameraOriginOffset } = payload;
-                const midX = (bounds.x.min + bounds.x.max) / 2;
-                const midY = (bounds.y.min + bounds.y.max) / 2;
-                console.debug('[Calibration] global bounds updated', {
-                    bounds,
-                    center: { x: midX, y: midY },
-                    cameraOriginOffset,
-                });
-            }
-        },
-        [],
-    );
 
     const setTileBoundsOverlayEntries = useCallback((payload: TileBoundsOverlayPayload | null) => {
         tileBoundsOverlayRef.current = payload;
@@ -830,41 +804,6 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
-            const drawGlobalBoundsCanvas = () => {
-                const payload = globalBoundsRef.current;
-                if (!payload) {
-                    return;
-                }
-                const { bounds, cameraOriginOffset } = payload;
-                const normalizedWidth = bounds.x.max - bounds.x.min;
-                const normalizedHeight = bounds.y.max - bounds.y.min;
-                if (normalizedWidth <= 0 || normalizedHeight <= 0) {
-                    return;
-                }
-                const { x: pxLeft, y: pxTop } = convertPointToPixels(
-                    bounds.x.min + cameraOriginOffset.x,
-                    bounds.y.min + cameraOriginOffset.y,
-                );
-                const pxWidth = convertDeltaToPixelsX(normalizedWidth);
-                const pxHeight = convertDeltaToPixelsY(normalizedHeight);
-                const localLeft = projectCameraValue(pxLeft, 'x');
-                const localTop = projectCameraValue(pxTop, 'y');
-
-                // Use anisotropic projection for rectangular bounds
-                const rectWidth = projectCameraDelta(pxWidth, 'x');
-                const rectHeight = projectCameraDelta(pxHeight, 'y');
-
-                if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
-                    return;
-                }
-                ctx.save();
-                ctx.lineWidth = Math.max(1, Math.min(width, height) * 0.004);
-                ctx.setLineDash(GLOBAL_BOUNDS_DASH);
-                ctx.strokeStyle = GLOBAL_BOUNDS_RGBA;
-                ctx.strokeRect(localLeft, localTop, rectWidth, rectHeight);
-                ctx.restore();
-            };
-
             // Convert centered coordinates [-1,1] to pixel coordinates (camera space)
             // Centered coords map directly to the full frame; letterbox handled by projectCameraValue.
             const convertPointToPixels = (cx: number, cy: number) => {
@@ -1051,12 +990,10 @@ export const useCameraPipeline = ({
                 ctx.restore();
             };
 
-            const hasGlobalBoundsOverlay = Boolean(globalBoundsRef.current);
             const hasTileBoundsOverlay = Boolean(tileBoundsOverlayRef.current?.entries.length);
             if (
                 !blobsOverlayVisibleRef.current &&
                 !alignmentOverlayVisibleRef.current &&
-                !hasGlobalBoundsOverlay &&
                 !hasTileBoundsOverlay
             ) {
                 return;
@@ -1077,7 +1014,6 @@ export const useCameraPipeline = ({
                 drawBlobsCanvas();
                 drawExpectedBlobPositionCanvas();
                 drawAlignmentCanvas();
-                drawGlobalBoundsCanvas();
                 drawTileBoundsCanvas();
                 return;
             }
@@ -1259,42 +1195,6 @@ export const useCameraPipeline = ({
                 });
             };
 
-            const drawGlobalBoundsCv = () => {
-                const payload = globalBoundsRef.current;
-                if (!payload) {
-                    return;
-                }
-                const { bounds, cameraOriginOffset } = payload;
-                const normalizedWidth = bounds.x.max - bounds.x.min;
-                const normalizedHeight = bounds.y.max - bounds.y.min;
-                if (normalizedWidth <= 0 || normalizedHeight <= 0) {
-                    return;
-                }
-                const { x: pxLeft, y: pxTop } = convertPointToPixels(
-                    bounds.x.min + cameraOriginOffset.x,
-                    bounds.y.min + cameraOriginOffset.y,
-                );
-                const pxWidth = convertDeltaToPixelsX(normalizedWidth);
-                const pxHeight = convertDeltaToPixelsY(normalizedHeight);
-                const localLeft = projectCameraValue(pxLeft, 'x');
-                const localTop = projectCameraValue(pxTop, 'y');
-
-                // Use anisotropic projection for rectangular bounds
-                const rectWidth = projectCameraDelta(pxWidth, 'x');
-                const rectHeight = projectCameraDelta(pxHeight, 'y');
-
-                if (rectWidth <= 0 || rectHeight <= 0 || localLeft == null || localTop == null) {
-                    return;
-                }
-                const topLeft = new runtime.Point(Math.round(localLeft), Math.round(localTop));
-                const bottomRight = new runtime.Point(
-                    Math.round(localLeft + rectWidth),
-                    Math.round(localTop + rectHeight),
-                );
-                const color = new runtime.Scalar(21, 204, 250, 230);
-                runtime.rectangle(overlayMat, topLeft, bottomRight, color, 2, runtime.LINE_AA);
-            };
-
             const drawTileBoundsCv = () => {
                 const payload = tileBoundsOverlayRef.current;
                 if (!payload || !payload.entries.length) {
@@ -1360,7 +1260,6 @@ export const useCameraPipeline = ({
             try {
                 drawBlobsCv();
                 drawAlignmentCv();
-                drawGlobalBoundsCv();
                 drawTileBoundsCv();
                 runtime.imshow(canvas, overlayMat);
             } finally {
@@ -1846,7 +1745,6 @@ export const useCameraPipeline = ({
         resetRoi,
         nativeBlobDetectorAvailable,
         setAlignmentOverlaySummary,
-        setGlobalBoundsOverlayBounds,
         setTileBoundsOverlayEntries,
         blobsOverlayEnabled,
         setBlobsOverlayEnabled,

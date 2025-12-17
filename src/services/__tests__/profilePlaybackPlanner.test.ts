@@ -53,7 +53,7 @@ const createCalibratedTile = (row: number, col: number): TileCalibrationResults 
             stepScale: -1_000,
         },
     },
-    inferredBounds: {
+    combinedBounds: {
         x: { min: -1, max: 1 },
         y: { min: -1, max: 1 },
     },
@@ -106,7 +106,6 @@ const createProfile = (
         },
         calibrationSpace: {
             blobStats: null,
-            globalBounds: null,
         },
         tiles,
         metrics: {
@@ -192,7 +191,7 @@ describe('profilePlaybackPlanner', () => {
     it('flags targets that exceed calibrated bounds or missing motors', () => {
         const mirrorConfig = buildMirrorConfig(gridSize.rows, gridSize.cols, { missingY: true });
         const profile = createProfile(gridSize.rows, gridSize.cols);
-        profile.tiles['0-0'].inferredBounds = {
+        profile.tiles['0-0'].combinedBounds = {
             x: { min: -0.5, max: 0.5 },
             y: { min: -0.5, max: 0.5 },
         };
@@ -214,7 +213,7 @@ describe('profilePlaybackPlanner', () => {
         // If we want to force an error, we must make ALL tiles invalid.
 
         for (const key in profile.tiles) {
-            profile.tiles[key].inferredBounds = {
+            profile.tiles[key].combinedBounds = {
                 x: { min: -0.5, max: 0.5 },
                 y: { min: -0.5, max: 0.5 },
             };
@@ -267,13 +266,13 @@ describe('profilePlaybackPlanner', () => {
         const profile = createProfile(1, 2);
 
         // Tile 0-0 (Left): Global bounds
-        profile.tiles['0-0'].inferredBounds = {
+        profile.tiles['0-0'].combinedBounds = {
             x: { min: -1, max: 1 },
             y: { min: -1, max: 1 },
         };
 
         // Tile 0-1 (Right): Restricted bounds (only covers top-left area)
-        profile.tiles['0-1'].inferredBounds = {
+        profile.tiles['0-1'].combinedBounds = {
             x: { min: -1.1, max: -0.9 },
             y: { min: -1.1, max: -0.9 },
         };
@@ -297,7 +296,7 @@ describe('profilePlaybackPlanner', () => {
         // My constraint setup was bad.
 
         // Let's fix bounds for 0-1 to cover P1.
-        profile.tiles['0-1'].inferredBounds = {
+        profile.tiles['0-1'].combinedBounds = {
             x: { min: -1.1, max: -0.9 },
             y: { min: -0.1, max: 0.1 }, // Covers y=0
         };

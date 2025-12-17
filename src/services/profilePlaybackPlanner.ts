@@ -181,7 +181,7 @@ const computeAxisTarget = ({
     }
 
     const normalizedTarget = patternPoint[axis];
-    const bounds = resolveAxisBounds(tile.inferredBounds, axis);
+    const bounds = resolveAxisBounds(tile.combinedBounds, axis);
     if (bounds && (normalizedTarget < bounds.min || normalizedTarget > bounds.max)) {
         return {
             error: createError(
@@ -373,7 +373,7 @@ export const planProfilePlayback = ({
     // We want to assign points that have FEWER options first.
     const pointOptions = rotatedPoints.map((point) => {
         const validTiles = availableTiles.filter((t) => {
-            const bounds = t.tile.inferredBounds;
+            const bounds = t.tile.combinedBounds;
             if (!bounds) return true; // No bounds = assume valid
             // Check X
             if (point.x < bounds.x.min || point.x > bounds.x.max) return false;

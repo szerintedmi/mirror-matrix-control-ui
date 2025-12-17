@@ -57,7 +57,8 @@ export interface TileCalibrationResult {
     sizeDeltaAtStepTest?: number | null;
     motorReachBounds?: CalibrationProfileBounds | null;
     footprintBounds?: CalibrationProfileBounds | null;
-    inferredBounds?: CalibrationProfileBounds | null;
+    /** Combined bounds: union of motorReachBounds and footprintBounds. */
+    combinedBounds?: CalibrationProfileBounds | null;
     stepScale?: { x: number | null; y: number | null };
 }
 

@@ -267,14 +267,10 @@ describe('summaryComputation', () => {
             expect(tile.motorReachBounds!.x.min).toBeLessThan(tile.motorReachBounds!.x.max);
             expect(tile.motorReachBounds!.y.min).toBeLessThan(tile.motorReachBounds!.y.max);
 
-            // Footprint should be centered on the original home measurement (0.1, -0.05)
+            // Footprint is computed from blueprint at ideal grid position
             expect(tile.footprintBounds).not.toBeNull();
-            const footprintCenterX =
-                (tile.footprintBounds!.x.min + tile.footprintBounds!.x.max) / 2;
-            const footprintCenterY =
-                (tile.footprintBounds!.y.min + tile.footprintBounds!.y.max) / 2;
-            expect(footprintCenterX).toBeCloseTo(0.1); // homeMeasurement.x
-            expect(footprintCenterY).toBeCloseTo(-0.05); // homeMeasurement.y
+            expect(tile.footprintBounds!.x.min).toBeLessThan(tile.footprintBounds!.x.max);
+            expect(tile.footprintBounds!.y.min).toBeLessThan(tile.footprintBounds!.y.max);
 
             expect(tile.stepScale).toEqual({ x: 1000, y: -500 });
         });

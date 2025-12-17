@@ -633,17 +633,17 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
 
         return Object.entries(selectedCalibrationProfile.tiles)
             .map(([id, tile]) => {
-                if (!tile.inferredBounds) {
+                if (!tile.combinedBounds) {
                     return null;
                 }
                 // Convert Centered bounds to Isotropic Pattern Space (Fit Width)
                 // X is unchanged. Y is scaled by 1/aspect.
                 return {
                     id,
-                    xMin: tile.inferredBounds.x.min,
-                    xMax: tile.inferredBounds.x.max,
-                    yMin: tile.inferredBounds.y.min / aspect,
-                    yMax: tile.inferredBounds.y.max / aspect,
+                    xMin: tile.combinedBounds.x.min,
+                    xMax: tile.combinedBounds.x.max,
+                    yMin: tile.combinedBounds.y.min / aspect,
+                    yMax: tile.combinedBounds.y.max / aspect,
                 };
             })
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
@@ -690,15 +690,15 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
 
         const bounds = Object.values(selectedCalibrationProfile.tiles)
             .map((t) => {
-                if (t.inferredBounds) {
+                if (t.combinedBounds) {
                     // Convert Centered bounds to Isotropic Pattern Space (Fit Width)
                     // X is unchanged. Y is scaled by 1/aspect.
-                    const yMin = t.inferredBounds.y.min / aspect;
-                    const yMax = t.inferredBounds.y.max / aspect;
+                    const yMin = t.combinedBounds.y.min / aspect;
+                    const yMax = t.combinedBounds.y.max / aspect;
                     return {
-                        x: t.inferredBounds.x.min,
+                        x: t.combinedBounds.x.min,
                         y: yMin,
-                        width: t.inferredBounds.x.max - t.inferredBounds.x.min,
+                        width: t.combinedBounds.x.max - t.combinedBounds.x.min,
                         height: yMax - yMin,
                     };
                 }

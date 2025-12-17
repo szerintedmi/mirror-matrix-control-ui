@@ -44,10 +44,10 @@ describe('canonical calibration snapshot – golden fixture', () => {
             const summaryTile = summary.tiles[key];
 
             expect(summaryTile.motorReachBounds).toEqual(
-                profileTile.motorReachBounds ?? profileTile.inferredBounds,
+                profileTile.motorReachBounds ?? profileTile.combinedBounds,
             );
             expect(summaryTile.footprintBounds).toEqual(
-                profileTile.footprintBounds ?? profileTile.inferredBounds,
+                profileTile.footprintBounds ?? profileTile.combinedBounds,
             );
             expect(summaryTile.stepScale).toEqual({
                 x: profileTile.axes.x.stepScale,

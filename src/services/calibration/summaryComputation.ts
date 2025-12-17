@@ -19,7 +19,7 @@ import type {
 } from '@/types';
 
 import { RobustMaxSizingStrategy, type TileEntry } from './math/blueprintStrategies';
-import { computeLiveTileBounds } from './math/boundsComputation';
+import { computeBlueprintFootprintBounds, computeLiveTileBounds } from './math/boundsComputation';
 import {
     buildStepScale,
     computeAxisPitch,
@@ -53,12 +53,12 @@ export interface TileCalibrationResult {
     stepToDisplacement?: { x: number | null; y: number | null };
     sizeDeltaAtStepTest?: number | null;
     stepScale?: { x: number | null; y: number | null };
-    /** Motor-range bounds computed from step tests (for live display during calibration) */
-    inferredBounds?: CalibrationProfileBounds | null;
-    /** Preferred explicit field for motor range; mirrors inferredBounds for now. */
+    /** Motor-range bounds computed from step tests */
     motorReachBounds?: CalibrationProfileBounds | null;
     /** Footprint bounds derived from blueprint (if available) */
     footprintBounds?: CalibrationProfileBounds | null;
+    /** Combined bounds: union of motorReachBounds and footprintBounds */
+    combinedBounds?: CalibrationProfileBounds | null;
 }
 
 /** Configuration for summary computation */
@@ -429,30 +429,22 @@ export function computeCalibrationSummary(
                       { x: normalizedMeasurement.x, y: normalizedMeasurement.y },
                       result.stepToDisplacement,
                   )
-                : (result.motorReachBounds ?? result.inferredBounds ?? null);
+                : (result.motorReachBounds ?? result.combinedBounds ?? null);
 
         const stepScale = result.stepScale ?? buildStepScale(result.stepToDisplacement);
 
-        // Compute footprint using ORIGINAL home measurement coords (not recentered)
+        // Compute footprint bounds from blueprint for consistency
         const footprintBounds =
-            result.homeMeasurement && gridBlueprint
-                ? {
-                      x: {
-                          min: result.homeMeasurement.x - halfTileX,
-                          max: result.homeMeasurement.x + halfTileX,
-                      },
-                      y: {
-                          min: result.homeMeasurement.y - halfTileY,
-                          max: result.homeMeasurement.y + halfTileY,
-                      },
-                  }
-                : (result.footprintBounds ?? null);
+            result.footprintBounds ??
+            (gridBlueprint
+                ? computeBlueprintFootprintBounds(gridBlueprint, result.tile.row, result.tile.col)
+                : null);
 
+        // Note: combinedBounds is computed in buildProfileTiles via mergeWithBlueprintFootprint
         tileSummary = {
             ...tileSummary,
             motorReachBounds,
-            inferredBounds: motorReachBounds ?? undefined,
-            footprintBounds,
+            footprintBounds: footprintBounds ?? undefined,
             stepScale: stepScale ?? undefined,
         };
 

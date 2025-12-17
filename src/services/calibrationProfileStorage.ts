@@ -1,5 +1,9 @@
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
-import { computeBlueprintFootprintBounds, computeTileBounds } from '@/services/calibration';
+import {
+    computeBlueprintFootprintBounds,
+    computeTileBounds,
+    mergeWithBlueprintFootprint,
+} from '@/services/calibration';
 import { computeMedian } from '@/services/calibration/math/robustStatistics';
 import type {
     CalibrationRunSummary,
@@ -115,51 +119,6 @@ const computeAxisCalibration = (
     stepScale: perStep && Math.abs(perStep) >= STEP_EPSILON ? 1 / perStep : null,
 });
 
-const mergeBoundsIntersection = (
-    current: CalibrationProfileBounds | null,
-    candidate: CalibrationProfileBounds,
-): CalibrationProfileBounds | null => {
-    if (!current) {
-        return {
-            x: { ...candidate.x },
-            y: { ...candidate.y },
-        };
-    }
-    const minX = Math.max(current.x.min, candidate.x.min);
-    const maxX = Math.min(current.x.max, candidate.x.max);
-    const minY = Math.max(current.y.min, candidate.y.min);
-    const maxY = Math.min(current.y.max, candidate.y.max);
-    if (minX > maxX || minY > maxY) {
-        return null;
-    }
-    return {
-        x: { min: minX, max: maxX },
-        y: { min: minY, max: maxY },
-    };
-};
-
-const mergeBoundsUnion = (
-    current: CalibrationProfileBounds | null,
-    candidate: CalibrationProfileBounds,
-): CalibrationProfileBounds => {
-    if (!current) {
-        return {
-            x: { ...candidate.x },
-            y: { ...candidate.y },
-        };
-    }
-    return {
-        x: {
-            min: Math.min(current.x.min, candidate.x.min),
-            max: Math.max(current.x.max, candidate.x.max),
-        },
-        y: {
-            min: Math.min(current.y.min, candidate.y.min),
-            max: Math.max(current.y.max, candidate.y.max),
-        },
-    };
-};
-
 const computeProfileBlobStats = (
     tiles: Record<string, TileCalibrationResults>,
 ): CalibrationProfileBlobStats | null => {
@@ -194,30 +153,10 @@ export const recenterBounds = (bounds: CalibrationProfileBounds): CalibrationPro
     };
 };
 
-export const computeGlobalBoundsFromTiles = (
-    tiles: Record<string, TileCalibrationResults>,
-): CalibrationProfileBounds | null => {
-    let aggregate: CalibrationProfileBounds | null = null;
-    Object.values(tiles).forEach((tile) => {
-        if (tile.inferredBounds) {
-            aggregate = mergeBoundsIntersection(aggregate, tile.inferredBounds);
-        }
-    });
-    if (!aggregate) {
-        return null;
-    }
-    const finalBounds = aggregate as CalibrationProfileBounds;
-    return {
-        x: { ...finalBounds.x },
-        y: { ...finalBounds.y },
-    };
-};
-
 const buildCalibrationSpace = (
     tiles: Record<string, TileCalibrationResults>,
 ): CalibrationProfileCalibrationSpace => ({
     blobStats: computeProfileBlobStats(tiles),
-    globalBounds: computeGlobalBoundsFromTiles(tiles),
 });
 
 const computeMetrics = (
@@ -263,9 +202,7 @@ const buildTileEntry = (
         y: computeAxisCalibration(stepToDisplacement.y, Boolean(tile.assignment.y)),
     };
     const motorReachBounds =
-        summaryTile?.motorReachBounds ??
-        summaryTile?.inferredBounds ??
-        computeTileBounds(adjustedHome, stepToDisplacement);
+        summaryTile?.motorReachBounds ?? computeTileBounds(adjustedHome, stepToDisplacement);
     const footprintBounds = summaryTile?.footprintBounds ?? null;
     const stepScaleFromAxes =
         axes.x.stepScale !== null || axes.y.stepScale !== null
@@ -288,24 +225,9 @@ const buildTileEntry = (
         footprintBounds,
         stepScale: stepScale ?? undefined,
         axes,
-        inferredBounds: motorReachBounds ?? null,
+        // combinedBounds is computed in buildProfileTiles via mergeWithBlueprintFootprint
+        combinedBounds: null,
     };
-};
-
-const mergeWithBlueprintFootprint = (
-    bounds: CalibrationProfileBounds | null,
-    blueprint: CalibrationGridBlueprint | null,
-    row: number,
-    col: number,
-): CalibrationProfileBounds | null => {
-    if (!blueprint) {
-        return bounds;
-    }
-    const footprint = computeBlueprintFootprintBounds(blueprint, row, col);
-    if (!bounds) {
-        return footprint;
-    }
-    return mergeBoundsUnion(bounds, footprint);
 };
 
 const buildProfileTiles = (
@@ -321,8 +243,8 @@ const buildProfileTiles = (
             ? computeBlueprintFootprintBounds(gridBlueprint, tile.tile.row, tile.tile.col)
             : null;
         entry.footprintBounds = entry.footprintBounds ?? blueprintFootprint;
-        entry.inferredBounds = mergeWithBlueprintFootprint(
-            entry.motorReachBounds ?? entry.inferredBounds,
+        entry.combinedBounds = mergeWithBlueprintFootprint(
+            entry.motorReachBounds ?? entry.combinedBounds,
             gridBlueprint,
             tile.tile.row,
             tile.tile.col,
@@ -346,8 +268,8 @@ const buildProfileTiles = (
                       )
                     : null;
                 entry.footprintBounds = entry.footprintBounds ?? blueprintFootprint;
-                entry.inferredBounds = mergeWithBlueprintFootprint(
-                    entry.motorReachBounds ?? entry.inferredBounds,
+                entry.combinedBounds = mergeWithBlueprintFootprint(
+                    entry.motorReachBounds ?? entry.combinedBounds,
                     gridBlueprint,
                     summaryTile.tile.row,
                     summaryTile.tile.col,
@@ -845,10 +767,9 @@ export const profileToRunSummary = (profile: CalibrationProfile): CalibrationRun
         }
         if (entry.motorReachBounds) {
             result.motorReachBounds = entry.motorReachBounds;
-            result.inferredBounds = entry.motorReachBounds;
-        } else if (entry.inferredBounds) {
-            result.motorReachBounds = entry.inferredBounds;
-            result.inferredBounds = entry.inferredBounds;
+        }
+        if (entry.combinedBounds) {
+            result.combinedBounds = entry.combinedBounds;
         }
         if (entry.footprintBounds) {
             result.footprintBounds = entry.footprintBounds;

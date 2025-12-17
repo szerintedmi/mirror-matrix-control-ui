@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 
-import { computeAxisBounds, computeTileBounds, computeLiveTileBounds } from '../boundsComputation';
+import {
+    computeAxisBounds,
+    computeTileBounds,
+    computeLiveTileBounds,
+    mergeBoundsIntersection,
+    mergeBoundsUnion,
+    mergeWithBlueprintFootprint,
+} from '../boundsComputation';
 
 describe('boundsComputation', () => {
     describe('computeAxisBounds', () => {
@@ -162,6 +169,159 @@ describe('boundsComputation', () => {
             );
 
             expect(liveBounds).toEqual(tileBounds);
+        });
+    });
+
+    describe('mergeBoundsIntersection', () => {
+        it('returns a copy of candidate when current is null', () => {
+            const candidate = { x: { min: -0.5, max: 0.5 }, y: { min: -0.3, max: 0.3 } };
+            const result = mergeBoundsIntersection(null, candidate);
+
+            expect(result).toEqual(candidate);
+            // Verify it's a copy, not the same reference
+            expect(result).not.toBe(candidate);
+        });
+
+        it('computes intersection when bounds overlap', () => {
+            const current = { x: { min: -0.8, max: 0.4 }, y: { min: -0.6, max: 0.6 } };
+            const candidate = { x: { min: -0.3, max: 0.7 }, y: { min: -0.2, max: 0.8 } };
+
+            const result = mergeBoundsIntersection(current, candidate);
+
+            expect(result).toEqual({
+                x: { min: -0.3, max: 0.4 }, // intersection of [-0.8, 0.4] and [-0.3, 0.7]
+                y: { min: -0.2, max: 0.6 }, // intersection of [-0.6, 0.6] and [-0.2, 0.8]
+            });
+        });
+
+        it('returns null when no overlap on X axis', () => {
+            const current = { x: { min: -0.8, max: -0.2 }, y: { min: -0.5, max: 0.5 } };
+            const candidate = { x: { min: 0.3, max: 0.9 }, y: { min: -0.3, max: 0.3 } };
+
+            const result = mergeBoundsIntersection(current, candidate);
+
+            expect(result).toBeNull();
+        });
+
+        it('returns null when no overlap on Y axis', () => {
+            const current = { x: { min: -0.5, max: 0.5 }, y: { min: 0.5, max: 0.9 } };
+            const candidate = { x: { min: -0.3, max: 0.3 }, y: { min: -0.8, max: -0.2 } };
+
+            const result = mergeBoundsIntersection(current, candidate);
+
+            expect(result).toBeNull();
+        });
+
+        it('handles edge-case where bounds touch at a single point', () => {
+            const current = { x: { min: -0.5, max: 0.0 }, y: { min: -0.5, max: 0.5 } };
+            const candidate = { x: { min: 0.0, max: 0.5 }, y: { min: -0.3, max: 0.3 } };
+
+            const result = mergeBoundsIntersection(current, candidate);
+
+            // At exactly 0, they touch - intersection is degenerate but valid
+            expect(result).toEqual({
+                x: { min: 0.0, max: 0.0 },
+                y: { min: -0.3, max: 0.3 },
+            });
+        });
+    });
+
+    describe('mergeBoundsUnion', () => {
+        it('returns a copy of candidate when current is null', () => {
+            const candidate = { x: { min: -0.5, max: 0.5 }, y: { min: -0.3, max: 0.3 } };
+            const result = mergeBoundsUnion(null, candidate);
+
+            expect(result).toEqual(candidate);
+            // Verify it's a copy, not the same reference
+            expect(result).not.toBe(candidate);
+        });
+
+        it('computes union envelope of overlapping bounds', () => {
+            const current = { x: { min: -0.8, max: 0.4 }, y: { min: -0.6, max: 0.6 } };
+            const candidate = { x: { min: -0.3, max: 0.7 }, y: { min: -0.2, max: 0.8 } };
+
+            const result = mergeBoundsUnion(current, candidate);
+
+            expect(result).toEqual({
+                x: { min: -0.8, max: 0.7 }, // union of [-0.8, 0.4] and [-0.3, 0.7]
+                y: { min: -0.6, max: 0.8 }, // union of [-0.6, 0.6] and [-0.2, 0.8]
+            });
+        });
+
+        it('computes union envelope of disjoint bounds', () => {
+            const current = { x: { min: -0.9, max: -0.5 }, y: { min: -0.9, max: -0.5 } };
+            const candidate = { x: { min: 0.5, max: 0.9 }, y: { min: 0.5, max: 0.9 } };
+
+            const result = mergeBoundsUnion(current, candidate);
+
+            expect(result).toEqual({
+                x: { min: -0.9, max: 0.9 },
+                y: { min: -0.9, max: 0.9 },
+            });
+        });
+
+        it('returns current when candidate is contained within', () => {
+            const current = { x: { min: -0.8, max: 0.8 }, y: { min: -0.8, max: 0.8 } };
+            const candidate = { x: { min: -0.2, max: 0.2 }, y: { min: -0.2, max: 0.2 } };
+
+            const result = mergeBoundsUnion(current, candidate);
+
+            expect(result).toEqual(current);
+        });
+    });
+
+    describe('mergeWithBlueprintFootprint', () => {
+        const blueprint = {
+            adjustedTileFootprint: { width: 0.2, height: 0.2 },
+            tileGap: { x: 0.05, y: 0.05 },
+            gridOrigin: { x: -0.5, y: -0.5 },
+            cameraOriginOffset: { x: 0, y: 0 },
+            sourceWidth: 1920,
+            sourceHeight: 1080,
+        };
+
+        it('returns bounds unchanged when blueprint is null', () => {
+            const bounds = { x: { min: -0.5, max: 0.5 }, y: { min: -0.3, max: 0.3 } };
+            const result = mergeWithBlueprintFootprint(bounds, null, 0, 0);
+
+            expect(result).toEqual(bounds);
+        });
+
+        it('returns null when both bounds and blueprint are null', () => {
+            const result = mergeWithBlueprintFootprint(null, null, 0, 0);
+
+            expect(result).toBeNull();
+        });
+
+        it('returns footprint when bounds is null', () => {
+            const result = mergeWithBlueprintFootprint(null, blueprint, 0, 0);
+
+            expect(result).not.toBeNull();
+            // The footprint should have valid x and y ranges
+            expect(result!.x.min).toBeLessThan(result!.x.max);
+            expect(result!.y.min).toBeLessThan(result!.y.max);
+        });
+
+        it('computes union of bounds and footprint', () => {
+            // Small bounds that don't cover the footprint
+            const bounds = { x: { min: 0.1, max: 0.2 }, y: { min: 0.1, max: 0.2 } };
+            const result = mergeWithBlueprintFootprint(bounds, blueprint, 0, 0);
+
+            expect(result).not.toBeNull();
+            // The result should be at least as large as the bounds
+            expect(result!.x.min).toBeLessThanOrEqual(bounds.x.min);
+            expect(result!.x.max).toBeGreaterThanOrEqual(bounds.x.max);
+        });
+
+        it('uses row and col for footprint position', () => {
+            const result00 = mergeWithBlueprintFootprint(null, blueprint, 0, 0);
+            const result11 = mergeWithBlueprintFootprint(null, blueprint, 1, 1);
+
+            expect(result00).not.toBeNull();
+            expect(result11).not.toBeNull();
+            // Different grid positions should produce different footprints
+            expect(result11!.x.min).toBeGreaterThan(result00!.x.min);
+            expect(result11!.y.min).toBeGreaterThan(result00!.y.min);
         });
     });
 });

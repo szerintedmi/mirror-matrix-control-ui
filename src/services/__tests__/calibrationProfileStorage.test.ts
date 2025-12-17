@@ -97,7 +97,7 @@ const createRunnerState = (): CalibrationRunnerState => {
                 adjustedHome: { x: 0.19166574478149423, y: -0.05035222371419279 },
                 stepToDisplacement: { x: -0.00032960216204325356, y: -0.0005600848551149723 },
                 sizeDeltaAtStepTest: 0.004601287841796878,
-                inferredBounds: {
+                combinedBounds: {
                     x: { min: -0.20385684967041007, max: 0.5871883392333985 },
                     y: { min: -0.6665131251017253, max: 0.6776905271742082 },
                 },
@@ -114,7 +114,7 @@ const createRunnerState = (): CalibrationRunnerState => {
                 adjustedHome: { x: 0.32241172790527356, y: -0.05035222371419279 },
                 stepToDisplacement: { x: -0.0003242341677347819, y: -0.0006024321803340205 },
                 sizeDeltaAtStepTest: 0.003791069984436027,
-                inferredBounds: {
+                combinedBounds: {
                     x: { min: -0.039401340484619185, max: 0.7387606620788574 },
                     y: { min: -0.7145076327853732, max: 0.731329600016276 },
                 },
@@ -131,7 +131,7 @@ const createRunnerState = (): CalibrationRunnerState => {
                 adjustedHome: { x: 0.19166574478149423, y: 0.1820850796169704 },
                 stepToDisplacement: { x: -0.0003325993220011392, y: -0.000606114281548394 },
                 sizeDeltaAtStepTest: 0.004261237382888791,
-                inferredBounds: {
+                combinedBounds: {
                     x: { min: -0.12357730865478489, max: 0.6746610641479491 },
                     y: { min: -0.4281306796603731, max: 1 },
                 },
@@ -148,7 +148,7 @@ const createRunnerState = (): CalibrationRunnerState => {
                 adjustedHome: { x: 0.32241172790527356, y: 0.1820850796169704 },
                 stepToDisplacement: { x: -0.00033713078498840327, y: -0.0005891155313562463 },
                 sizeDeltaAtStepTest: 0.0021966099739074707,
-                inferredBounds: {
+                combinedBounds: {
                     x: { min: -0.0607142448425293, max: 0.7483996391296386 },
                     y: { min: -0.5248535580105251, max: 0.8890237172444659 },
                 },
@@ -250,7 +250,6 @@ describe('calibrationProfileStorage', () => {
             expect(saved!.schemaVersion).toBe(3);
             expect(saved!.arrayRotation).toBe(0);
             expect(saved!.tiles['0-0']).toMatchObject({ status: 'completed' });
-            expect(saved!.calibrationSpace.globalBounds).not.toBeNull();
             const measurementRecord = saved!.tiles['0-0'].homeMeasurement;
             expect(measurementRecord).not.toBeNull();
             expect(measurementRecord!.sourceWidth).toBe(1920);
@@ -300,7 +299,7 @@ describe('calibrationProfileStorage', () => {
                 homeMeasurement: customMeasurement,
                 adjustedHome,
                 stepToDisplacement,
-                inferredBounds: null,
+                combinedBounds: null,
             };
 
             runnerState.tiles[tileKey] = {
@@ -317,7 +316,7 @@ describe('calibrationProfileStorage', () => {
             const saved = saveProfile({ name: 'Bounds from steps' });
 
             expect(saved).not.toBeNull();
-            const bounds = saved!.tiles[tileKey].inferredBounds!;
+            const bounds = saved!.tiles[tileKey].combinedBounds!;
 
             const axisXMin = clampNormalized(
                 adjustedHome.x +
@@ -359,7 +358,7 @@ describe('calibrationProfileStorage', () => {
             runnerState.summary!.tiles[tileKey] = {
                 ...runnerState.summary!.tiles[tileKey],
                 adjustedHome: undefined,
-                inferredBounds: null,
+                combinedBounds: null,
             };
             runnerState.tiles[tileKey] = {
                 ...runnerState.tiles[tileKey],
@@ -372,7 +371,7 @@ describe('calibrationProfileStorage', () => {
             const saved = saveProfile({ name: 'Missing adjusted home' });
 
             expect(saved).not.toBeNull();
-            const bounds = saved!.tiles[tileKey].inferredBounds!;
+            const bounds = saved!.tiles[tileKey].combinedBounds!;
             const blueprint = runnerState.summary!.gridBlueprint!;
 
             // Compute expected isotropic bounds

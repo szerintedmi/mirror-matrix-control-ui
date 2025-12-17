@@ -10,6 +10,10 @@ export {
     computeTileBounds,
     computeLiveTileBounds,
     computeBlueprintFootprintBounds,
+    // Merge helpers
+    mergeBoundsIntersection,
+    mergeBoundsUnion,
+    mergeWithBlueprintFootprint,
 } from './math/boundsComputation';
 
 export {

@@ -140,7 +140,7 @@ describe('PatternDesignerPage validation feedback', () => {
                         gridSize: { rows: 1, cols: 1 },
                         stepTestSettings: { deltaSteps: 100 },
                         gridStateFingerprint: { hash: 'hash', snapshot: {} },
-                        calibrationSpace: { blobStats: null, globalBounds: null },
+                        calibrationSpace: { blobStats: null },
                         tiles: {},
                         metrics: {
                             totalTiles: 1,
@@ -164,7 +164,7 @@ describe('PatternDesignerPage validation feedback', () => {
         expect(pointElement?.getAttribute('stroke')).toBe('#ef4444');
     });
 
-    it('validates points using inferredBounds when global validation fails', async () => {
+    it('validates points using combinedBounds when global validation fails', async () => {
         // Mock grid storage to return a grid state
         (loadGridState as Mock).mockReturnValue({
             gridSize: { rows: 8, cols: 8 },
@@ -174,7 +174,7 @@ describe('PatternDesignerPage validation feedback', () => {
         // Mock playback planner to return NO errors (since we removed the blocking check)
         // But we still want to test the fallback logic?
         // Actually, if the planner returns NO errors, then invalidPointIds will be empty.
-        // The test 'validates points using inferredBounds when global validation fails' was testing the fallback.
+        // The test 'validates points using combinedBounds when global validation fails' was testing the fallback.
         // Now that we removed the blocking error, the planner WILL run assignment.
         // If assignment succeeds, there are no errors.
         // If we want to test fallback, we need to simulate a case where planner fails globally but not specifically?
@@ -223,10 +223,10 @@ describe('PatternDesignerPage validation feedback', () => {
                         gridSize: { rows: 4, cols: 4 },
                         stepTestSettings: { deltaSteps: 100 },
                         gridStateFingerprint: { hash: 'hash', snapshot: {} },
-                        calibrationSpace: { blobStats: null, globalBounds: null },
+                        calibrationSpace: { blobStats: null },
                         tiles: {
                             '0-0': {
-                                inferredBounds: {
+                                combinedBounds: {
                                     x: { min: -1, max: 1 },
                                     y: { min: -1, max: 1 },
                                 },

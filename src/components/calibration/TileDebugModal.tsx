@@ -54,7 +54,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
         home,
         adjustedHome,
         homeOffset,
-        inferredBounds,
+        combinedBounds,
         perStepX,
         perStepY,
         stepScaleX,
@@ -333,7 +333,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     </section>
                                 </div>
                             </div>
-                            {inferredBounds ? (
+                            {combinedBounds ? (
                                 <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4 text-sm text-gray-100">
                                     <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
                                         Reach estimates (normalized)
@@ -341,7 +341,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     <div className="grid gap-2 sm:grid-cols-2">
                                         <DebugStat
                                             label="bounds.x.min"
-                                            value={formatDecimal(inferredBounds.x.min, {
+                                            value={formatDecimal(combinedBounds.x.min, {
                                                 digits: 4,
                                                 signed: true,
                                             })}
@@ -349,7 +349,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                         />
                                         <DebugStat
                                             label="bounds.x.max"
-                                            value={formatDecimal(inferredBounds.x.max, {
+                                            value={formatDecimal(combinedBounds.x.max, {
                                                 digits: 4,
                                                 signed: true,
                                             })}
@@ -357,7 +357,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                         />
                                         <DebugStat
                                             label="bounds.y.min"
-                                            value={formatDecimal(inferredBounds.y.min, {
+                                            value={formatDecimal(combinedBounds.y.min, {
                                                 digits: 4,
                                                 signed: true,
                                             })}
@@ -365,7 +365,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                         />
                                         <DebugStat
                                             label="bounds.y.max"
-                                            value={formatDecimal(inferredBounds.y.max, {
+                                            value={formatDecimal(combinedBounds.y.max, {
                                                 digits: 4,
                                                 signed: true,
                                             })}

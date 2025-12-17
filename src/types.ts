@@ -279,10 +279,10 @@ export interface CalibrationSnapshotTile {
     sizeDeltaAtStepTest?: number | null;
     motorReachBounds?: CalibrationProfileBounds | null;
     /**
-     * Legacy alias kept for compatibility while migrating to explicit motorReachBounds.
-     * Prefer reading motorReachBounds going forward.
+     * Combined bounds: union of motorReachBounds and footprintBounds.
+     * Used for pattern validation and UI overlays.
      */
-    inferredBounds?: CalibrationProfileBounds | null;
+    combinedBounds?: CalibrationProfileBounds | null;
     footprintBounds?: CalibrationProfileBounds | null;
     stepScale?: { x: number | null; y: number | null };
 }
@@ -406,7 +406,8 @@ export interface TileCalibrationResults {
         x: TileAxisCalibration;
         y: TileAxisCalibration;
     };
-    inferredBounds: CalibrationProfileBounds | null;
+    /** Combined bounds: union of motorReachBounds and footprintBounds. */
+    combinedBounds: CalibrationProfileBounds | null;
 }
 
 export interface CalibrationProfileMetrics {
@@ -427,7 +428,6 @@ export interface CalibrationProfileFingerprint {
 
 export interface CalibrationProfileCalibrationSpace {
     blobStats: CalibrationProfileBlobStats | null;
-    globalBounds: CalibrationProfileBounds | null;
 }
 
 /**

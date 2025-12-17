@@ -1,9 +1,22 @@
 /**
  * Bounds Computation Module
  *
- * Pure functions for computing motor-range bounds for calibration tiles.
- * Determines the reachable position range based on motor step limits
- * and step-to-displacement ratios from calibration.
+ * Pure functions for computing and merging calibration bounds.
+ *
+ * ## Coordinate Space
+ *
+ * All bounds use **centered normalized coordinates** where:
+ * - X axis: [-1, 1] maps to camera width (left to right)
+ * - Y axis: [-1, 1] maps to camera height (top to bottom)
+ *
+ * ## Bounds Types
+ *
+ * - **motorReachBounds**: Physical motor limits projected to centered coords.
+ *   Derived from motor step limits and step-to-displacement ratios.
+ * - **footprintBounds**: Tile footprint from grid blueprint dimensions.
+ *   Represents the physical extent of the tile on the canvas.
+ * - **combinedBounds**: Union of motorReachBounds and footprintBounds.
+ *   Used for pattern validation and UI overlays.
  */
 
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
@@ -151,4 +164,109 @@ export const computeBlueprintFootprintBounds = (
             max: minY + tileSizeYCentered,
         },
     };
+};
+
+// ============================================================================
+// Bounds Merge Helpers
+// ============================================================================
+
+/**
+ * Compute the intersection of two bounds (AND operation).
+ *
+ * Returns the overlapping region of current and candidate bounds.
+ * If current is null, returns a copy of candidate.
+ * If there is no overlap, returns null.
+ *
+ * Use case: Computing global bounds across all tiles (joint constraint).
+ *
+ * @param current - Existing bounds to merge into, or null
+ * @param candidate - New bounds to intersect with
+ * @returns Intersection bounds, or null if no overlap
+ */
+export const mergeBoundsIntersection = (
+    current: CalibrationProfileBounds | null,
+    candidate: CalibrationProfileBounds,
+): CalibrationProfileBounds | null => {
+    if (!current) {
+        return {
+            x: { ...candidate.x },
+            y: { ...candidate.y },
+        };
+    }
+    const minX = Math.max(current.x.min, candidate.x.min);
+    const maxX = Math.min(current.x.max, candidate.x.max);
+    const minY = Math.max(current.y.min, candidate.y.min);
+    const maxY = Math.min(current.y.max, candidate.y.max);
+    if (minX > maxX || minY > maxY) {
+        return null;
+    }
+    return {
+        x: { min: minX, max: maxX },
+        y: { min: minY, max: maxY },
+    };
+};
+
+/**
+ * Compute the union of two bounds (OR operation).
+ *
+ * Returns the outer envelope encompassing both bounds.
+ * If current is null, returns a copy of candidate.
+ *
+ * Use case: Combining motor reach bounds with footprint bounds.
+ *
+ * @param current - Existing bounds to merge into, or null
+ * @param candidate - New bounds to union with
+ * @returns Union bounds (outer envelope)
+ */
+export const mergeBoundsUnion = (
+    current: CalibrationProfileBounds | null,
+    candidate: CalibrationProfileBounds,
+): CalibrationProfileBounds => {
+    if (!current) {
+        return {
+            x: { ...candidate.x },
+            y: { ...candidate.y },
+        };
+    }
+    return {
+        x: {
+            min: Math.min(current.x.min, candidate.x.min),
+            max: Math.max(current.x.max, candidate.x.max),
+        },
+        y: {
+            min: Math.min(current.y.min, candidate.y.min),
+            max: Math.max(current.y.max, candidate.y.max),
+        },
+    };
+};
+
+/**
+ * Merge bounds with blueprint footprint using union.
+ *
+ * Expands the input bounds to include the tile's blueprint footprint.
+ * If bounds is null, returns the blueprint footprint.
+ * If blueprint is null, returns the original bounds.
+ *
+ * Use case: Computing combinedBounds from motorReachBounds.
+ *
+ * @param bounds - Motor reach bounds, or null
+ * @param blueprint - Grid blueprint for footprint calculation, or null
+ * @param row - Tile row index
+ * @param col - Tile column index
+ * @returns Merged bounds (union of bounds and footprint)
+ */
+export const mergeWithBlueprintFootprint = (
+    bounds: CalibrationProfileBounds | null,
+    blueprint: CalibrationGridBlueprint | null,
+    row: number,
+    col: number,
+): CalibrationProfileBounds | null => {
+    if (!blueprint) {
+        return bounds;
+    }
+    const footprint = computeBlueprintFootprintBounds(blueprint, row, col);
+    if (!bounds) {
+        return footprint;
+    }
+    return mergeBoundsUnion(bounds, footprint);
 };

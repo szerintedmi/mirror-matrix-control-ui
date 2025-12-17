@@ -176,7 +176,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         resetRoi,
         nativeBlobDetectorAvailable,
         setAlignmentOverlaySummary,
-        setGlobalBoundsOverlayBounds,
         setTileBoundsOverlayEntries,
         blobsOverlayEnabled,
         setBlobsOverlayEnabled,
@@ -288,12 +287,12 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         // During calibration: source from runner summary
         if (isCalibrationActive && runnerState.summary) {
             return Object.values(runnerState.summary.tiles)
-                .filter((tile) => tile.status === 'completed' && Boolean(tile.inferredBounds))
+                .filter((tile) => tile.status === 'completed' && Boolean(tile.combinedBounds))
                 .map((tile) => ({
                     key: tile.tile.key,
                     row: tile.tile.row,
                     col: tile.tile.col,
-                    bounds: tile.inferredBounds!,
+                    bounds: tile.combinedBounds!,
                 }));
         }
         // When not calibrating: source from active profile
@@ -301,12 +300,12 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             return [];
         }
         return Object.values(activeProfile.tiles)
-            .filter((tile) => Boolean(tile.inferredBounds))
+            .filter((tile) => Boolean(tile.combinedBounds))
             .map((tile) => ({
                 key: tile.key,
                 row: tile.row,
                 col: tile.col,
-                bounds: tile.inferredBounds!,
+                bounds: tile.combinedBounds!,
             }));
     }, [activeProfile, isCalibrationActive, runnerState.summary]);
 
@@ -375,30 +374,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             setAlignmentOverlayVisible(true);
         }
     }, [isCalibrationActive, alignmentOverlayAvailable]);
-
-    const activeGlobalBounds = activeProfile?.calibrationSpace.globalBounds ?? null;
-
-    useEffect(() => {
-        const shouldShowBounds =
-            displayedAlignmentOverlayEnabled &&
-            !isCalibrationActive &&
-            Boolean(activeGlobalBounds) &&
-            Boolean(activeCameraOriginOffset);
-        setGlobalBoundsOverlayBounds(
-            shouldShowBounds && activeGlobalBounds && activeCameraOriginOffset
-                ? {
-                      bounds: activeGlobalBounds,
-                      cameraOriginOffset: activeCameraOriginOffset,
-                  }
-                : null,
-        );
-    }, [
-        activeGlobalBounds,
-        displayedAlignmentOverlayEnabled,
-        isCalibrationActive,
-        activeCameraOriginOffset,
-        setGlobalBoundsOverlayBounds,
-    ]);
 
     const tileBoundsOverlayAvailable =
         activeTileBounds.length > 0 && Boolean(activeCameraOriginOffset);

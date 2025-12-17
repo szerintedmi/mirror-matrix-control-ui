@@ -56,9 +56,9 @@ export interface AxisStepScale {
 }
 
 /**
- * Inferred bounds from calibration
+ * Combined bounds from calibration (union of motor reach and footprint)
  */
-export interface InferredBounds {
+export interface CombinedBounds {
     x: { min: number; max: number };
     y: { min: number; max: number };
 }
@@ -72,7 +72,7 @@ export interface TileMetrics {
     homeOffset: HomeOffset | null;
     stepToDisplacement: StepToDisplacement | null;
     sizeDeltaAtStepTest: number | null;
-    inferredBounds: InferredBounds | null;
+    combinedBounds: CombinedBounds | null;
     axisStepScale: AxisStepScale | null;
     perStepX: number | null;
     perStepY: number | null;
@@ -110,7 +110,7 @@ export function computeTileMetrics(input: TileMetricsInput): TileMetrics {
     const sizeDeltaAtStepTest = (metrics.sizeDeltaAtStepTest ??
         summaryTile?.sizeDeltaAtStepTest ??
         null) as number | null;
-    const inferredBounds = (summaryTile?.inferredBounds ?? null) as InferredBounds | null;
+    const combinedBounds = (summaryTile?.combinedBounds ?? null) as CombinedBounds | null;
     const axisStepScale = (summaryTile?.stepScale ?? null) as AxisStepScale | null;
 
     // Per-step values
@@ -164,7 +164,7 @@ export function computeTileMetrics(input: TileMetricsInput): TileMetrics {
         home ||
             adjustedHome ||
             homeOffset ||
-            inferredBounds ||
+            combinedBounds ||
             (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)) ||
             (axisStepScale && (axisStepScale.x || axisStepScale.y)),
     );
@@ -175,7 +175,7 @@ export function computeTileMetrics(input: TileMetricsInput): TileMetrics {
         homeOffset,
         stepToDisplacement,
         sizeDeltaAtStepTest,
-        inferredBounds,
+        combinedBounds,
         axisStepScale,
         perStepX,
         perStepY,

@@ -234,11 +234,33 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 - Starting point: [`../src/services/calibration/script/script.ts`](../src/services/calibration/script/script.ts)
 - **Status: Complete.** All 4 helper generators extracted. Main orchestrator uses `yield*` delegation. X/Y step test logic unified in `runAxisStepTest*`. All 468 tests pass.
 
-6. [ ] **Bounds semantics unification** (low effort, medium gain)
-   - Keep two explicit kinds: `motorReachBounds` (step-based) and `footprintBounds` (blueprint).
-   - Provide helper for union/intersection; remove hidden unions in storage.
-   - Tests: bounds combination fixtures; ensure planner sees expected shape.
-   - Starting point: [`../src/services/calibration/math/boundsComputation.ts`](../src/services/calibration/math/boundsComputation.ts)
+6. [x] **Bounds semantics unification** (low effort, medium gain)
+
+   **Status: Complete.**
+
+   **Completed:**
+   1. ✓ Moved merge helpers (`mergeBoundsIntersection`, `mergeBoundsUnion`, `mergeWithBlueprintFootprint`) to `boundsComputation.ts` with JSDoc documenting centered [-1,1] coordinate space.
+   2. ✓ Removed `globalBounds` from `CalibrationProfileCalibrationSpace` type, deleted `computeGlobalBoundsFromTiles()`, removed overlay code from `useCameraPipeline.ts`.
+   3. ✓ Renamed `inferredBounds` → `combinedBounds` across ~40 locations. Added backward-compatible fallback in deserialization.
+   4. ✓ Added 14 tests for merge helpers (intersection, union, null handling, blueprint footprint).
+
+   **Files modified:**
+   - `src/types.ts` — removed `globalBounds`, renamed `inferredBounds` → `combinedBounds`
+   - `src/services/calibration/types.ts` — renamed `inferredBounds` → `combinedBounds`
+   - `src/services/calibration/math/boundsComputation.ts` — added merge helpers with JSDoc
+   - `src/services/calibrationProfileStorage.ts` — removed local merge helpers, globalBounds computation, added backward compat
+   - `src/hooks/useCameraPipeline.ts` — removed globalBounds overlay code
+   - `src/utils/tileCalibrationCalculations.ts` — renamed `InferredBounds` → `CombinedBounds`
+   - Pages/components (~10 files) — mechanical rename
+   - Tests/fixtures (~6 files) — updated to use `combinedBounds`
+
+   **Verification:** All 482 tests pass, typecheck/lint/build clean.
+
+   **Feedback addressed:**
+   - ✓ Semantics: Fixed `combinedBounds` flow—`summaryComputation.ts` no longer sets `combinedBounds` (computed in `buildProfileTiles` via `mergeWithBlueprintFootprint`). `buildTileEntry` sets `combinedBounds: null` as placeholder.
+   - ✓ Consistency: Consolidated footprint to single source—removed local halfTile math from `summaryComputation.ts`, now uses `computeBlueprintFootprintBounds` everywhere.
+   - ✓ Docs: Updated `docs/requirements.md` to reference `combinedBounds` and removed `globalBounds`/`inferredBounds` mentions.
+   - ✓ Cleanup: Removed `inferredBounds` fallback in `calibrationProfileStorage.ts` (calibrations will be rerun).
 
 7. [ ] **Planner split and space consistency (incl. Pattern Designer validation)** (medium effort, high gain)
    - Two passes: (a) validate points vs bounds in canonical space, (b) convert to steps using snapshot.
