@@ -35,7 +35,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
 
 ### In Progress
 
-- [ ] **Item 4: Generator-based script + executor skeleton** — Defining command types, building executor, prototyping one-tile script.
+- [x] **Item 4: Generator-based script + executor skeleton** — Command types, adapters, executor, skeleton script, and tests complete. Golden trace deferred to item 5.
 
 ## Priority roadmap
 
@@ -93,7 +93,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
      - core calibration math is now IO-free under `src/services/calibration/math/`, with tests colocated.
      - All tests pass (29 tests for gridBlueprintMath after cleanup)
 
-4. [ ] **Generator-based script + executor skeleton** (medium effort, high gain)
+4. [x] **Generator-based script + executor skeleton** (medium effort, high gain)
 
    **Goal:** Separate "what to do" (script) from "how to do it" (executor). The script becomes a pure generator yielding command intents; the executor drives it, handles IO, pause/resume/abort, and state emission.
 
@@ -164,7 +164,7 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
    4. `src/services/calibration/script/script.ts` - Skeleton script (home all + one tile happy path)
    5. `src/services/calibration/script/__tests__/script.test.ts` - Synchronous script tests (command sequence assertions)
    6. `src/services/calibration/script/__tests__/executor.test.ts` - Async executor tests (fake adapters + deterministic timers for pause/resume/abort/retry)
-   7. Golden trace: record normalized trace from old runner for 1-tile scenario; assert new generator matches before flipping `useCalibrationController`
+   7. Golden trace: record normalized trace from old runner for 1-tile scenario; assert new generator matches before flipping `useCalibrationController` _(deferred to item 5 — skeleton only handles one tile; golden trace more valuable once full sequence is ported)_
 
    **Testing approach:**
    - **Script tests (sync):** Step through generator with `generator.next(cannedResult)`, assert exact command sequence. No timers, no async.
@@ -172,6 +172,14 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
    - **Golden trace bridge:** Run 1-tile scenario through old `CalibrationRunner`, normalize the command log to a trace format, then verify new script+executor produces equivalent trace.
 
    **Starting point:** [`../src/services/calibrationRunner.ts`](../src/services/calibrationRunner.ts)
+
+   **Feedback / gaps (review):** _(addressed)_
+   - ✓ Good: clear command vocabulary + explicit adapter boundary; executor is a plausible "IO kernel" for item 5.
+   - ✓ `onCommandError` / `onTileError` callbacks now invoked in executor (motor failures, tile failures).
+   - ✓ pause/resume, step-mode gating, and abort tests added; abort during DELAY/CAPTURE correctly transitions to `aborted` (not `error`).
+   - ✓ Bug fixed: abort during DELAY now maps AbortError to ExecutorAbortError.
+   - ✓ `activeTile` now derived from UPDATE_TILE patches (set when `measuring`, cleared when `completed`/`failed`/`skipped`).
+   - Gap (deferred): no integration path yet (feature-flag/parallel wiring into `useCalibrationController`); skeleton exercised via unit tests only for now.
 
 5. [ ] **Port full calibration sequence to generator** (higher effort, very high gain)
 
