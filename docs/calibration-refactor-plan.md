@@ -1,6 +1,8 @@
-# Calibration / Playback Refactor Plan
+# Calibration / Playback Refactor Plan - Phase 1 (COMPLETE)
 
-Consolidated proposal to simplify calibration, bounds, and pattern playback. Tasks are ordered by impact/effort (highest gain per effort first). Each phase includes a testing approach to keep regressions in check.
+**Status: All items complete. Remaining work moved to [Phase 2 Plan](./calibration-refactor-phase2-plan.md).**
+
+Phase 1 established the core calibration architecture: coordinate kernel, canonical snapshot shape, pure math isolation, generator-based executor, and unified bounds semantics.
 
 ## Guiding principles
 
@@ -262,30 +264,12 @@ Consolidated proposal to simplify calibration, bounds, and pattern playback. Tas
    - ✓ Docs: Updated `docs/requirements.md` to reference `combinedBounds` and removed `globalBounds`/`inferredBounds` mentions.
    - ✓ Cleanup: Removed `inferredBounds` fallback in `calibrationProfileStorage.ts` (calibrations will be rerun).
 
-7. [ ] **Planner split and space consistency (incl. Pattern Designer validation)** (medium effort, high gain)
-   - Two passes: (a) validate points vs bounds in canonical space, (b) convert to steps using snapshot.
-   - Plug-in assignment strategy (greedy now, pluggable later).
-   - Reuse the same validation path for Pattern Designer (invalid-point highlighting) so editor == planner.
-   - Bring Animation Path editor/player onto the same validation/bounds pipeline to eliminate aspect drift between tools.
-   - Tests: fixtures for point->tile assignment and step outputs across rotations/aspects; designer/animation validation mirrors planner results.
-   - Starting point: [`../src/services/profilePlaybackPlanner.ts`](../src/services/profilePlaybackPlanner.ts)
+---
 
-8. [ ] **Declarative overlays** (low-medium effort, medium gain)
-   - Overlays described in canonical space; single renderer maps to screen via `coords` module.
-   - Tests: screenshot/DOM geometry assertions in JSDOM with stubbed size.
-   - Starting point: [`../src/hooks/useCameraPipeline.ts`](../src/hooks/useCameraPipeline.ts)
+## Phase 1 Complete
 
-9. [ ] **Regression safety net** (ongoing)
-   - Contract tests run in CI: coord conversions, snapshot golden, planner outputs, generator command traces.
-   - Add a fast "dry-run" mode for the executor that records commands without motors.
-   - As pieces move, keep adapters thin and covered by integration tests that stitch math + executor + adapters with fakes.
-   - Starting point: [`../src/services/calibration/__tests__/summaryComputation.test.ts`](../src/services/calibration/__tests__/summaryComputation.test.ts)
+All 6 items finished. See [Phase 2 Plan](./calibration-refactor-phase2-plan.md) for remaining work:
 
-## Testability strategy during refactor
-
-- **Strangle, don't big-bang**: introduce new modules in parallel, validate with golden tests, then flip consumers one by one.
-- **Golden fixtures**: freeze current expected runner summary, bounds, planner outputs on sample inputs; compare after each swap.
-- **Deterministic fakes**: motor API fake (records moves, supports clamped ranges); camera measurement fake (scripted detections with noise options).
-- **Command trace assertions**: for the generator, assert the exact sequence of intents given a scripted environment.
-- **Coord contract suite**: small matrix of aspect ratios/resolutions tested across all conversions to catch regressions early.
-- **CI guardrails**: run unit + contract suites on every refactor PR; keep e2e optional until orchestration stabilizes.
+- Planner split and space consistency
+- Declarative overlays
+- Regression safety net
