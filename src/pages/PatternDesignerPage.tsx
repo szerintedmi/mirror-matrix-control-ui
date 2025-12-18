@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
+import { showSimpleErrorToast } from '@/components/common/StyledToast';
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
 import PatternDesignerToolbar from '@/components/patternDesigner/PatternDesignerToolbar';
@@ -11,6 +12,7 @@ import { usePatternContext } from '@/context/PatternContext';
 import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import { loadGridState } from '@/services/gridStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
+import { centeredBoundsToPattern, getSpaceParams } from '@/services/spaceConversion';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
 import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/coordinates';
 import {
@@ -628,116 +630,125 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         if (!selectedCalibrationProfile) {
             return [];
         }
-        // Default to 16:9 if aspect ratio is missing
-        const aspect = selectedCalibrationProfile.calibrationCameraAspect ?? 16 / 9;
+        const spaceParams = getSpaceParams(selectedCalibrationProfile);
 
         return Object.entries(selectedCalibrationProfile.tiles)
             .map(([id, tile]) => {
                 if (!tile.combinedBounds) {
                     return null;
                 }
-                // Convert Centered bounds to Isotropic Pattern Space (Fit Width)
-                // X is unchanged. Y is scaled by 1/aspect.
+                // Convert Centered bounds to Isotropic Pattern Space
+                const patternBounds = centeredBoundsToPattern(tile.combinedBounds, spaceParams);
                 return {
                     id,
-                    xMin: tile.combinedBounds.x.min,
-                    xMax: tile.combinedBounds.x.max,
-                    yMin: tile.combinedBounds.y.min / aspect,
-                    yMax: tile.combinedBounds.y.max / aspect,
+                    ...patternBounds,
                 };
             })
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
     }, [selectedCalibrationProfile]);
 
-    const invalidPointIds = useMemo(() => {
-        if (!selectedPattern || !selectedCalibrationProfile) return new Set<string>();
+    // Compute full validation using planner (bounds + capacity + step range)
+    const selectedPatternValidation = useMemo(() => {
+        if (!selectedPattern || !selectedCalibrationProfile) {
+            return { invalidPointIds: new Set<string>(), errors: [] };
+        }
 
-        // Use the playback planner to check for validity against the profile
         const plan = planProfilePlayback({
-            pattern: selectedPattern,
-            profile: selectedCalibrationProfile,
             gridSize,
             mirrorConfig,
+            profile: selectedCalibrationProfile,
+            pattern: selectedPattern,
         });
 
-        if (plan.errors.length === 0) {
-            return new Set<string>();
+        // Extract invalid point IDs from planner errors
+        const invalidIds = new Set<string>();
+        for (const error of plan.errors) {
+            if (error.patternPointId) {
+                invalidIds.add(error.patternPointId);
+            }
         }
 
-        // Collect errors from the planner
-        const plannerInvalidIds = new Set<string>();
-
-        plan.errors.forEach((err) => {
-            if (err.patternPointId) {
-                plannerInvalidIds.add(err.patternPointId);
-            }
-        });
-
-        // If we have specific point errors from the planner, use them.
-        // (This covers capacity issues, out of bounds on specific axes, etc.)
-        if (plannerInvalidIds.size > 0) {
-            return plannerInvalidIds;
-        }
-
-        // If we have a grid mismatch (and thus no specific point errors),
-        // OR if we have other global errors but no specific point errors,
-        // we fall back to the geometric bounds check.
-        // This is useful for "profile_grid_mismatch" so we can still see if points are roughly valid.
-        // We also do this if there are NO specific errors but still global errors, just in case.
-        const invalid = new Set<string>();
-        // Default to 16:9 if aspect ratio is missing
-        const aspect = selectedCalibrationProfile.calibrationCameraAspect ?? 16 / 9;
-
-        const bounds = Object.values(selectedCalibrationProfile.tiles)
-            .map((t) => {
-                if (t.combinedBounds) {
-                    // Convert Centered bounds to Isotropic Pattern Space (Fit Width)
-                    // X is unchanged. Y is scaled by 1/aspect.
-                    const yMin = t.combinedBounds.y.min / aspect;
-                    const yMax = t.combinedBounds.y.max / aspect;
-                    return {
-                        x: t.combinedBounds.x.min,
-                        y: yMin,
-                        width: t.combinedBounds.x.max - t.combinedBounds.x.min,
-                        height: yMax - yMin,
-                    };
-                }
-                if (t.homeMeasurement) {
-                    // Measurements are also in Centered coords, so apply same scaling
-                    const y = (t.homeMeasurement.y - t.homeMeasurement.size / 2) / aspect;
-                    const height = t.homeMeasurement.size / aspect;
-                    return {
-                        x: t.homeMeasurement.x - t.homeMeasurement.size / 2,
-                        y: y,
-                        width: t.homeMeasurement.size,
-                        height: height,
-                    };
-                }
-                return null;
-            })
-            .filter((b): b is NonNullable<typeof b> => Boolean(b));
-
-        selectedPattern.points.forEach((pt) => {
-            // Check if point is inside ANY bounding box
-            const isInAny = bounds.some(
-                (box) =>
-                    pt.x >= box.x &&
-                    pt.x <= box.x + box.width &&
-                    pt.y >= box.y &&
-                    pt.y <= box.y + box.height,
-            );
-            if (!isInAny) {
-                invalid.add(pt.id);
-            }
-        });
-
-        return invalid;
+        return { invalidPointIds: invalidIds, errors: plan.errors };
     }, [selectedPattern, selectedCalibrationProfile, gridSize, mirrorConfig]);
+
+    const invalidPointIds = selectedPatternValidation.invalidPointIds;
 
     const maxOverlapCount = useMemo(() => {
         if (!selectedPattern) return 0;
         return calculateMaxOverlapCount(selectedPattern.points, calibratedBlobRadius);
     }, [selectedPattern, calibratedBlobRadius]);
+
+    // Validation for all patterns (for pattern list warnings)
+    const validationByPatternId = useMemo(() => {
+        if (!selectedCalibrationProfile) return null;
+
+        const map = new Map<string, { isValid: boolean; message?: string; details?: string }>();
+
+        patterns.forEach((pattern) => {
+            if (pattern.points.length === 0) {
+                map.set(pattern.id, {
+                    isValid: false,
+                    message: 'Empty pattern',
+                    details: 'Add at least one point to enable playback.',
+                });
+                return;
+            }
+
+            const plan = planProfilePlayback({
+                gridSize,
+                mirrorConfig,
+                profile: selectedCalibrationProfile,
+                pattern,
+            });
+
+            const relevantErrors = plan.errors.filter(
+                (error) => error.code !== 'missing_profile' && error.code !== 'missing_pattern',
+            );
+
+            if (relevantErrors.length === 0) {
+                map.set(pattern.id, { isValid: true });
+                return;
+            }
+
+            // Categorize errors for user-friendly messages
+            const outOfBoundsErrors = relevantErrors.filter(
+                (e) => e.code === 'no_valid_tile_for_point' || e.code === 'target_out_of_bounds',
+            );
+            const capacityErrors = relevantErrors.filter(
+                (e) =>
+                    e.code === 'insufficient_calibrated_tiles' ||
+                    e.code === 'pattern_exceeds_mirrors',
+            );
+
+            let message: string;
+            if (outOfBoundsErrors.length > 0) {
+                message = `Point(s) outside bounds (${outOfBoundsErrors.length})`;
+            } else if (capacityErrors.length > 0) {
+                message = 'More points than tiles';
+            } else {
+                message = relevantErrors[0].message;
+            }
+
+            map.set(pattern.id, {
+                isValid: false,
+                message,
+                details: relevantErrors
+                    .slice(0, 3)
+                    .map((e) => e.message)
+                    .join(' • '),
+            });
+        });
+
+        return map;
+    }, [gridSize, mirrorConfig, patterns, selectedCalibrationProfile]);
+
+    const getValidationStatus = useCallback(
+        (pattern: Pattern) => {
+            if (!selectedCalibrationProfile) return { isValid: true };
+            return validationByPatternId?.get(pattern.id) ?? { isValid: true };
+        },
+        [selectedCalibrationProfile, validationByPatternId],
+    );
 
     // Handlers
     const handleCreatePattern = () => {
@@ -794,31 +805,19 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     const renameInputId = 'rename-pattern-input';
     const isRenameDisabled = !renameState?.value.trim();
 
-    const [quickPlayMessage, setQuickPlayMessage] = useState<{
-        tone: 'success' | 'error';
-        text: string;
-    } | null>(null);
-
     const handleQuickPlay = useCallback(
         async (pattern: Pattern) => {
             if (!selectedCalibrationProfile) {
-                setQuickPlayMessage({
-                    tone: 'error',
-                    text: 'Select a calibration profile to play.',
-                });
+                showSimpleErrorToast('Playback failed', 'Select a calibration profile to play.');
                 return;
             }
 
-            setQuickPlayMessage({ tone: 'success', text: `Playing "${pattern.name}"...` });
             selectPattern(pattern.id);
-
             const result = await playSinglePattern(pattern, selectedCalibrationProfile);
-            setQuickPlayMessage({
-                tone: result.success ? 'success' : 'error',
-                text: result.success
-                    ? `Played "${pattern.name}" (${result.axisCount} axes)`
-                    : result.message,
-            });
+
+            if (!result.success) {
+                showSimpleErrorToast(`Playback failed: ${pattern.name}`, result.message);
+            }
         },
         [playSinglePattern, selectPattern, selectedCalibrationProfile],
     );
@@ -838,18 +837,6 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     </button>
                 </div>
 
-                {quickPlayMessage && (
-                    <p
-                        className={`text-xs font-semibold ${
-                            quickPlayMessage.tone === 'success'
-                                ? 'text-emerald-300'
-                                : 'text-amber-300'
-                        }`}
-                    >
-                        {quickPlayMessage.text}
-                    </p>
-                )}
-
                 <PatternLibraryList
                     patterns={patterns}
                     selectedPatternId={selectedPattern?.id ?? null}
@@ -857,6 +844,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     onDelete={deletePattern}
                     onRename={handleOpenRenameModal}
                     onPlay={handleQuickPlay}
+                    getValidationStatus={getValidationStatus}
                     className="flex-1 min-h-0 overflow-y-auto"
                 />
             </div>

@@ -26,32 +26,20 @@ Continuation of calibration system improvements. Phase 1 (items 1-6) completed t
 
 ## Phase 2 Roadmap
 
-### 1. [ ] **Planner split and space consistency** (medium effort, high gain)
+### 1. [x] **Planner split and space consistency** ✓ DONE
 
 **Goal:** Unify pattern validation across Pattern Designer, Animation Path, and Playback.
 
-**Current state:**
+**Completed:**
 
-- `profilePlaybackPlanner.ts` validates and assigns pattern points to tiles
-- Pattern Designer has its own validation path
-- Animation Path editor may have aspect drift
-
-**Deliverables:**
-
-1. Split planner into two passes:
-   - Pass A: Validate points against `combinedBounds` in canonical space
-   - Pass B: Convert validated points to motor steps using tile snapshot
-2. Plug-in assignment strategy (greedy now, pluggable later)
-3. Shared validation module for Pattern Designer invalid-point highlighting
-4. Animation Path editor uses same bounds pipeline
-
-**Tests:**
-
-- Fixtures for point→tile assignment across rotations/aspects
-- Step output verification
-- Pattern Designer and Animation validation mirrors planner results
-
-**Starting point:** `src/services/profilePlaybackPlanner.ts`
+- `src/services/spaceConversion.ts` - Space transform helpers (`patternToCentered`, `centeredToPattern`, `getSpaceParams`)
+- `src/services/boundsValidation.ts` - Shared validation (`validatePatternInProfile`, `validateWaypointsInProfile`)
+- `profilePlaybackPlanner.ts` refactored to use shared modules + deterministic assignment
+- `PatternDesignerPage.tsx` simplified to use `validatePatternInProfile`
+- `animationPlanner.ts` now applies aspect/rotation + validates waypoints
+- `AnimationPathEditor.tsx` highlights invalid waypoints (red stroke)
+- New error code `no_valid_tile_for_point` for clearer taxonomy
+- 61 new tests (47 space conversion, 14 bounds validation)
 
 ---
 
@@ -68,12 +56,14 @@ Continuation of calibration system improvements. Phase 1 (items 1-6) completed t
 **Deliverables:**
 
 1. Overlay descriptor types in canonical space:
+
    ```typescript
    type Overlay =
      | { type: 'point'; position: CenteredPoint; style: PointStyle }
      | { type: 'rect'; bounds: Bounds; style: RectStyle }
      | { type: 'grid'; blueprint: GridBlueprint; style: GridStyle };
    ```
+
 2. Single renderer maps overlays to screen via `coords` module
 3. Overlay composition (multiple overlays in one render pass)
 

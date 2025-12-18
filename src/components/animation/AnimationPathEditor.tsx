@@ -29,6 +29,8 @@ interface AnimationPathEditorProps {
     onShowBoundsChange?: (show: boolean) => void;
     /** Whether bounds can be shown (calibration profile selected) */
     canShowBounds?: boolean;
+    /** Set of waypoint IDs that are invalid (out of bounds) */
+    invalidWaypointIds?: Set<string>;
     /** Transform callback: shift path waypoints */
     onShift?: (dx: number, dy: number) => void;
     /** Transform callback: scale path waypoints */
@@ -60,6 +62,7 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
     showBounds = false,
     onShowBoundsChange,
     canShowBounds = false,
+    invalidWaypointIds,
     onShift,
     onScale,
     onRotate,
@@ -398,6 +401,7 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
                                     const isDragging = draggingWaypointId === wp.id;
                                     const isFirst = index === 0;
                                     const isLast = index === p.waypoints.length - 1;
+                                    const isInvalid = invalidWaypointIds?.has(wp.id) ?? false;
 
                                     return (
                                         <g key={wp.id}>
@@ -416,11 +420,13 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
                                                             : color
                                                 }
                                                 stroke={
-                                                    isHovered && editMode === 'delete'
-                                                        ? '#f87171'
-                                                        : '#fff'
+                                                    isInvalid
+                                                        ? '#ef4444'
+                                                        : isHovered && editMode === 'delete'
+                                                          ? '#f87171'
+                                                          : '#fff'
                                                 }
-                                                strokeWidth={0.003}
+                                                strokeWidth={isInvalid ? 0.006 : 0.003}
                                                 style={{
                                                     cursor: isSelected
                                                         ? editMode === 'move'

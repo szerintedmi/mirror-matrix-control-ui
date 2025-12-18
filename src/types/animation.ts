@@ -114,6 +114,7 @@ export type AnimationPlanErrorCode =
     | 'missing_calibration'
     | 'missing_motor'
     | 'speed_exceeds_limit'
+    | 'steps_out_of_range'
     | 'no_assignments'
     | 'no_mirrors_in_sequence';
 

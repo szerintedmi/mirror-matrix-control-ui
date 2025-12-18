@@ -1,3 +1,4 @@
+import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
 import type { Axis, CalibrationProfile, MirrorConfig, TileCalibrationResults } from '@/types';
 import type {
     Animation,
@@ -18,6 +19,9 @@ import {
 } from '@/types/animation';
 import { convertDeltaToSteps } from '@/utils/calibrationMath';
 import { getMirrorAssignment } from '@/utils/grid';
+
+import { validateWaypointsInProfile } from './boundsValidation';
+import { getSpaceParams, patternToCentered, type SpaceConversionParams } from './spaceConversion';
 
 // ============================================================================
 // Types
@@ -73,13 +77,36 @@ const isTileCalibrated = (
     );
 
 /**
+ * Get the allowed step range for a tile axis.
+ */
+const resolveAxisRange = (
+    tile: TileCalibrationResults,
+    axis: Axis,
+): { min: number; max: number } => {
+    const range = tile.axes?.[axis]?.stepRange;
+    if (range) {
+        return { min: range.minSteps, max: range.maxSteps };
+    }
+    return { min: MOTOR_MIN_POSITION_STEPS, max: MOTOR_MAX_POSITION_STEPS };
+};
+
+/**
+ * Result of converting normalized coordinate to steps.
+ */
+interface StepsResult {
+    steps: number;
+    clamped: boolean;
+}
+
+/**
  * Convert a normalized coordinate to motor steps using calibration data.
+ * Clamps the result to the valid step range for the axis.
  */
 const normalizedToSteps = (
     normalizedValue: number,
     tile: TileCalibrationResults,
     axis: Axis,
-): number | null => {
+): StepsResult | null => {
     const perStep = tile.stepToDisplacement[axis];
     const adjustedHome = tile.adjustedHome;
 
@@ -95,7 +122,14 @@ const normalizedToSteps = (
 
     if (deltaSteps === null) return null;
 
-    return Math.round(homeSteps + deltaSteps);
+    const rawSteps = Math.round(homeSteps + deltaSteps);
+    const range = resolveAxisRange(tile, axis);
+
+    // Clamp to valid range
+    const clampedSteps = Math.max(range.min, Math.min(range.max, rawSteps));
+    const clamped = clampedSteps !== rawSteps;
+
+    return { steps: clampedSteps, clamped };
 };
 
 // ============================================================================
@@ -355,6 +389,7 @@ interface SegmentPlanContext {
     mirrorConfig: MirrorConfig;
     defaultSpeedSps: number;
     previousSteps: Map<string, number>; // "mirrorId:axis" -> steps
+    spaceParams: SpaceConversionParams; // For converting pattern space to centered space
 }
 
 /**
@@ -391,19 +426,23 @@ const planSegment = (
         const fromWaypoint = path.waypoints[segmentIndex];
         const toWaypoint = path.waypoints[segmentIndex + 1];
 
+        // Transform waypoints from pattern space to centered space
+        const fromCentered = patternToCentered(fromWaypoint, ctx.spaceParams);
+        const toCentered = patternToCentered(toWaypoint, ctx.spaceParams);
+
         const assignment = getMirrorAssignment(ctx.mirrorConfig, row, col);
 
         for (const axis of AXES) {
             const motor = assignment[axis];
             if (!motor) continue;
 
-            const fromNormalized = fromWaypoint[axis];
-            const toNormalized = toWaypoint[axis];
+            const fromNormalized = fromCentered[axis];
+            const toNormalized = toCentered[axis];
 
-            const fromSteps = normalizedToSteps(fromNormalized, tile, axis);
-            const toSteps = normalizedToSteps(toNormalized, tile, axis);
+            const fromResult = normalizedToSteps(fromNormalized, tile, axis);
+            const toResult = normalizedToSteps(toNormalized, tile, axis);
 
-            if (fromSteps === null || toSteps === null) {
+            if (fromResult === null || toResult === null) {
                 errors.push(
                     createError(
                         'missing_calibration',
@@ -413,6 +452,20 @@ const planSegment = (
                 );
                 continue;
             }
+
+            // Warn if steps were clamped to the valid range
+            if (fromResult.clamped || toResult.clamped) {
+                errors.push(
+                    createError(
+                        'steps_out_of_range',
+                        `Target steps clamped to valid range for ${mirrorId} axis ${axis} in segment ${segmentIndex}.`,
+                        { mirrorId, segmentIndex },
+                    ),
+                );
+            }
+
+            const fromSteps = fromResult.steps;
+            const toSteps = toResult.steps;
 
             // Use previous end position if available (for continuity)
             const stateKey = `${mirrorId}:${axis}`;
@@ -570,6 +623,22 @@ export const planAnimation = (params: PlanAnimationParams): AnimationPlaybackPla
         };
     }
 
+    // Get space conversion params for transforming waypoints
+    const spaceParams = getSpaceParams(profile);
+
+    // Validate waypoints against bounds
+    for (const path of animation.paths) {
+        const validation = validateWaypointsInProfile(path.waypoints, { profile });
+        for (const error of validation.errors) {
+            errors.push(
+                createError('waypoint_out_of_bounds', error.message, {
+                    pathId: path.id,
+                    waypointId: error.pointId,
+                }),
+            );
+        }
+    }
+
     // Plan segments
     const segments: AnimationSegmentPlan[] = [];
     const ctx: SegmentPlanContext = {
@@ -577,6 +646,7 @@ export const planAnimation = (params: PlanAnimationParams): AnimationPlaybackPla
         mirrorConfig,
         defaultSpeedSps: animation.defaultSpeedSps,
         previousSteps: new Map(),
+        spaceParams,
     };
 
     // offsetMs calculation reserved for future sequential timing offset feature

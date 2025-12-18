@@ -1,11 +1,11 @@
 import { MOTOR_MAX_POSITION_STEPS, MOTOR_MIN_POSITION_STEPS } from '@/constants/control';
-import { rotateVector } from '@/utils/arrayRotation';
 import { convertDeltaToSteps } from '@/utils/calibrationMath';
 
 import { getMirrorAssignment } from '../utils/grid';
 
+import { getSpaceParams, patternToCentered } from './spaceConversion';
+
 import type {
-    ArrayRotation,
     Axis,
     CalibrationProfile,
     CalibrationProfileBounds,
@@ -31,6 +31,7 @@ export type ProfilePlaybackErrorCode =
     | 'profile_grid_mismatch'
     | 'pattern_exceeds_mirrors'
     | 'insufficient_calibrated_tiles'
+    | 'no_valid_tile_for_point'
     | 'tile_not_calibrated'
     | 'missing_motor'
     | 'missing_axis_calibration'
@@ -292,27 +293,15 @@ export const planProfilePlayback = ({
     const totalMirrors = gridSize.rows * gridSize.cols;
     const globalErrors: ProfilePlaybackValidationError[] = [];
 
-    // Apply array rotation to pattern points.
-    // This transforms pattern coordinates to match the calibrated coordinate space.
-    const arrayRotation: ArrayRotation = profile.arrayRotation ?? 0;
-    // Default to 16:9 if aspect ratio is missing, as that's the standard camera aspect
-    const aspect = profile.calibrationCameraAspect ?? 16 / 9;
-
+    // Transform pattern points from isotropic pattern space to camera-centered space
+    // using shared space conversion helpers (rotation + aspect ratio scaling)
+    const spaceParams = getSpaceParams(profile);
     const rotatedPoints: PatternPoint[] = pattern.points.map((point) => {
-        const rotated =
-            arrayRotation === 0
-                ? { x: point.x, y: point.y }
-                : rotateVector({ x: point.x, y: point.y }, arrayRotation);
-
-        // Convert Isotropic Pattern coordinates to Anisotropic Centered coordinates
-        // We use "Fit Width" strategy where Pattern X [-1, 1] maps to Centered X [-1, 1].
-        // Since Centered Y [-1, 1] covers a smaller physical distance than Centered X [-1, 1],
-        // we must scale Pattern Y by the aspect ratio to preserve circularity.
-        // This means Pattern Y=1 maps to Centered Y=aspect (e.g. 1.77), which may be outside the image.
+        const centered = patternToCentered(point, spaceParams);
         return {
             ...point,
-            x: rotated.x,
-            y: rotated.y * aspect,
+            x: centered.x,
+            y: centered.y,
         };
     });
 
@@ -389,7 +378,12 @@ export const planProfilePlayback = ({
 
     // 3. Sort points by flexibility (ascending number of valid tiles)
     // This ensures we handle constrained points first.
-    pointOptions.sort((a, b) => a.validTiles.length - b.validTiles.length);
+    // Stable tie-break on point ID for deterministic results.
+    pointOptions.sort((a, b) => {
+        const flexDiff = a.validTiles.length - b.validTiles.length;
+        if (flexDiff !== 0) return flexDiff;
+        return a.point.id.localeCompare(b.point.id);
+    });
 
     // 4. Assign tiles
     const assignedTileKeys = new Set<string>();
@@ -406,6 +400,7 @@ export const planProfilePlayback = ({
         }
 
         // Find the "closest" candidate
+        // Stable tie-break on tile key for deterministic results when distances are equal.
         let bestCandidate = candidates[0];
         let minDistanceSq = Number.POSITIVE_INFINITY;
 
@@ -413,7 +408,10 @@ export const planProfilePlayback = ({
             const dx = point.x - candidate.idealX;
             const dy = point.y - candidate.idealY;
             const distSq = dx * dx + dy * dy;
-            if (distSq < minDistanceSq) {
+            if (
+                distSq < minDistanceSq ||
+                (distSq === minDistanceSq && candidate.key < bestCandidate.key)
+            ) {
                 minDistanceSq = distSq;
                 bestCandidate = candidate;
             }
@@ -500,19 +498,32 @@ export const planProfilePlayback = ({
     }
 
     // Check for unassigned points to report errors
-    // If a point was not assigned, it means we ran out of valid tiles or it was impossible
+    // Distinguish between "no valid tiles" (outside bounds) vs "no remaining tiles" (capacity)
     const unassignedPoints = rotatedPoints.filter((p) => !pointAssignments.has(p.id));
     for (const p of unassignedPoints) {
-        // We need to attach this error somewhere.
-        // The interface puts errors on tiles or global.
-        // Since it's not assigned to a tile, it's a global error or we just report it.
-        globalErrors.push(
-            createError(
-                'insufficient_calibrated_tiles', // Or a new error code 'point_unassignable'
-                `Unable to assign pattern point ${p.id} to any valid tile (constraints or capacity).`,
-                { patternPointId: p.id },
-            ),
-        );
+        // Find the original pointOptions entry to check if it had any valid tiles
+        const options = pointOptions.find((opt) => opt.point.id === p.id);
+        const hadValidTiles = options && options.validTiles.length > 0;
+
+        if (hadValidTiles) {
+            // Point had valid tiles but they were all taken by other points
+            globalErrors.push(
+                createError(
+                    'insufficient_calibrated_tiles',
+                    `No remaining tile for point "${p.id}" - all compatible tiles already assigned.`,
+                    { patternPointId: p.id },
+                ),
+            );
+        } else {
+            // Point has no valid tiles (outside all tile bounds)
+            globalErrors.push(
+                createError(
+                    'no_valid_tile_for_point',
+                    `Point "${p.id}" at (${p.x.toFixed(3)}, ${p.y.toFixed(3)}) is outside all tile bounds.`,
+                    { patternPointId: p.id },
+                ),
+            );
+        }
     }
 
     const playableAxisTargets = tiles

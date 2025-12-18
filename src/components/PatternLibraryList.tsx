@@ -141,28 +141,16 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                         <span className="text-xs text-gray-500">
                                             {pattern.points.length} spots
                                         </span>
-                                        {isInvalid && (
-                                            <span
-                                                className="mt-1 flex items-center gap-1 text-xs text-red-400"
-                                                title={validation?.details ?? validation?.message}
-                                            >
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    viewBox="0 0 20 20"
-                                                    fill="currentColor"
-                                                    className="h-3 w-3"
-                                                >
-                                                    <path
-                                                        fillRule="evenodd"
-                                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z"
-                                                        clipRule="evenodd"
-                                                    />
-                                                </svg>
-                                                {validation.message}
-                                            </span>
-                                        )}
                                     </div>
                                 </div>
+                                {isInvalid && (
+                                    <span
+                                        className="mt-1 text-xs text-amber-400"
+                                        title={validation?.details ?? validation?.message}
+                                    >
+                                        {validation.message}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="flex flex-none items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">

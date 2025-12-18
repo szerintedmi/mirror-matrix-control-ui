@@ -11,10 +11,12 @@ import {
     AnimationTimeline,
 } from '@/components/animation';
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
+import { showSimpleErrorToast } from '@/components/common/StyledToast';
 import Modal from '@/components/Modal';
 import { useAnimationContext } from '@/context/AnimationContext';
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { useAnimationPlayback } from '@/hooks/useAnimationPlayback';
+import { validateWaypointsInProfile } from '@/services/boundsValidation';
 import { loadGridState } from '@/services/gridStorage';
 import type { MirrorConfig } from '@/types';
 import type {
@@ -207,6 +209,15 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
     }, [selectedCalibrationProfile]);
 
     const canShowBounds = Boolean(selectedCalibrationProfile) && calibrationTileBounds.length > 0;
+
+    // Validate waypoints for the selected path
+    const invalidWaypointIds = useMemo(() => {
+        if (!selectedPath || !selectedCalibrationProfile) return new Set<string>();
+        const result = validateWaypointsInProfile(selectedPath.waypoints, {
+            profile: selectedCalibrationProfile,
+        });
+        return result.invalidPointIds;
+    }, [selectedPath, selectedCalibrationProfile]);
 
     // Handlers
     const handleOpenCreateModal = () => {
@@ -407,9 +418,18 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
     };
 
     const handlePlay = async () => {
-        if (!selectedAnimation || !selectedCalibrationProfile) return;
+        if (!selectedAnimation || !selectedCalibrationProfile) {
+            showSimpleErrorToast(
+                'Playback failed',
+                'Select an animation and calibration profile to play.',
+            );
+            return;
+        }
         setPlaybackResultMessage(null);
         const result = await playAnimation(selectedAnimation, selectedCalibrationProfile);
+        if (!result.success) {
+            showSimpleErrorToast(`Playback failed: ${selectedAnimation.name}`, result.message);
+        }
         setPlaybackResultMessage(result.message);
     };
 
@@ -575,6 +595,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                     showBounds={showBounds}
                                     onShowBoundsChange={setShowBounds}
                                     canShowBounds={canShowBounds}
+                                    invalidWaypointIds={invalidWaypointIds}
                                     onShift={handleShift}
                                     onScale={handleScale}
                                     onRotate={handleRotate}

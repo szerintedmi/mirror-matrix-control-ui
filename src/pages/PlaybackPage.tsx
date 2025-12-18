@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
+import { showSimpleErrorToast } from '@/components/common/StyledToast';
 import PatternLibraryList from '@/components/PatternLibraryList';
 import PlaybackSequenceManager, {
     type PlaybackSequenceManagerHandle,
@@ -97,16 +98,26 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
                 return;
             }
 
+            // Categorize errors for user-friendly messages
             const outOfBoundsErrors = relevantErrors.filter(
-                (error) => error.code === 'target_out_of_bounds',
+                (e) => e.code === 'no_valid_tile_for_point' || e.code === 'target_out_of_bounds',
+            );
+            const capacityErrors = relevantErrors.filter(
+                (e) =>
+                    e.code === 'insufficient_calibrated_tiles' ||
+                    e.code === 'pattern_exceeds_mirrors',
             );
             const prioritizedErrors =
                 outOfBoundsErrors.length > 0 ? outOfBoundsErrors : relevantErrors;
 
-            const message =
-                outOfBoundsErrors.length > 0
-                    ? `Points out of bounds (${outOfBoundsErrors.length})`
-                    : prioritizedErrors[0].message;
+            let message: string;
+            if (outOfBoundsErrors.length > 0) {
+                message = `Point(s) outside bounds (${outOfBoundsErrors.length})`;
+            } else if (capacityErrors.length > 0) {
+                message = 'More points than tiles';
+            } else {
+                message = prioritizedErrors[0].message;
+            }
 
             const detailsList = prioritizedErrors.slice(0, 3).map((error) => {
                 const pointLabel = error.patternPointId ? `Point ${error.patternPointId}` : 'Point';
@@ -159,9 +170,13 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
     const handleQuickPlay = useCallback(
         async (pattern: Pattern) => {
             if (!selectedCalibrationProfile) {
+                showSimpleErrorToast('Playback failed', 'Select a calibration profile to play.');
                 return;
             }
-            await playSinglePattern(pattern, selectedCalibrationProfile);
+            const result = await playSinglePattern(pattern, selectedCalibrationProfile);
+            if (!result.success) {
+                showSimpleErrorToast(`Playback failed: ${pattern.name}`, result.message);
+            }
         },
         [playSinglePattern, selectedCalibrationProfile],
     );
