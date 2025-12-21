@@ -11,16 +11,16 @@
 - Update presets in `metadata.json` when needed.
 - Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
 - Primary framework: React. Vue can be introduced later, but is not configured yet. If/when introducing Vue makes sense suggest it.
-- Install: `yarn install`
+- Install: `bun install`
 
 ## Build, Test, and Development Commands
 
-- Run `yarn format` / `yarn format:fix` → Prettier checks after changes in markdown files and other non code files.
+- Run `bun run format` / `bun run format:fix` → Prettier checks after changes in markdown files and other non code files.
 - Run all these after changes in code or configuration:
-  - `yarn build` → builds with Vite. A `prebuild` hook runs `tsc --noEmit` to fail on type errors.
-  - `yarn test` → Vitest unit tests.
-  - `yarn lint` / `yarn lint:fix` → ESLint checks and safe autofixes.
-  - `yarn format` / `yarn format:fix` → Prettier checks and safe autofixes.
+  - `bun run build` → builds with Vite. A `prebuild` hook runs `tsc --noEmit` to fail on type errors.
+  - `bun run test` → Vitest unit tests.
+  - `bun run lint` / `bun run lint:fix` → ESLint checks and safe autofixes.
+  - `bun run format` / `bun run format:fix` → Prettier checks and safe autofixes.
 - Your should resolve any errors and warnings from the above pre-checks before hand-off.
 - Dev server error overlay: TypeScript errors are shown in-browser via `vite-plugin-checker`.
 
@@ -59,7 +59,7 @@ You proceed to next step without user input unless you miss information to proce
 #### 4. Implement and validate
 
 - Do not install new dependencies without explicit prior approval
-- Before you report you are ready always run `yarn build` first. Then `yarn format:fix`, `yarn lint:fix`, `yarn:test`. Always request elevated permissions for `yarn test:e2e`
+- Before you report you are ready always run `bun run build` first. Then `bun run format:fix`, `bun run lint:fix`, `bun run test`. Always request elevated permissions for `bun run test:e2e`
 - E2e tests are slow - aim to run at the end of your work and after all other checks has passed.
 - Always request elevated privileges if a command execution fails.
 - Think of overall structure and complexity when you are adding code. If a component grew thousands of lines then it's time to split it. Even if not too many lines of code split it to a separete file if there is a clear separation of concern.
@@ -77,7 +77,7 @@ You proceed to next step without user input unless you miss information to proce
 - Linter and Prettier configuration is source of truth. Follow the surrounding code stlye but check `eslint.config.js` and `prettier.config.cjs` for new files or when you are unsure.
   - Code: spaces, four-space indentation (Prettier `tabWidth: 4`, `useTabs: false`).
   - Markdown: lists use 2-space indentation (Prettier override for `*.md`/`*.mdx`, aligns with markdownlint MD007).
-  - Run `yarn lint:fix` and `yarn format:fix`. If there is anything which is not auto fixable fix it.
+  - Run `bun run lint:fix` and `bun run format:fix`. If there is anything which is not auto fixable fix it.
 - Imports: external → absolute (`@/*`) → relative; enforced via `import/order`.
 - State: keep page-level state in `App.tsx` until a shared store exists.
 - Props: prefer descriptive names over abbreviations.
@@ -106,8 +106,8 @@ You proceed to next step without user input unless you miss information to proce
 
 - Tooling: Vitest + JSDOM.
 - Commands:
-  - `yarn test` → single run.
-  - `yarn test:watch` → watch mode during development.
+  - `bun run test` → single run.
+  - `bun run test:watch` → watch mode during development.
 - Requirements:
   - Run the full suite before every commit or review request.
   - Document test results in hand-off notes.
@@ -130,4 +130,4 @@ You proceed to next step without user input unless you miss information to proce
   - Explain the motivation and summarize functional changes.
   - Reference related issues (`Linked Issue: #123`).
   - Attach screenshots or recordings for UI updates.
-  - List verification steps and ensure `yarn build` passes before requesting review.
+  - List verification steps and ensure `bun run build` passes before requesting review.

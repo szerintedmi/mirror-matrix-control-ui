@@ -17,4 +17,4 @@
 ## Notes
 
 - Plan each change in a lightweight doc when work touches multiple files or requires follow-up discussion; use the existing `agent_notes` process if the scope grows.
-- Run `yarn build`, `yarn test`, `yarn lint`, and `yarn format` after implementing the above changes to ensure the pre-checks remain green.
+- Run `bun run build`, `bun run test`, `bun run lint`, and `bun run format` after implementing the above changes to ensure the pre-checks remain green.

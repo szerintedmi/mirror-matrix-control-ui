@@ -18,12 +18,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-
-
-.yarn/install-state.gz
-.yarn/cache
-.yarn/unplugged
-
 node_modules
 dist
 dist-ssr

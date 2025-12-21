@@ -9,18 +9,18 @@ React SPA for controlling a kinetic mirror grid. Communicates with ESP32 mirror 
 ## Commands
 
 ```bash
-yarn dev              # Start dev server on port 3000
-yarn build            # Type-check then production build
-yarn typecheck        # TypeScript type checking
-yarn lint             # ESLint (use yarn lint:fix for auto-fix)
-yarn format           # Prettier check (use yarn format:fix to write)
-yarn test             # Unit tests with Vitest
-yarn test:watch       # Vitest watch mode
-yarn test:e2e         # Playwright E2E tests
-yarn test:e2e:ui      # Playwright UI mode for debugging
+bun dev               # Start dev server on port 3000
+bun run build         # Type-check then production build
+bun run typecheck     # TypeScript type checking
+bun run lint          # ESLint (use bun run lint:fix for auto-fix)
+bun run format        # Prettier check (use bun run format:fix to write)
+bun run test          # Unit tests with Vitest
+bun run test:watch    # Vitest watch mode
+bun run test:e2e      # Playwright E2E tests
+bun run test:e2e:ui   # Playwright UI mode for debugging
 ```
 
-First-time E2E setup: `yarn dlx playwright install --with-deps`
+First-time E2E setup: `bunx playwright install --with-deps`
 
 ## Directory Map
 
@@ -247,6 +247,6 @@ All storage services use localStorage with JSON serialization. Key services:
 
 ## Pre-Completion Checklist
 
-Before reporting work as complete, run in this order: `yarn build`, `yarn format:fix`, `yarn lint:fix`, `yarn test`
+Before reporting work as complete, run in this order: `bun run build`, `bun run format:fix`, `bun run lint:fix`, `bun run test`
 
-E2E tests (`yarn test:e2e`) are slow - run once at the end of a session after all other checks pass.
+E2E tests (`bun run test:e2e`) are slow - run once at the end of a session after all other checks pass.

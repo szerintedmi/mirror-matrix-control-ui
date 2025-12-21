@@ -24,7 +24,7 @@ export default defineConfig({
         screenshot: 'only-on-failure',
     },
     webServer: {
-        command: `yarn dev --host ${devHost} --port ${devPort}`,
+        command: `bun dev --host ${devHost} --port ${devPort}`,
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120000,
