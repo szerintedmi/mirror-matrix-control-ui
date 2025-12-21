@@ -104,12 +104,12 @@ const isTileCalibrated = (
 ): tile is TileCalibrationResults =>
     Boolean(
         tile &&
-            tile.status === 'completed' &&
-            tile.adjustedHome &&
-            typeof tile.adjustedHome.stepsX === 'number' &&
-            typeof tile.adjustedHome.stepsY === 'number' &&
-            tile.stepToDisplacement.x !== null &&
-            tile.stepToDisplacement.y !== null,
+        tile.status === 'completed' &&
+        tile.adjustedHome &&
+        typeof tile.adjustedHome.stepsX === 'number' &&
+        typeof tile.adjustedHome.stepsY === 'number' &&
+        tile.stepToDisplacement.x !== null &&
+        tile.stepToDisplacement.y !== null,
     );
 
 const resolveAxisBounds = (

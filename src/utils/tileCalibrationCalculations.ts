@@ -162,11 +162,11 @@ export function computeTileMetrics(input: TileMetricsInput): TileMetrics {
     // Whether any meaningful metrics exist
     const hasMetrics = Boolean(
         home ||
-            adjustedHome ||
-            homeOffset ||
-            combinedBounds ||
-            (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)) ||
-            (axisStepScale && (axisStepScale.x || axisStepScale.y)),
+        adjustedHome ||
+        homeOffset ||
+        combinedBounds ||
+        (stepToDisplacement && (stepToDisplacement.x || stepToDisplacement.y)) ||
+        (axisStepScale && (axisStepScale.x || axisStepScale.y)),
     );
 
     return {
