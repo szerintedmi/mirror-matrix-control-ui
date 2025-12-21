@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
-import { showSimpleErrorToast } from '@/components/common/StyledToast';
+import { showCommandErrorToast, showSimpleErrorToast } from '@/components/common/StyledToast';
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
 import PatternDesignerToolbar from '@/components/patternDesigner/PatternDesignerToolbar';
@@ -816,7 +816,15 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             const result = await playSinglePattern(pattern, selectedCalibrationProfile);
 
             if (!result.success) {
-                showSimpleErrorToast(`Playback failed: ${pattern.name}`, result.message);
+                if (result.failures && result.failures.length > 0) {
+                    showCommandErrorToast({
+                        title: pattern.name,
+                        totalCount: result.axisCount ?? result.failures.length,
+                        errors: result.failures,
+                    });
+                } else {
+                    showSimpleErrorToast(`Playback failed: ${pattern.name}`, result.message);
+                }
             }
         },
         [playSinglePattern, selectPattern, selectedCalibrationProfile],

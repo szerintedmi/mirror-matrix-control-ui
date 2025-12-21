@@ -6,7 +6,7 @@ import {
     DETECTION_BLOB_MAX_MEDIAN_DEVIATION_PT,
     DETECTION_BLOB_MIN_SAMPLES,
 } from '@/constants/calibration';
-import { asIsotropic, convert, convertDelta } from '@/coords';
+import { asViewport, convert, convertDelta } from '@/coords';
 import { computeMedian } from '@/services/calibration/math/robustStatistics';
 import type { CaptureBlobMeasurement } from '@/services/calibration/types';
 import type { BlobMeasurement, BlobMeasurementStats } from '@/types';
@@ -51,6 +51,8 @@ export interface BlobSample {
     capturedAt: number;
     sourceWidth: number;
     sourceHeight: number;
+    roiWidth?: number;
+    roiHeight?: number;
 }
 
 const aggregateBlobSamples = (
@@ -71,10 +73,21 @@ const aggregateBlobSamples = (
     const sizeValues = samples.map((sample) => sample.size);
     const responseValues = samples.map((sample) => sample.response ?? 0);
 
+    console.log('[BlobAggregate] Sample sizes:', sizeValues);
+    console.log('[BlobAggregate] Sample count:', samples.length);
+    console.log(
+        '[BlobAggregate] First sample roiWidth:',
+        samples[0]?.roiWidth,
+        'roiHeight:',
+        samples[0]?.roiHeight,
+    );
+
     const medianX = computeMedian(xValues);
     const medianY = computeMedian(yValues);
     const medianSize = computeMedian(sizeValues);
     const medianResponse = computeMedian(responseValues);
+
+    console.log('[BlobAggregate] Median size:', medianSize);
 
     const deviationX = xValues.map((value) => Math.abs(value - medianX));
     const deviationY = yValues.map((value) => Math.abs(value - medianY));
@@ -118,6 +131,8 @@ const aggregateBlobSamples = (
         capturedAt: lastSample.capturedAt,
         sourceWidth: lastSample.sourceWidth,
         sourceHeight: lastSample.sourceHeight,
+        roiWidth: lastSample.roiWidth,
+        roiHeight: lastSample.roiHeight,
         stats,
     };
 
@@ -200,14 +215,18 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
     // (measurements come from BlobSample which has required sourceWidth/sourceHeight)
     const sourceWidth = measurement.sourceWidth!;
     const sourceHeight = measurement.sourceHeight!;
-    const ctx = { width: sourceWidth, height: sourceHeight } as const;
 
-    // Convert isotropic [0,1] → viewport [0,1] first, then viewport → centered [-1,1]
-    // This fixes the coordinate system mismatch where blob measurements are captured
-    // in isotropic coords but were incorrectly treated as viewport coords.
-    const isoCoord = asIsotropic(measurement.x, measurement.y);
-    const centeredCoord = convert(isoCoord, 'isotropic', 'centered', ctx);
-    const centeredSize = convertDelta(measurement.size, 'x', 'isotropic', 'centered', ctx);
+    // For position conversion, always use full-frame context (positions are in full-frame space)
+    const positionCtx = { width: sourceWidth, height: sourceHeight } as const;
+
+    // Sizes are normalized to the full frame, so convert using the full-frame context
+    // to stay consistent with position conversion.
+    const sizeCtx = positionCtx;
+
+    // Convert viewport [0,1] → centered [-1,1]; measurements now originate in viewport space.
+    const viewportCoord = asViewport(measurement.x, measurement.y);
+    const centeredCoord = convert(viewportCoord, 'viewport', 'centered', positionCtx);
+    const centeredSize = convertDelta(measurement.size, 'x', 'viewport', 'centered', sizeCtx);
 
     const convertStats = measurement.stats
         ? {
@@ -217,32 +236,49 @@ const convertMeasurementToCentered = (measurement: BlobMeasurement): BlobMeasure
                   maxMedianDeviationPt: measurement.stats.thresholds.maxMedianDeviationPt * 2,
               },
               median: (() => {
-                  const medianIso = asIsotropic(
+                  const medianViewport = asViewport(
                       measurement.stats.median.x,
                       measurement.stats.median.y,
                   );
-                  const medianCentered = convert(medianIso, 'isotropic', 'centered', ctx);
+                  const medianCentered = convert(
+                      medianViewport,
+                      'viewport',
+                      'centered',
+                      positionCtx,
+                  );
                   return {
                       x: medianCentered.x,
                       y: medianCentered.y,
                       size: convertDelta(
                           measurement.stats.median.size,
                           'x',
-                          'isotropic',
+                          'viewport',
                           'centered',
-                          ctx,
+                          sizeCtx,
                       ),
                   };
               })(),
               nMad: {
-                  x: convertDelta(measurement.stats.nMad.x, 'x', 'isotropic', 'centered', ctx),
-                  y: convertDelta(measurement.stats.nMad.y, 'y', 'isotropic', 'centered', ctx),
+                  x: convertDelta(
+                      measurement.stats.nMad.x,
+                      'x',
+                      'viewport',
+                      'centered',
+                      positionCtx,
+                  ),
+                  y: convertDelta(
+                      measurement.stats.nMad.y,
+                      'y',
+                      'viewport',
+                      'centered',
+                      positionCtx,
+                  ),
                   size: convertDelta(
                       measurement.stats.nMad.size,
                       'x',
-                      'isotropic',
+                      'viewport',
                       'centered',
-                      ctx,
+                      sizeCtx,
                   ),
               },
           }

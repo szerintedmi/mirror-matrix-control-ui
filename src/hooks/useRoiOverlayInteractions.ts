@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { clamp01 } from '@/constants/calibration';
+import { transformRoi } from '@/overlays';
 import type { NormalizedRoi } from '@/types';
 
 export type RoiEditingMode = 'idle' | 'drag' | 'resize' | 'draw';
@@ -29,42 +30,6 @@ export interface UseRoiOverlayInteractionsParams {
     roiRef: MutableRefObject<NormalizedRoi>;
     rotationDegrees: number;
 }
-
-// Helper to transform ROI between Source Space and Screen Space
-const transformRoi = (
-    inputRoi: NormalizedRoi,
-    degrees: number,
-    direction: 'toScreen' | 'toSource',
-): NormalizedRoi => {
-    const normDeg = ((degrees % 360) + 360) % 360;
-    if (normDeg === 0) return { ...inputRoi };
-
-    const rot = direction === 'toScreen' ? normDeg : (360 - normDeg) % 360;
-    const rad = (rot * Math.PI) / 180;
-    const c = Math.round(Math.cos(rad));
-    const s = Math.round(Math.sin(rad));
-
-    const cx = inputRoi.x + inputRoi.width / 2;
-    const cy = inputRoi.y + inputRoi.height / 2;
-    const tx = cx - 0.5;
-    const ty = cy - 0.5;
-    const rx = tx * c - ty * s;
-    const ry = tx * s + ty * c;
-    const newCx = rx + 0.5;
-    const newCy = ry + 0.5;
-
-    const swap = Math.abs(s) === 1;
-    const newW = swap ? inputRoi.height : inputRoi.width;
-    const newH = swap ? inputRoi.width : inputRoi.height;
-
-    return {
-        ...inputRoi,
-        x: newCx - newW / 2,
-        y: newCy - newH / 2,
-        width: newW,
-        height: newH,
-    };
-};
 
 export const useRoiOverlayInteractions = ({
     roi,

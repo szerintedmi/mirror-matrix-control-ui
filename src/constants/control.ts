@@ -4,7 +4,7 @@ export const STEPS_PER_DEGREE = 190;
 
 export const NUDGE_DELTA_STEPS = 500;
 
-export const COMMAND_ACK_TIMEOUT_MS = 1_000;
+export const COMMAND_ACK_TIMEOUT_MS = 5_000;
 export const COMMAND_COMPLETION_TIMEOUT_MS = 15_000;
 
 export const HOME_ACTION = 'HOME';

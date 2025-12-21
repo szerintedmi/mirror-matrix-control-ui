@@ -17,6 +17,8 @@ describe('summaryComputation', () => {
         size,
         response: 100,
         capturedAt: Date.now(),
+        sourceWidth: 1000,
+        sourceHeight: 1000,
     });
 
     const createTileResult = (

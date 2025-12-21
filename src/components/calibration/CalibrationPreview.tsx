@@ -6,6 +6,7 @@ import type {
     PreviewMode,
     RoiEditingMode,
 } from '@/hooks/useCameraPipeline';
+import { transformRoi } from '@/overlays';
 import type { OpenCvWorkerStatus } from '@/services/opencvWorkerClient';
 import type { NormalizedRoi } from '@/types';
 
@@ -71,71 +72,6 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         }
         return 1;
     }, [videoDimensions.height, videoDimensions.width]);
-
-    // Helper to transform ROI between Source Space (0-1 relative to Source W,H) and Screen Space (0-1 relative to Rotated W,H)
-    const transformRoi = useCallback(
-        (
-            inputRoi: { x: number; y: number; width: number; height: number },
-            degrees: number,
-            direction: 'toScreen' | 'toSource',
-        ) => {
-            // Normalize degrees to 0, 90, 180, 270
-            const normDeg = ((degrees % 360) + 360) % 360;
-
-            if (normDeg === 0) return { ...inputRoi };
-
-            // For 90 degree steps, we can map coordinates.
-            // Source (u, v) -> Screen (x, y)
-            // 90 CW: x = 1-v-h, y = u. (Wait, let's re-verify)
-            // Source TL(0,0) -> Screen TR(1,0).
-            // Source BL(0,1) -> Screen TL(0,0).
-            // Source TR(1,0) -> Screen BR(1,1).
-            // Source BR(1,1) -> Screen BL(0,1).
-
-            // Let's use a geometric approach:
-            // Center is 0.5, 0.5.
-            // Rotate point around center.
-            // If direction is 'toScreen', we rotate by `degrees` CW.
-            // If direction is 'toSource', we rotate by `-degrees` (or `360-degrees`) CW.
-
-            const rot = direction === 'toScreen' ? normDeg : (360 - normDeg) % 360;
-            const rad = (rot * Math.PI) / 180;
-            const c = Math.round(Math.cos(rad)); // 0, 1, -1
-            const s = Math.round(Math.sin(rad)); // 0, 1, -1
-
-            // Rotate center of ROI
-            const cx = inputRoi.x + inputRoi.width / 2;
-            const cy = inputRoi.y + inputRoi.height / 2;
-
-            // Translate to origin (0.5, 0.5)
-            const tx = cx - 0.5;
-            const ty = cy - 0.5;
-
-            // Rotate
-            // x' = x*c - y*s
-            // y' = x*s + y*c
-            const rx = tx * c - ty * s;
-            const ry = tx * s + ty * c;
-
-            // Translate back
-            const newCx = rx + 0.5;
-            const newCy = ry + 0.5;
-
-            // Rotate dimensions
-            // If 90 or 270, swap width/height
-            const swap = Math.abs(s) === 1;
-            const newW = swap ? inputRoi.height : inputRoi.width;
-            const newH = swap ? inputRoi.width : inputRoi.height;
-
-            return {
-                x: newCx - newW / 2,
-                y: newCy - newH / 2,
-                width: newW,
-                height: newH,
-            };
-        },
-        [],
-    );
 
     const roiAspectRatio = useMemo(() => {
         if (!roiViewEnabled || !roi.enabled) {

@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
-import { showSimpleErrorToast } from '@/components/common/StyledToast';
+import { showCommandErrorToast, showSimpleErrorToast } from '@/components/common/StyledToast';
 import PatternLibraryList from '@/components/PatternLibraryList';
 import PlaybackSequenceManager, {
     type PlaybackSequenceManagerHandle,
@@ -175,7 +175,15 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
             }
             const result = await playSinglePattern(pattern, selectedCalibrationProfile);
             if (!result.success) {
-                showSimpleErrorToast(`Playback failed: ${pattern.name}`, result.message);
+                if (result.failures && result.failures.length > 0) {
+                    showCommandErrorToast({
+                        title: pattern.name,
+                        totalCount: result.axisCount ?? result.failures.length,
+                        errors: result.failures,
+                    });
+                } else {
+                    showSimpleErrorToast(`Playback failed: ${pattern.name}`, result.message);
+                }
             }
         },
         [playSinglePattern, selectedCalibrationProfile],

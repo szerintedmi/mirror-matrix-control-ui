@@ -227,11 +227,19 @@ export function computeGridBlueprint(
     let tileWidth = tileSize;
     let tileHeight = tileSize;
 
-    // Compute pitch (spacing) from measured centroids directly in Centered Coordinates
-    // We do NOT use isotropic scaling here because we want the grid to match the camera's
-    // centered coordinate space directly.
+    // Compute pitch (spacing) from measured centroids in ISOTROPIC space.
+    // This ensures that for a physically square grid, pitchX ≈ pitchY, allowing
+    // us to average them for uniform tile dimensions (no visual gaps).
     const deltasX: number[] = [];
     const deltasY: number[] = [];
+
+    // Isotropic conversion factors: convert centered coords to isotropic space
+    // where equal physical distances have equal values.
+    // For a wide camera (1920x1080): avgDim=1500, isoFactorX=1.28, isoFactorY=0.72
+    // This EXPANDS X deltas and SHRINKS Y deltas to make them comparable.
+    const avgDim = (sourceWidth + sourceHeight) / 2;
+    const isoFactorX = sourceWidth / avgDim;
+    const isoFactorY = sourceHeight / avgDim;
 
     // Create lookup by row-col for reliable adjacency checks
     const tileMapByRowCol = new Map<string, BlobMeasurement>();
@@ -239,23 +247,23 @@ export function computeGridBlueprint(
         tileMapByRowCol.set(`${entry.tile.row}-${entry.tile.col}`, entry.homeMeasurement);
     }
 
-    // Collect horizontal and vertical deltas (raw centered coords)
+    // Collect horizontal and vertical deltas in ISOTROPIC space
     for (const entry of measuredTiles) {
         const { row, col } = entry.tile;
 
         // Check right neighbor (X pitch)
         const rightMeas = tileMapByRowCol.get(`${row}-${col + 1}`);
         if (rightMeas) {
-            // Use axis-specific delta for pitch calculation.
+            // Use axis-specific delta in isotropic space.
             // Euclidean distance inflates pitch when tiles are slightly misaligned.
-            const dx = rightMeas.x - entry.homeMeasurement.x;
+            const dx = (rightMeas.x - entry.homeMeasurement.x) * isoFactorX;
             deltasX.push(Math.abs(dx));
         }
 
         // Check bottom neighbor (Y pitch)
         const downMeas = tileMapByRowCol.get(`${row + 1}-${col}`);
         if (downMeas) {
-            const dy = downMeas.y - entry.homeMeasurement.y;
+            const dy = (downMeas.y - entry.homeMeasurement.y) * isoFactorY;
             deltasY.push(Math.abs(dy));
         }
     }
@@ -281,16 +289,41 @@ export function computeGridBlueprint(
     let computedTileHeight = tileHeight; // Fallback to max blob size
 
     // Use computed pitch if available (via extracted math function)
-    const pitchX = computeAxisPitch(deltasX);
-    const pitchY = computeAxisPitch(deltasY);
+    // Pitches are now in ISOTROPIC space
+    let isoPitchX = computeAxisPitch(deltasX);
+    let isoPitchY = computeAxisPitch(deltasY);
 
-    if (pitchX > 0) {
-        computedTileWidth = pitchX - gapX;
+    // If we don't have vertical neighbors yet, use X pitch directly
+    // (in isotropic space, pitchX ≈ pitchY for a square physical grid)
+    if (isoPitchY <= 0 && isoPitchX > 0) {
+        isoPitchY = isoPitchX;
     }
 
-    if (pitchY > 0) {
-        computedTileHeight = pitchY - gapY;
+    // Average the isotropic pitches for uniform tile dimensions.
+    // For a square physical grid, isoPitchX ≈ isoPitchY; averaging handles noise.
+    let isoPitch: number;
+    if (isoPitchX > 0 && isoPitchY > 0) {
+        isoPitch = (isoPitchX + isoPitchY) / 2;
+    } else if (isoPitchX > 0) {
+        isoPitch = isoPitchX;
+    } else {
+        isoPitch = isoPitchY > 0 ? isoPitchY : 0;
     }
+
+    // Convert isotropic pitch back to centered coords for each axis.
+    // This produces different tileWidth/tileHeight values, but when projected
+    // per-axis by the renderer, they will result in equal visual sizes.
+    // tileWidth * sourceWidth = tileHeight * sourceHeight = isoPitch * avgDim
+    if (isoPitch > 0) {
+        // Convert gap to isotropic (same value since gapX == gapY)
+        const isoGap = gapX;
+        const isoTileSize = isoPitch - isoGap;
+        // Convert back to centered coords for each axis
+        computedTileWidth = isoTileSize / isoFactorX;
+        computedTileHeight = isoTileSize / isoFactorY;
+    }
+
+    // When pitch is available, prefer spacing-derived sizes to preserve grid alignment.
 
     // If we only have single tile or no deltas, we stick to the MaxBlobSize logic (fallback)
     // implicitly via initialization of computedTileWidth/Height above.

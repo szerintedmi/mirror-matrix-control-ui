@@ -331,6 +331,8 @@ export interface BlobMeasurement {
     capturedAt: number;
     sourceWidth?: number;
     sourceHeight?: number;
+    roiWidth?: number;
+    roiHeight?: number;
     stats?: BlobMeasurementStats;
 }
 

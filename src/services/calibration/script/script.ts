@@ -257,6 +257,33 @@ function* measureHome(
         const { measurement, error: captureError } = getCaptureResult(homeCaptureResult);
 
         if (measurement) {
+            // Measurements are in CENTERED coordinate space [-1, 1]
+            // Positions use full-frame context, sizes use ROI context when ROI is active
+            const maxDim = Math.max(measurement.sourceWidth || 1, measurement.sourceHeight || 1);
+            const pixelX = measurement.x * maxDim;
+            const pixelY = measurement.y * maxDim;
+
+            // Size is in centered delta space (range is 2 instead of 1)
+            // When ROI is active, size was normalized and converted using ROI dimensions
+            // Convert to pixels: (centered_size / 2) * context_max_dim
+            const hasRoi =
+                measurement.roiWidth !== undefined && measurement.roiHeight !== undefined;
+            const sizeContextDim = hasRoi
+                ? Math.max(measurement.roiWidth!, measurement.roiHeight!)
+                : maxDim;
+            const pixelSize = (measurement.size / 2) * sizeContextDim;
+
+            // Build ROI info string if ROI is active
+            const roiInfo = hasRoi
+                ? ` ROI=${Math.round(measurement.roiWidth!)}x${Math.round(measurement.roiHeight!)}`
+                : '';
+
+            // Log successful measurement with blob size and coordinate system
+            yield log(
+                `Home measurement ${tileLabel}: blob=${pixelSize.toFixed(1)}px at (${pixelX.toFixed(1)}, ${pixelY.toFixed(1)})px [centered: x=${measurement.x.toFixed(3)}, y=${measurement.y.toFixed(3)}, size=${measurement.size.toFixed(3)}] src=${measurement.sourceWidth}x${measurement.sourceHeight}${roiInfo}`,
+                tileAddress,
+                'measure',
+            );
             return measurement;
         }
 
@@ -361,8 +388,12 @@ function* runAxisStepTest(
                     interimDelta,
                 );
                 interimPerStep = interimResult.perStep;
+                const maxDim = Math.max(
+                    interimMeas.sourceWidth || 1,
+                    interimMeas.sourceHeight || 1,
+                );
                 yield log(
-                    `${axisLabel} interim: perStep=${interimResult.perStep?.toFixed(6)}`,
+                    `${axisLabel} interim: perStep=${interimResult.perStep?.toFixed(6)}, blob=${(interimMeas.size * maxDim).toFixed(1)}px at (${(interimMeas.x * maxDim).toFixed(1)}, ${(interimMeas.y * maxDim).toFixed(1)})px`,
                     tileAddress,
                     'step-test',
                 );
@@ -427,8 +458,9 @@ function* runAxisStepTest(
 
             if (fullMeas) {
                 result = computeAxisStepTestResult(homeMeasurement, fullMeas, axis, fullDelta);
+                const maxDim = Math.max(fullMeas.sourceWidth || 1, fullMeas.sourceHeight || 1);
                 yield log(
-                    `${axisLabel} full: displacement=${result.displacement.toFixed(4)}, perStep=${result.perStep?.toFixed(6)}`,
+                    `${axisLabel} full: displacement=${result.displacement.toFixed(4)}, perStep=${result.perStep?.toFixed(6)}, blob=${(fullMeas.size * maxDim).toFixed(1)}px at (${(fullMeas.x * maxDim).toFixed(1)}, ${(fullMeas.y * maxDim).toFixed(1)})px`,
                     tileAddress,
                     'step-test',
                 );
