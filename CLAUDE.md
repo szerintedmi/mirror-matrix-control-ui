@@ -220,6 +220,7 @@ MqttProvider          → MQTT connection, subscribe/publish
 ### Calibration System
 
 The calibration system uses a script-based approach:
+
 1. **Script** (`services/calibration/script/script.ts`): Defines calibration steps as a state machine
 2. **Executor** (`executor.ts`): Runs scripts step-by-step with camera feedback
 3. **Math** (`math/`): Pure functions for bounds computation, position prediction, etc.
@@ -228,6 +229,7 @@ The calibration system uses a script-based approach:
 ### Storage
 
 All storage services use localStorage with JSON serialization. Key services:
+
 - `gridStorage.ts` - Named grid configuration snapshots
 - `calibrationProfileStorage.ts` - Calibration profiles per grid position
 - `patternStorage.ts` - User-created patterns
