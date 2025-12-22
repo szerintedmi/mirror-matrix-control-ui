@@ -382,6 +382,16 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                                     Retry
                                 </button>
                             )}
+                            {pendingDecision.options.includes('home-retry') && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSubmitDecision('home-retry')}
+                                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-500"
+                                    title="Home both motors for this tile, then retry the failed operation"
+                                >
+                                    Home & Retry
+                                </button>
+                            )}
                             {pendingDecision.options.includes('ignore') && (
                                 <button
                                     type="button"

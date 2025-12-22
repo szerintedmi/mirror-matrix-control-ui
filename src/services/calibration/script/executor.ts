@@ -127,16 +127,26 @@ const isCommandFailure = (error: unknown): error is CommandFailure =>
  */
 const isMotorCommand = (command: CalibrationCommand): boolean =>
     command.type === 'HOME_ALL' ||
+    command.type === 'HOME_TILE' ||
     command.type === 'MOVE_AXIS' ||
     command.type === 'MOVE_AXES_BATCH' ||
     command.type === 'MOVE_TILE_POSE' ||
     command.type === 'MOVE_TILES_BATCH';
 
 /**
+ * Check if a command is a home command (where home-retry doesn't make sense).
+ */
+const isHomeCommand = (command: CalibrationCommand): boolean =>
+    command.type === 'HOME_ALL' || command.type === 'HOME_TILE';
+
+/**
  * Get tile context from a command if available.
  */
 const getCommandTileContext = (command: CalibrationCommand): TileAddress | null => {
     if (command.type === 'MOVE_TILE_POSE') {
+        return command.tile;
+    }
+    if (command.type === 'HOME_TILE') {
         return command.tile;
     }
     if (command.type === 'MOVE_TILES_BATCH' && command.moves.length === 1) {
@@ -436,11 +446,17 @@ export class CalibrationExecutor {
                 // - With tile context during measuring: can ignore (keep home, infer) or skip
                 // - With tile context before measuring: can skip the tile
                 // - Without tile context (e.g., HOME_ALL): can only retry or abort
+                // - home-retry available when we have tile context and command is not already a home
                 const inMeasuringPhase = this.state.phase === 'measuring';
+                const canHomeRetry = tileContext && !isHomeCommand(command);
                 const options: DecisionOption[] = tileContext
                     ? inMeasuringPhase
-                        ? ['retry', 'ignore', 'skip', 'abort'] // During step test, ignore keeps home data
-                        : ['retry', 'skip', 'abort']
+                        ? canHomeRetry
+                            ? ['retry', 'home-retry', 'ignore', 'skip', 'abort']
+                            : ['retry', 'ignore', 'skip', 'abort']
+                        : canHomeRetry
+                          ? ['retry', 'home-retry', 'skip', 'abort']
+                          : ['retry', 'skip', 'abort']
                     : ['retry', 'abort'];
 
                 // Present decision to user
@@ -459,6 +475,17 @@ export class CalibrationExecutor {
                     // Loop will retry
                     continue;
                 }
+                if (decision === 'home-retry') {
+                    // Home the tile's motors, then retry the command
+                    if (tileContext) {
+                        const homeResult = await this.executeHomeRetryRecovery(tileContext);
+                        if (homeResult === 'abort') {
+                            return 'abort';
+                        }
+                    }
+                    // Loop will retry the original command
+                    continue;
+                }
                 if (decision === 'ignore') {
                     // Continue as if command succeeded (motor may be in wrong position)
                     return 'ignore';
@@ -473,12 +500,80 @@ export class CalibrationExecutor {
     }
 
     /**
+     * Execute home-retry recovery: home the tile's motors before retrying.
+     * @returns 'success' if homing succeeded, 'abort' if user chose to abort
+     */
+    private async executeHomeRetryRecovery(tileContext: TileAddress): Promise<'success' | 'abort'> {
+        const assignment = this.getTileAssignment(tileContext.key);
+        if (!assignment) {
+            return 'success';
+        }
+
+        try {
+            // Home both motors for the tile
+            await this.adapters.motor.homeTile(assignment.x, assignment.y);
+
+            // Clear axis positions for homed motors
+            if (assignment.x) {
+                this.axisPositions.delete(`${assignment.x.nodeMac}:${assignment.x.motorIndex}`);
+            }
+            if (assignment.y) {
+                this.axisPositions.delete(`${assignment.y.nodeMac}:${assignment.y.motorIndex}`);
+            }
+
+            return 'success';
+        } catch (error) {
+            if (error instanceof ExecutorAbortError) {
+                return 'abort';
+            }
+
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            // Emit structured error for toast display
+            if (isCommandFailure(error)) {
+                const detail = extractCommandErrorDetail(error);
+                this.callbacks.onCommandError?.({
+                    title: 'Calibration',
+                    totalCount: 1,
+                    errors: [detail],
+                });
+            }
+
+            // Homing failed during recovery - ask user what to do
+            const decisionResult = await this.executeAwaitDecision({
+                type: 'AWAIT_DECISION',
+                kind: 'command-failure',
+                tile: tileContext,
+                error: `Home during recovery failed: ${errorMessage}`,
+                options: ['retry', 'skip', 'abort'],
+            });
+
+            const decision =
+                decisionResult.type === 'AWAIT_DECISION' ? decisionResult.decision : 'abort';
+
+            if (decision === 'retry') {
+                // Recursively retry the home recovery
+                return this.executeHomeRetryRecovery(tileContext);
+            }
+            if (decision === 'skip') {
+                // Skip means we don't home, but we'll still retry the original command
+                // The retry will likely fail again, but that's the user's choice
+                return 'success';
+            }
+            // decision === 'abort'
+            return 'abort';
+        }
+    }
+
+    /**
      * Get the success result for a command type.
      */
     private getSuccessResultForCommand(command: CalibrationCommand): CommandResult {
         switch (command.type) {
             case 'HOME_ALL':
                 return { type: 'HOME_ALL', success: true };
+            case 'HOME_TILE':
+                return { type: 'HOME_TILE', success: true };
             case 'MOVE_AXIS':
                 return { type: 'MOVE_AXIS', success: true };
             case 'MOVE_AXES_BATCH':
@@ -519,6 +614,9 @@ export class CalibrationExecutor {
         switch (command.type) {
             case 'HOME_ALL':
                 return this.executeHomeAll(command.macAddresses);
+
+            case 'HOME_TILE':
+                return this.executeHomeTile(command.tile);
 
             case 'MOVE_AXIS':
                 return this.executeMoveAxis(command.motor, command.target);
@@ -573,6 +671,25 @@ export class CalibrationExecutor {
         // Reset axis positions
         this.axisPositions.clear();
         return { type: 'HOME_ALL', success: true };
+    }
+
+    private async executeHomeTile(tile: TileAddress): Promise<CommandResult> {
+        const assignment = this.getTileAssignment(tile.key);
+        if (!assignment) {
+            return { type: 'HOME_TILE', success: true };
+        }
+
+        await this.adapters.motor.homeTile(assignment.x, assignment.y);
+
+        // Clear axis positions for homed motors
+        if (assignment.x) {
+            this.axisPositions.delete(`${assignment.x.nodeMac}:${assignment.x.motorIndex}`);
+        }
+        if (assignment.y) {
+            this.axisPositions.delete(`${assignment.y.nodeMac}:${assignment.y.motorIndex}`);
+        }
+
+        return { type: 'HOME_TILE', success: true };
     }
 
     private async executeMoveAxis(

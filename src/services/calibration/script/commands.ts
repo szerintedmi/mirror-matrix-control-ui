@@ -35,6 +35,16 @@ export interface HomeAllCommand {
 }
 
 /**
+ * Home both motors (X and Y) for a single tile.
+ * Executor calls motor.homeTile() and waits for completion.
+ * Used for home-retry recovery and single-tile recalibration.
+ */
+export interface HomeTileCommand {
+    type: 'HOME_TILE';
+    tile: TileAddress;
+}
+
+/**
  * Move a single motor axis to an absolute step position.
  * Executor calls motor.moveMotor() and waits for completion.
  */
@@ -101,12 +111,13 @@ export interface DelayCommand {
 
 /**
  * Decision options for user choices during calibration.
- * - retry: Try the capture again
+ * - retry: Try the command again
+ * - home-retry: Home tile motors, then retry the command
  * - skip: Skip the entire tile (used for home measurement failures)
  * - ignore: Keep partial data and infer missing values (used for step test failures)
  * - abort: Stop calibration entirely
  */
-export type DecisionOption = 'retry' | 'skip' | 'ignore' | 'abort';
+export type DecisionOption = 'retry' | 'home-retry' | 'skip' | 'ignore' | 'abort';
 
 /**
  * Await a user decision (e.g., after a tile failure).
@@ -128,6 +139,7 @@ export interface AwaitDecisionCommand {
 /** IO commands that require adapter calls */
 export type IOCommand =
     | HomeAllCommand
+    | HomeTileCommand
     | MoveAxisCommand
     | MoveAxesBatchCommand
     | MoveTilePoseCommand
@@ -241,6 +253,7 @@ export type CalibrationCommand = IOCommand | StateCommand;
  */
 export type CommandResult =
     | { type: 'HOME_ALL'; success: true }
+    | { type: 'HOME_TILE'; success: true }
     | { type: 'MOVE_AXIS'; success: true }
     | { type: 'MOVE_AXES_BATCH'; success: true }
     | { type: 'MOVE_TILE_POSE'; success: true }
@@ -280,6 +293,13 @@ export interface MotorAdapter {
      * @throws on motor command failure
      */
     homeAll(macAddresses: string[]): Promise<void>;
+
+    /**
+     * Home both motors (X and Y) for a single tile.
+     * Motors are homed in parallel for efficiency.
+     * @throws on motor command failure
+     */
+    homeTile(xMotor: Motor | null, yMotor: Motor | null): Promise<void>;
 
     /**
      * Move a single motor to an absolute step position.
@@ -336,6 +356,7 @@ export interface ExecutorAdapters {
 export function isIOCommand(cmd: CalibrationCommand): cmd is IOCommand {
     return (
         cmd.type === 'HOME_ALL' ||
+        cmd.type === 'HOME_TILE' ||
         cmd.type === 'MOVE_AXIS' ||
         cmd.type === 'MOVE_AXES_BATCH' ||
         cmd.type === 'MOVE_TILE_POSE' ||

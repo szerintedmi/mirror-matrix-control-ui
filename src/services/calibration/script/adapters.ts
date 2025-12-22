@@ -23,6 +23,28 @@ export function createMotorAdapter(motorApi: MotorCommandApi): MotorAdapter {
             await motorApi.homeAll({ macAddresses });
         },
 
+        async homeTile(
+            xMotor: { nodeMac: string; motorIndex: number } | null,
+            yMotor: { nodeMac: string; motorIndex: number } | null,
+        ): Promise<void> {
+            const homePromises: Promise<unknown>[] = [];
+
+            if (xMotor) {
+                homePromises.push(
+                    motorApi.homeMotor({ mac: xMotor.nodeMac, motorId: xMotor.motorIndex }),
+                );
+            }
+            if (yMotor) {
+                homePromises.push(
+                    motorApi.homeMotor({ mac: yMotor.nodeMac, motorId: yMotor.motorIndex }),
+                );
+            }
+
+            if (homePromises.length > 0) {
+                await Promise.all(homePromises);
+            }
+        },
+
         async moveMotor(mac: string, motorId: number, positionSteps: number): Promise<void> {
             await motorApi.moveMotor({ mac, motorId, positionSteps });
         },
@@ -126,7 +148,7 @@ export function createAdapters(
  * Recorded motor command for test assertions.
  */
 export interface RecordedMotorCommand {
-    type: 'homeAll' | 'moveMotor';
+    type: 'homeAll' | 'homeTile' | 'moveMotor';
     args: unknown[];
     timestamp: number;
 }
@@ -162,6 +184,17 @@ export function createFakeMotorAdapter(): MotorAdapter & {
             commands.push({
                 type: 'homeAll',
                 args: [macAddresses],
+                timestamp: timestamp++,
+            });
+        },
+
+        async homeTile(
+            xMotor: { nodeMac: string; motorIndex: number } | null,
+            yMotor: { nodeMac: string; motorIndex: number } | null,
+        ): Promise<void> {
+            commands.push({
+                type: 'homeTile',
+                args: [xMotor, yMotor],
                 timestamp: timestamp++,
             });
         },

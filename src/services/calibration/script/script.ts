@@ -35,6 +35,7 @@ import type {
     CommandResult,
     DecisionOption,
     HomeAllCommand,
+    HomeTileCommand,
     LogCommand,
     MoveAxesBatchCommand,
     MoveAxisCommand,
@@ -120,6 +121,10 @@ function getCaptureResult(result: CommandResult): {
 
 function homeAll(macAddresses: string[]): HomeAllCommand {
     return { type: 'HOME_ALL', macAddresses };
+}
+
+function homeTile(tile: TileAddress): HomeTileCommand {
+    return { type: 'HOME_TILE', tile };
 }
 
 function updatePhase(phase: UpdatePhaseCommand['phase']): UpdatePhaseCommand {
@@ -297,11 +302,21 @@ function* measureHome(
             'tile-failure',
             tileAddress,
             errorMessage,
+            ['retry', 'home-retry', 'skip', 'abort'],
         );
         const decision = getDecisionResult(decisionResult);
 
         if (decision === 'retry') {
             yield log(`Retrying home measurement for ${tileLabel}`, tileAddress, 'measure');
+            // Loop will continue
+        } else if (decision === 'home-retry') {
+            yield log(`Homing tile ${tileLabel} before retry`, tileAddress, 'measure');
+            yield homeTile(tileAddress);
+            yield log(
+                `Retrying home measurement for ${tileLabel} after homing`,
+                tileAddress,
+                'measure',
+            );
             // Loop will continue
         } else if (decision === 'skip') {
             yield log(`Skipping tile ${tileLabel}`, tileAddress, 'measure');
@@ -481,7 +496,7 @@ function* runAxisStepTest(
                     'step-test-failure',
                     tileAddress,
                     errorMessage,
-                    ['retry', 'ignore', 'abort'],
+                    ['retry', 'home-retry', 'ignore', 'abort'],
                 );
                 const decision = getDecisionResult(decisionResult);
 
@@ -492,6 +507,37 @@ function* runAxisStepTest(
                         'step-test',
                     );
                     // Loop will continue
+                } else if (decision === 'home-retry') {
+                    yield log(
+                        `Homing tile ${tileLabel} before ${axisLabel} step test retry`,
+                        tileAddress,
+                        'step-test',
+                    );
+                    yield homeTile(tileAddress);
+                    // Re-issue the step test move since motors are now at home
+                    yield log(
+                        `Re-issuing ${axisLabel} step test move for ${tileLabel}`,
+                        tileAddress,
+                        'step-test',
+                    );
+                    // For Y axis on non-first tiles, parallel move X back to 0
+                    if (axis === 'y' && !isFirstTile && tile.xMotor) {
+                        yield moveAxesBatch([
+                            { motor: tile.xMotor, target: 0 },
+                            { motor, target: fullDelta },
+                        ]);
+                    } else if (axis === 'y' && isFirstTile) {
+                        const yInterimMoves: Array<{ motor: Motor; target: number }> = [
+                            { motor, target: fullDelta },
+                        ];
+                        if (tile.xMotor) {
+                            yInterimMoves.push({ motor: tile.xMotor, target: 0 });
+                        }
+                        yield moveAxesBatch(yInterimMoves);
+                    } else {
+                        yield moveAxis(motor, fullDelta);
+                    }
+                    // Loop will continue to capture
                 } else if (decision === 'ignore') {
                     ignored = true;
                     // Infer perStep from first tile
