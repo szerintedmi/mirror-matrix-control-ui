@@ -117,10 +117,11 @@ interface GlobalMoveDropdownProps {
 const GlobalMoveDropdown: React.FC<GlobalMoveDropdownProps> = ({ gridSize, mirrorConfig }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const { moveMotor } = useMotorCommands();
+    const { moveMotor, homeAll } = useMotorCommands();
     const calibratedHomeFeedback = useCommandFeedback();
     const physicalHomeFeedback = useCommandFeedback();
     const stagingFeedback = useCommandFeedback();
+    const homeAllFeedback = useCommandFeedback();
 
     const { selectedProfile } = useCalibrationContext();
 
@@ -178,12 +179,24 @@ const GlobalMoveDropdown: React.FC<GlobalMoveDropdownProps> = ({ gridSize, mirro
 
     const hasAnyMotors = tileAssignments.some((t) => t.x !== null || t.y !== null);
 
+    // Collect unique MAC addresses for home all
+    const uniqueMacAddresses = useMemo(() => {
+        const macs = new Set<string>();
+        tileAssignments.forEach((t) => {
+            if (t.x) macs.add(t.x.nodeMac);
+            if (t.y) macs.add(t.y.nodeMac);
+        });
+        return Array.from(macs);
+    }, [tileAssignments]);
+
     const calibratedButtonDisabled =
         calibratedAxisTargets.length === 0 || calibratedHomeFeedback.feedback.state === 'pending';
     const physicalButtonDisabled =
         physicalAxisTargets.length === 0 || physicalHomeFeedback.feedback.state === 'pending';
     const stagingButtonDisabled =
         stagingAxisTargets.length === 0 || stagingFeedback.feedback.state === 'pending';
+    const homeAllButtonDisabled =
+        uniqueMacAddresses.length === 0 || homeAllFeedback.feedback.state === 'pending';
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -282,14 +295,40 @@ const GlobalMoveDropdown: React.FC<GlobalMoveDropdownProps> = ({ gridSize, mirro
         );
     }, [executeMove, stagingAxisTargets, stagingFeedback]);
 
+    const handleHomeAll = useCallback(async () => {
+        if (uniqueMacAddresses.length === 0) {
+            homeAllFeedback.fail('No motors available for homing.');
+            return;
+        }
+        homeAllFeedback.begin('Homing all motors…');
+        setIsOpen(false);
+
+        try {
+            await homeAll({ macAddresses: uniqueMacAddresses });
+            homeAllFeedback.succeed('All motors homed.');
+        } catch (error) {
+            const detail = extractCommandErrorDetail(error);
+            homeAllFeedback.fail(detail.errorMessage ?? 'Home all failed.');
+        }
+    }, [uniqueMacAddresses, homeAll, homeAllFeedback]);
+
     const activeFeedback = useMemo(() => {
         const feedbacks = [
             calibratedHomeFeedback.feedback,
             physicalHomeFeedback.feedback,
             stagingFeedback.feedback,
+            homeAllFeedback.feedback,
         ];
-        return feedbacks.find((f) => f.state !== 'idle' && f.message);
-    }, [calibratedHomeFeedback.feedback, physicalHomeFeedback.feedback, stagingFeedback.feedback]);
+        // Show the most recently updated feedback (by timestamp)
+        return feedbacks
+            .filter((f) => f.state !== 'idle' && f.message && f.timestamp)
+            .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))[0];
+    }, [
+        calibratedHomeFeedback.feedback,
+        physicalHomeFeedback.feedback,
+        stagingFeedback.feedback,
+        homeAllFeedback.feedback,
+    ]);
 
     // Don't render if no motors are configured
     if (!hasAnyMotors) {
@@ -360,6 +399,32 @@ const GlobalMoveDropdown: React.FC<GlobalMoveDropdownProps> = ({ gridSize, mirro
                     >
                         <span className="size-2 rounded-full bg-sky-500" />
                         To stage position
+                    </button>
+
+                    {/* Divider */}
+                    <div className="my-1 border-t border-gray-700" />
+
+                    <button
+                        type="button"
+                        onClick={handleHomeAll}
+                        disabled={homeAllButtonDisabled}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Run homing sequence on all motor controllers"
+                    >
+                        <svg
+                            className="size-4 text-orange-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                            />
+                        </svg>
+                        Home all motors
                     </button>
                 </div>
             )}

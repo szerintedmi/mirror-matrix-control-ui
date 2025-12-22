@@ -1,15 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
 import ArrayPersistenceControls from '../components/ArrayPersistenceControls';
-import { showSingleCommandErrorToast } from '../components/common/StyledToast';
 import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
 import MirrorGrid from '../components/MirrorGrid';
 import UnassignedMotorTray from '../components/UnassignedMotorTray';
 import { useStatusStore } from '../context/StatusContext';
-import { useCommandFeedback } from '../hooks/useCommandFeedback';
-import { useMotorCommands } from '../hooks/useMotorCommands';
-import { extractCommandErrorDetail } from '../utils/commandErrors';
 import {
     isMotorAssigned as checkMotorAssigned,
     moveMotorToPosition,
@@ -80,8 +76,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     setMirrorConfig,
     persistenceControls,
 }) => {
-    const { homeAll } = useMotorCommands();
-    const globalHomeFeedback = useCommandFeedback();
     const {
         drivers,
         counts,
@@ -272,22 +266,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 setMirrorConfig(new Map());
             },
         );
-    };
-
-    const handleHomeAllDrivers = async () => {
-        if (drivers.length === 0) {
-            globalHomeFeedback.fail('No drivers available');
-            return;
-        }
-        globalHomeFeedback.begin('Dispatching Home All…');
-        try {
-            await homeAll({ macAddresses: drivers.map((driver) => driver.topicMac) });
-            globalHomeFeedback.succeed('Home All dispatched');
-        } catch (error) {
-            const details = extractCommandErrorDetail(error);
-            globalHomeFeedback.fail(details.errorMessage ?? 'Command failed', details.errorCode);
-            showSingleCommandErrorToast('Home all drivers', details);
-        }
     };
 
     const handleClearNodeAssignments = (nodeMac: string) => {
@@ -552,20 +530,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                         />
                         <div className="flex flex-wrap items-center justify-end gap-3">
                             <button
-                                onClick={handleHomeAllDrivers}
-                                className="flex items-center gap-2 rounded-md border border-emerald-600/70 bg-emerald-900/40 px-4 py-2 text-sm text-emerald-200 transition-colors hover:bg-emerald-700/40"
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="size-5"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                >
-                                    <path d="M10 2a1 1 0 01.894.553l5 10A1 1 0 0115 14H5a1 1 0 01-.894-1.447l5-10A1 1 0 0110 2zM10 6.118L6.764 12h6.472L10 6.118z" />
-                                </svg>
-                                Home All
-                            </button>
-                            <button
                                 onClick={handleResetAll}
                                 className="flex items-center gap-2 rounded-md border border-red-600/80 bg-red-800/70 px-4 py-2 text-sm text-red-200 transition-colors hover:bg-red-700/80"
                                 title="Reset all assignments"
@@ -586,25 +550,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             </button>
                         </div>
                     </div>
-                    {globalHomeFeedback.feedback.state !== 'idle' &&
-                    globalHomeFeedback.feedback.message ? (
-                        <p
-                            className={`text-xs ${
-                                globalHomeFeedback.feedback.state === 'error'
-                                    ? 'text-red-200'
-                                    : globalHomeFeedback.feedback.state === 'pending'
-                                      ? 'text-sky-200'
-                                      : 'text-emerald-200'
-                            }`}
-                        >
-                            {globalHomeFeedback.feedback.message}
-                            {globalHomeFeedback.feedback.code && (
-                                <span className="ml-1 text-[10px] text-gray-400">
-                                    ({globalHomeFeedback.feedback.code})
-                                </span>
-                            )}
-                        </p>
-                    ) : null}
                 </section>
 
                 <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
