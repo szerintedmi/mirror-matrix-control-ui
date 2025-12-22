@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
-import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
 import { showCommandErrorToast, showSimpleErrorToast } from '@/components/common/StyledToast';
 import PatternLibraryList from '@/components/PatternLibraryList';
 import PlaybackSequenceManager, {
@@ -29,12 +28,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
 
     // Contexts
     const { patterns, selectedPatternId, selectPattern } = usePatternContext();
-    const {
-        profiles: calibrationProfiles,
-        selectedProfileId: selectedCalibrationProfileId,
-        selectProfile: selectCalibrationProfile,
-        selectedProfile: selectedCalibrationProfile,
-    } = useCalibrationContext();
+    const { selectedProfile: selectedCalibrationProfile } = useCalibrationContext();
 
     const { playSinglePattern } = usePlaybackDispatch({ gridSize, mirrorConfig });
 
@@ -221,17 +215,6 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
 
             {/* Main Content */}
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto pr-2">
-                <section className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
-                    <CalibrationProfileSelector
-                        profiles={calibrationProfiles}
-                        selectedProfileId={selectedCalibrationProfileId ?? ''}
-                        onSelect={selectCalibrationProfile}
-                        label="Calibration Profile"
-                        placeholder="No calibration profiles"
-                        selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
-                    />
-                </section>
-
                 <PlaybackSequenceManager
                     ref={sequenceManagerRef}
                     patterns={patterns}

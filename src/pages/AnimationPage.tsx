@@ -10,7 +10,6 @@ import {
     AnimationSequentialConfig,
     AnimationTimeline,
 } from '@/components/animation';
-import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
 import { showSimpleErrorToast } from '@/components/common/StyledToast';
 import Modal from '@/components/Modal';
 import { useAnimationContext } from '@/context/AnimationContext';
@@ -93,12 +92,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
         deletePath,
     } = useAnimationContext();
 
-    const {
-        profiles: calibrationProfiles,
-        selectedProfileId: selectedCalibrationProfileId,
-        selectProfile: selectCalibrationProfile,
-        selectedProfile: selectedCalibrationProfile,
-    } = useCalibrationContext();
+    const { selectedProfile: selectedCalibrationProfile } = useCalibrationContext();
 
     // Playback
     const {
@@ -443,16 +437,6 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <h1 className="text-xl font-bold text-gray-100">Animations</h1>
-                <div className="flex items-center gap-4">
-                    <CalibrationProfileSelector
-                        profiles={calibrationProfiles}
-                        selectedProfileId={selectedCalibrationProfileId ?? ''}
-                        onSelect={selectCalibrationProfile}
-                        label=""
-                        placeholder="Select calibration..."
-                        selectClassName="min-w-[12rem]"
-                    />
-                </div>
             </div>
 
             <div className="flex flex-1 gap-4 overflow-hidden">

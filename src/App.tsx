@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Toaster } from 'sonner';
 
 import AppTopBar, { type AppTopBarBreadcrumb } from './components/AppTopBar';
+import CalibrationProfileManagementModal from './components/calibration/CalibrationProfileManagementModal';
 import ConnectionSettingsContent from './components/ConnectionSettingsContent';
 import MobileNavigationDrawer from './components/MobileNavigationDrawer';
 import Modal from './components/Modal';
@@ -89,6 +90,7 @@ const App: React.FC = () => {
     const [isRailCollapsed, setIsRailCollapsed] = useState(false);
     const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
     const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
+    const [isProfileManagementModalOpen, setIsProfileManagementModalOpen] = useState(false);
 
     // Grid state and persistence (extracted to hook)
     const {
@@ -370,6 +372,9 @@ const App: React.FC = () => {
                                                 onOpenSettings={() =>
                                                     setIsConnectionModalOpen(true)
                                                 }
+                                                onOpenProfileManagement={() =>
+                                                    setIsProfileManagementModalOpen(true)
+                                                }
                                                 pageTitle={pageTitle}
                                                 breadcrumbs={breadcrumbs}
                                             />
@@ -387,6 +392,12 @@ const App: React.FC = () => {
                                         >
                                             <ConnectionSettingsContent />
                                         </Modal>
+                                        <CalibrationProfileManagementModal
+                                            open={isProfileManagementModalOpen}
+                                            onClose={() => setIsProfileManagementModalOpen(false)}
+                                            gridSize={gridSize}
+                                            mirrorConfig={mirrorConfig}
+                                        />
                                         <Toaster
                                             position="bottom-right"
                                             richColors

@@ -7,6 +7,7 @@ import {
     loadLastCalibrationProfileId,
     persistLastCalibrationProfileId,
 } from '@/services/calibrationProfileStorage';
+import { isDraftProfile } from '@/services/draftProfileService';
 import type { CalibrationProfile } from '@/types';
 
 // Helper to sort profiles (duplicated from CalibrationProfileSelector for now, or should be shared)
@@ -19,7 +20,12 @@ const sortCalibrationProfiles = (profiles: CalibrationProfile[]): CalibrationPro
 };
 
 interface CalibrationContextType {
+    /** All profiles (both saved and draft) */
     profiles: CalibrationProfile[];
+    /** Saved profiles only (excludes draft) */
+    savedProfiles: CalibrationProfile[];
+    /** Draft profile if one exists */
+    draftProfile: CalibrationProfile | null;
     selectedProfileId: string | null;
     selectedProfile: CalibrationProfile | null;
     selectProfile: (profileId: string | null) => void;
@@ -59,6 +65,10 @@ export const CalibrationProvider: React.FC<{ children: React.ReactNode }> = ({ c
         () => profiles.find((p) => p.id === selectedProfileId) ?? null,
         [profiles, selectedProfileId],
     );
+
+    const savedProfiles = useMemo(() => profiles.filter((p) => !isDraftProfile(p)), [profiles]);
+
+    const draftProfile = useMemo(() => profiles.find(isDraftProfile) ?? null, [profiles]);
 
     const refreshProfiles = useCallback(() => {
         const next = sortCalibrationProfiles(loadCalibrationProfiles(resolvedStorage));
@@ -104,12 +114,22 @@ export const CalibrationProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const value = useMemo(
         () => ({
             profiles,
+            savedProfiles,
+            draftProfile,
             selectedProfileId,
             selectedProfile,
             selectProfile,
             refreshProfiles,
         }),
-        [profiles, selectedProfileId, selectedProfile, selectProfile, refreshProfiles],
+        [
+            profiles,
+            savedProfiles,
+            draftProfile,
+            selectedProfileId,
+            selectedProfile,
+            selectProfile,
+            refreshProfiles,
+        ],
     );
 
     return <CalibrationContext.Provider value={value}>{children}</CalibrationContext.Provider>;

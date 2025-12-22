@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
-import CalibrationProfileManager from '@/components/calibration/CalibrationProfileManager';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
 import TileStatusesPanel from '@/components/calibration/TileStatusesPanel';
 import { DEFAULT_STAGING_POSITION } from '@/constants/calibration';
+import { useCalibrationContext } from '@/context/CalibrationContext';
 import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationController } from '@/hooks/useCalibrationController';
 import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
@@ -20,6 +20,7 @@ import {
     loadLastCalibrationProfileId,
     profileToRunSummary,
 } from '@/services/calibrationProfileStorage';
+import { DRAFT_PROFILE_ID, saveDraftProfile } from '@/services/draftProfileService';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type { Motor } from '@/types';
 import type {
@@ -229,16 +230,14 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     // Compute initial active profile summary on mount (before hooks)
     // This enables single-tile recalibration for loaded profiles
-    const [loadedProfileSummary, setLoadedProfileSummary] = useState<CalibrationRunSummary | null>(
-        () => {
-            const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
-            const profiles = loadCalibrationProfiles(storage);
-            const lastId = loadLastCalibrationProfileId(storage);
-            const activeProfile =
-                (lastId && profiles.find((p) => p.id === lastId)) || profiles[0] || null;
-            return activeProfile ? profileToRunSummary(activeProfile) : null;
-        },
-    );
+    const [loadedProfileSummary] = useState<CalibrationRunSummary | null>(() => {
+        const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
+        const profiles = loadCalibrationProfiles(storage);
+        const lastId = loadLastCalibrationProfileId(storage);
+        const activeProfile =
+            (lastId && profiles.find((p) => p.id === lastId)) || profiles[0] || null;
+        return activeProfile ? profileToRunSummary(activeProfile) : null;
+    });
 
     const calibrationController = useCalibrationController({
         gridSize,
@@ -266,7 +265,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         resume: resumeCalibration,
         advance: advanceCalibration,
         abort: abortCalibration,
-        reset: resetCalibration,
         startSingleTileRecalibration,
     } = calibrationController;
 
@@ -289,40 +287,45 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         arrayRotation,
     });
 
-    // Wrapper for loadProfile that resets the controller and updates loaded profile summary
-    // This enables recalibration when loading a different profile
-    const handleLoadProfile = useCallback(
-        (profileId: string) => {
-            const profile = calibrationProfilesController.loadProfile(profileId);
-            if (profile) {
-                // Reset controller to clear existing summary, then update with new profile
-                resetCalibration();
-                setLoadedProfileSummary(profileToRunSummary(profile));
-            }
-            return profile;
-        },
-        [calibrationProfilesController, resetCalibration],
-    );
+    const { refreshProfiles, selectProfile } = useCalibrationContext();
 
-    // Wrapper for importProfileFromJson that updates loaded profile summary
-    const handleImportProfile = useCallback(
-        (payload: string) => {
-            const profile = calibrationProfilesController.importProfileFromJson(payload);
-            if (profile) {
-                resetCalibration();
-                setLoadedProfileSummary(profileToRunSummary(profile));
-            }
-            return profile;
-        },
-        [calibrationProfilesController, resetCalibration],
-    );
+    // Track previous phase to detect transitions (not just current state)
+    const prevPhaseRef = useRef<string | null>(null);
 
-    const runSummary = {
-        total: runnerState.progress.total,
-        completed: runnerState.progress.completed,
-        failed: runnerState.progress.failed,
-        skipped: runnerState.progress.skipped,
-    };
+    // Auto-save draft when calibration transitions to 'completed' (not on mount/restore)
+    useEffect(() => {
+        const prevPhase = prevPhaseRef.current;
+        prevPhaseRef.current = runnerState.phase;
+
+        // Only save draft when transitioning TO completed from an active phase
+        // This prevents re-creating drafts on page reload or after user saves/discards
+        const isTransitionToCompleted =
+            runnerState.phase === 'completed' &&
+            prevPhase !== null &&
+            prevPhase !== 'completed' &&
+            prevPhase !== 'idle';
+
+        if (isTransitionToCompleted && runnerState.summary) {
+            const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
+            const gridSnapshot: GridStateSnapshot = { gridSize, mirrorConfig };
+            saveDraftProfile(storage, {
+                runnerState,
+                gridSnapshot,
+                arrayRotation,
+            });
+            refreshProfiles();
+            selectProfile(DRAFT_PROFILE_ID);
+        }
+    }, [
+        runnerState.phase,
+        runnerState.summary,
+        runnerState,
+        gridSize,
+        mirrorConfig,
+        arrayRotation,
+        refreshProfiles,
+        selectProfile,
+    ]);
 
     const isCalibrationActive = !['idle', 'completed', 'error', 'aborted'].includes(
         runnerState.phase,
@@ -477,24 +480,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     return (
         <div className="flex flex-col gap-6">
-            <CalibrationProfileManager
-                profiles={calibrationProfilesController.profiles}
-                activeProfileId={calibrationProfilesController.activeProfileId}
-                selectedProfileId={calibrationProfilesController.selectedProfileId}
-                onDeleteProfile={calibrationProfilesController.deleteProfile}
-                onLoadProfile={handleLoadProfile}
-                profileName={calibrationProfilesController.profileNameInput}
-                onProfileNameChange={calibrationProfilesController.setProfileNameInput}
-                onSaveProfile={calibrationProfilesController.saveProfile}
-                onSaveAsNewProfile={calibrationProfilesController.saveAsNewProfile}
-                onImportProfile={handleImportProfile}
-                canSave={calibrationProfilesController.canSaveProfile}
-                saveFeedback={calibrationProfilesController.saveFeedback}
-                onDismissFeedback={calibrationProfilesController.dismissFeedback}
-                onReportFeedback={calibrationProfilesController.reportFeedback}
-                lastRunSummary={runSummary}
-                currentGridFingerprint={calibrationProfilesController.currentGridFingerprint}
-            />
             {showCameraAspectWarning && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 shadow-lg">
                     <p className="font-semibold text-amber-100">Aspect mismatch detected</p>

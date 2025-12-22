@@ -21,6 +21,18 @@ vi.mock('@/hooks/useMotorCommands', () => ({
     }),
 }));
 
+vi.mock('@/context/CalibrationContext', () => ({
+    useCalibrationContext: () => ({
+        profiles: [],
+        savedProfiles: [],
+        draftProfile: null,
+        selectedProfileId: null,
+        selectedProfile: null,
+        selectProfile: vi.fn(),
+        refreshProfiles: vi.fn(),
+    }),
+}));
+
 vi.mock('@/context/StatusContext', () => ({
     useStatusStore: () => ({
         drivers: [],

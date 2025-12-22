@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
+import CalibrationProfileDropdown from '@/components/calibration/CalibrationProfileDropdown';
+
 import { useMqtt } from '../context/MqttContext';
 import {
     formatRetryCountdown,
@@ -16,15 +18,19 @@ export interface AppTopBarBreadcrumb {
 interface AppTopBarProps {
     onMenuClick: () => void;
     onOpenSettings: () => void;
+    onOpenProfileManagement?: () => void;
     pageTitle: string;
     breadcrumbs?: AppTopBarBreadcrumb[];
+    showProfileSelector?: boolean;
 }
 
 const AppTopBar: React.FC<AppTopBarProps> = ({
     onMenuClick,
     onOpenSettings,
+    onOpenProfileManagement,
     pageTitle,
     breadcrumbs = [],
+    showProfileSelector = true,
 }) => {
     const { state, connectionUrl, settings } = useMqtt();
     const [heartbeat, setHeartbeat] = useState(() => Date.now());
@@ -128,6 +134,9 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                     </div>
                 </div>
                 <div className="flex flex-1 items-center justify-end gap-3">
+                    {showProfileSelector && onOpenProfileManagement && (
+                        <CalibrationProfileDropdown onOpenManagement={onOpenProfileManagement} />
+                    )}
                     <button
                         type="button"
                         onClick={onOpenSettings}

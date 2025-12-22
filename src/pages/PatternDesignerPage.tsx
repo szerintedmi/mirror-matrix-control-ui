@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
-import CalibrationProfileSelector from '@/components/calibration/CalibrationProfileSelector';
 import { showCommandErrorToast, showSimpleErrorToast } from '@/components/common/StyledToast';
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
@@ -443,12 +442,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         usePatternContext();
 
     // Calibration Context
-    const {
-        profiles: calibrationProfiles,
-        selectedProfileId: selectedCalibrationProfileId,
-        selectProfile: selectCalibrationProfile,
-        selectedProfile: selectedCalibrationProfile,
-    } = useCalibrationContext();
+    const { selectedProfile: selectedCalibrationProfile } = useCalibrationContext();
 
     const { playSinglePattern } = usePlaybackDispatch({ gridSize, mirrorConfig });
 
@@ -857,26 +851,17 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             <div className="flex min-h-0 min-w-[500px] flex-1 flex-col gap-4">
                 {/* Toolbar section - fixed height */}
                 <div className="flex-none rounded-md bg-gray-900/60 p-4">
-                    <div className="rounded-md border border-gray-800/60 bg-gray-950/40 p-4">
-                        <CalibrationProfileSelector
-                            profiles={calibrationProfiles}
-                            selectedProfileId={selectedCalibrationProfileId ?? ''}
-                            onSelect={selectCalibrationProfile}
-                            label="Calibration Profile (optional)"
-                            placeholder="No calibration profiles"
-                            selectClassName="min-w-[10rem] flex-none max-w-[14rem]"
-                            rightAccessory={
-                                showSpotSummary ? (
-                                    <span
-                                        className={`whitespace-nowrap ${spotsOverCapacity ? 'text-red-300' : 'text-gray-300'}`}
-                                    >
-                                        Spots: {placedSpotCount} / {availableSpotCount}
-                                    </span>
-                                ) : null
-                            }
-                        />
-                    </div>
-                    <div className="mt-4">
+                    {showSpotSummary && (
+                        <div className="mb-4 flex items-center justify-between rounded-md border border-gray-800/60 bg-gray-950/40 px-4 py-2">
+                            <span className="text-sm text-gray-400">Pattern capacity</span>
+                            <span
+                                className={`text-sm font-semibold ${spotsOverCapacity ? 'text-red-300' : 'text-gray-300'}`}
+                            >
+                                Spots: {placedSpotCount} / {availableSpotCount}
+                            </span>
+                        </div>
+                    )}
+                    <div>
                         <PatternDesignerToolbar
                             editMode={editMode}
                             onEditModeChange={updateEditMode}
