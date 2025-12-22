@@ -14,7 +14,9 @@ import { useCalibrationStateSession } from '@/hooks/useCalibrationStateSession';
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
+import type { TileAddress } from '@/services/calibration/types';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
+import type { Motor } from '@/types';
 import type {
     ArrayRotation,
     CalibrationCameraResolution,
@@ -245,6 +247,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         resume: resumeCalibration,
         advance: advanceCalibration,
         abort: abortCalibration,
+        startSingleTileRecalibration,
     } = calibrationController;
 
     const isCalibrationPaused = runnerState.phase === 'paused';
@@ -275,6 +278,32 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const isCalibrationActive = !['idle', 'completed', 'error', 'aborted'].includes(
         runnerState.phase,
+    );
+
+    // Handler to home both axes of a tile
+    const handleHomeTile = useCallback(
+        (_tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => {
+            const homePromises: Promise<unknown>[] = [];
+            if (motors.x) {
+                homePromises.push(
+                    motorCommands.homeMotor({
+                        mac: motors.x.nodeMac,
+                        motorId: motors.x.motorIndex,
+                    }),
+                );
+            }
+            if (motors.y) {
+                homePromises.push(
+                    motorCommands.homeMotor({
+                        mac: motors.y.nodeMac,
+                        motorId: motors.y.motorIndex,
+                    }),
+                );
+            }
+            // Fire and forget - errors are handled by the command system
+            Promise.all(homePromises).catch(console.error);
+        },
+        [motorCommands],
     );
 
     const alignmentSourceSummary =
@@ -437,6 +466,9 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                         ? new Set(runnerState.summary.outlierAnalysis.outlierTileKeys)
                         : undefined
                 }
+                isCalibrationActive={isCalibrationActive}
+                onHomeTile={handleHomeTile}
+                onRecalibrateTile={startSingleTileRecalibration}
             />
             <CalibrationRunnerPanel
                 controller={calibrationController}

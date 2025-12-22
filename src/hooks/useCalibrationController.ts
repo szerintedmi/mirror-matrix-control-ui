@@ -16,9 +16,14 @@ import type { DecisionOption } from '@/services/calibration/script/commands';
 import { CalibrationExecutor, type PendingDecision } from '@/services/calibration/script/executor';
 import { calibrationScript } from '@/services/calibration/script/script';
 import {
+    singleTileRecalibrationScript,
+    type SingleTileRecalibrationConfig,
+} from '@/services/calibration/script/singleTileScript';
+import {
     type CalibrationCommandLogEntry,
     type CalibrationRunnerState,
     type CalibrationStepState,
+    type TileAddress,
     type TileRunState,
     type CaptureBlobMeasurement,
     createBaselineRunnerState,
@@ -107,6 +112,8 @@ export interface CalibrationController {
     advance: () => void;
     /** Submit a decision for retry/skip/abort */
     submitDecision: (decision: DecisionOption) => void;
+    /** Start single-tile recalibration (requires existing profile) */
+    startSingleTileRecalibration: (tile: TileAddress) => void;
 }
 
 export const useCalibrationController = ({
@@ -287,6 +294,90 @@ export const useCalibrationController = ({
         executorRef.current?.submitDecision(decision);
     }, []);
 
+    const startSingleTileRecalibration = useCallback(
+        (tile: TileAddress) => {
+            // Require existing profile
+            if (!runnerState.summary) {
+                setRunnerState((prev) => ({
+                    ...prev,
+                    error: 'No calibration profile available for recalibration. Run full calibration first.',
+                }));
+                return;
+            }
+
+            if (!detectionReady) {
+                setRunnerState((prev) => ({
+                    ...prev,
+                    error: 'Camera stream and detector must be ready before recalibration can start.',
+                }));
+                return;
+            }
+
+            executorRef.current?.abort();
+            executorRef.current = null;
+
+            // Clear any previous errors and create fresh toast manager
+            errorToastRef.current.clear();
+            errorToastRef.current = createAccumulatingErrorToast('Recalibration');
+
+            // Create adapters for the executor
+            const adapters = createAdapters(motorApi, captureMeasurement);
+
+            // Build the extended config for single-tile recalibration
+            const singleTileConfig: SingleTileRecalibrationConfig = {
+                gridSize,
+                mirrorConfig,
+                settings: runnerSettings,
+                arrayRotation,
+                stagingPosition,
+                roi,
+                mode,
+                targetTile: tile,
+                existingProfile: runnerState.summary,
+            };
+
+            // Create the executor with callbacks
+            const executor = new CalibrationExecutor(singleTileConfig, adapters, {
+                onStateChange: setRunnerState,
+                onStepStateChange: setStepState,
+                onCommandLog: appendLogEntry,
+                onCommandError: showCommandErrorToast,
+                onTileError: (row, col, message) => {
+                    errorToastRef.current.addError({ row, col, message });
+                },
+                onExpectedPositionChange,
+                onPendingDecision: setPendingDecision,
+            });
+            executorRef.current = executor;
+            setCommandLog([]);
+            setStepState(null);
+            setPendingDecision(null);
+
+            // Run the single-tile recalibration script
+            // Wrap in factory to satisfy executor's expected signature
+            executor
+                .run(() => singleTileRecalibrationScript(singleTileConfig))
+                .catch((err) => {
+                    console.error('Single-tile recalibration failed:', err);
+                });
+        },
+        [
+            appendLogEntry,
+            arrayRotation,
+            captureMeasurement,
+            detectionReady,
+            gridSize,
+            mirrorConfig,
+            mode,
+            motorApi,
+            onExpectedPositionChange,
+            roi,
+            runnerSettings,
+            runnerState.summary,
+            stagingPosition,
+        ],
+    );
+
     const tileEntries = useMemo(
         () =>
             Object.values(runnerState.tiles).sort((a, b) => {
@@ -379,6 +470,7 @@ export const useCalibrationController = ({
         reset,
         advance,
         submitDecision,
+        startSingleTileRecalibration,
     };
 };
 

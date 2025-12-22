@@ -126,6 +126,7 @@ const createMockController = (
     reset: noop,
     advance: noop,
     submitDecision: noop,
+    startSingleTileRecalibration: noop,
     ...overrides,
 });
 

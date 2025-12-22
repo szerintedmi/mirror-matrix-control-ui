@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 
 import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
+import TileRecalibrationMenu from '@/components/calibration/TileRecalibrationMenu';
 import CollapsibleSection from '@/components/common/CollapsibleSection';
 import {
     getTileStatusClasses,
@@ -9,6 +10,7 @@ import {
     TILE_WARNING_TEXT_CLASS,
 } from '@/constants/calibrationUiThemes';
 import type { DriverView } from '@/context/StatusContext';
+import type { TileAddress } from '@/services/calibration/types';
 import type { CalibrationRunSummary, TileRunState } from '@/services/calibration/types';
 import type { Motor, MotorTelemetry } from '@/types';
 
@@ -19,6 +21,12 @@ interface TileStatusesPanelProps {
     deltaSteps: number;
     /** Keys of tiles identified as outliers (unusually large measurements) */
     outlierTileKeys?: Set<string>;
+    /** Whether calibration is currently active (disables tile actions) */
+    isCalibrationActive?: boolean;
+    /** Callback to home a tile (both axes) */
+    onHomeTile?: (tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => void;
+    /** Callback to start single-tile recalibration */
+    onRecalibrateTile?: (tile: TileAddress) => void;
 }
 
 const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
@@ -27,8 +35,12 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
     runnerSummary,
     deltaSteps,
     outlierTileKeys,
+    isCalibrationActive = false,
+    onHomeTile,
+    onRecalibrateTile,
 }) => {
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
+    const [hoveredTileKey, setHoveredTileKey] = useState<string | null>(null);
 
     const debugTileEntry = useMemo(() => {
         if (!debugTileKey) {
@@ -166,6 +178,8 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                 >
                     {tileEntries.map((entry) => {
                         const isOutlier = outlierTileKeys?.has(entry.tile.key) ?? false;
+                        const isHovered = hoveredTileKey === entry.tile.key;
+                        const showMenu = isHovered && onHomeTile && onRecalibrateTile;
                         return (
                             <div
                                 key={entry.tile.key}
@@ -174,6 +188,8 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                 aria-label={`Inspect calibration metrics for tile [${entry.tile.row},${entry.tile.col}]${isOutlier ? ' (outlier)' : ''}`}
                                 onClick={(event) => handleTileCardClick(event, entry.tile.key)}
                                 onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
+                                onMouseEnter={() => setHoveredTileKey(entry.tile.key)}
+                                onMouseLeave={() => setHoveredTileKey(null)}
                                 className={`rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'} ${isOutlier ? 'ring-2 ring-amber-500/60 ring-offset-1 ring-offset-gray-950' : ''}`}
                             >
                                 <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] font-semibold">
@@ -188,9 +204,22 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                             </span>
                                         )}
                                     </span>
-                                    <span className="text-xs capitalize font-medium">
-                                        {entry.status}
-                                    </span>
+                                    <div className="flex items-center gap-1">
+                                        {showMenu && (
+                                            <TileRecalibrationMenu
+                                                tile={entry.tile}
+                                                xMotor={entry.assignment.x}
+                                                yMotor={entry.assignment.y}
+                                                hasProfile={Boolean(runnerSummary)}
+                                                isCalibrationActive={isCalibrationActive}
+                                                onHomeTile={onHomeTile}
+                                                onRecalibrateTile={onRecalibrateTile}
+                                            />
+                                        )}
+                                        <span className="text-xs capitalize font-medium">
+                                            {entry.status}
+                                        </span>
+                                    </div>
                                 </div>
                                 {entry.error && (
                                     <div
