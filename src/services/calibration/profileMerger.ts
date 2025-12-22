@@ -209,12 +209,19 @@ export function extractFirstTilePerStep(profile: CalibrationRunSummary): {
 /**
  * Extract existing measurements from profile for expected position calculation.
  * Excludes the target tile being recalibrated.
+ *
+ * IMPORTANT: Profile measurements are stored with cameraOriginOffset subtracted
+ * (to center the grid at origin). For expected position calculation, we need
+ * the original raw coordinates, so we add the offset back.
  */
 export function extractExistingMeasurements(
     profile: CalibrationRunSummary,
     excludeTileKey?: string,
 ): TileMeasurement[] {
     const measurements: TileMeasurement[] = [];
+
+    // Get the camera origin offset that was subtracted from measurements during summary computation
+    const offset = profile.gridBlueprint?.cameraOriginOffset ?? { x: 0, y: 0 };
 
     for (const [key, tile] of Object.entries(profile.tiles)) {
         // Skip the tile being recalibrated
@@ -223,10 +230,15 @@ export function extractExistingMeasurements(
         // Only include tiles with valid home measurements
         if ((tile.status === 'completed' || tile.status === 'partial') && tile.homeMeasurement) {
             const [rowStr, colStr] = key.split('-');
+            // Add back cameraOriginOffset to get original raw coordinates
+            // (measurements in profile have offset subtracted for centered storage)
             measurements.push({
                 row: parseInt(rowStr, 10),
                 col: parseInt(colStr, 10),
-                position: asCentered(tile.homeMeasurement.x, tile.homeMeasurement.y),
+                position: asCentered(
+                    tile.homeMeasurement.x + offset.x,
+                    tile.homeMeasurement.y + offset.y,
+                ),
             });
         }
     }
