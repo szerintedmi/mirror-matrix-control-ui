@@ -254,9 +254,14 @@ const CalibrationProfileManagementModal: React.FC<CalibrationProfileManagementMo
                                         value={saveTarget}
                                         onChange={(e) => {
                                             setSaveTarget(e.target.value);
-                                            // Clear name when switching to overwrite mode
-                                            if (e.target.value !== 'new') {
+                                            // Populate name field with the selected profile's name for easy editing
+                                            if (e.target.value === 'new') {
                                                 setDraftName('');
+                                            } else {
+                                                const targetProfile = sortedProfiles.find(
+                                                    (p) => p.id === e.target.value,
+                                                );
+                                                setDraftName(targetProfile?.name ?? '');
                                             }
                                         }}
                                         className="w-full rounded-md border border-amber-500/30 bg-gray-900/60 px-3 py-2 text-sm text-gray-100"
