@@ -89,7 +89,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                         >
                             <PatternPreview
                                 pattern={pattern}
-                                className="h-12 w-12 flex-none rounded border border-gray-800/70 shadow-inner"
+                                className="size-12 flex-none rounded border border-gray-800/70 shadow-inner"
                             />
 
                             <div className="flex min-w-0 flex-1 flex-col">
@@ -101,7 +101,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                                 event.stopPropagation();
                                                 onPlay(pattern);
                                             }}
-                                            className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/80 text-white shadow-inner transition hover:bg-emerald-500"
+                                            className="flex size-6 items-center justify-center rounded-full bg-emerald-600/80 text-white shadow-inner transition hover:bg-emerald-500"
                                             title="Quick play"
                                             aria-label={`Play pattern ${pattern.name}`}
                                         >
@@ -109,21 +109,21 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                                 xmlns="http://www.w3.org/2000/svg"
                                                 viewBox="0 0 24 24"
                                                 fill="currentColor"
-                                                className="h-3.5 w-3.5"
+                                                className="size-3.5"
                                             >
                                                 <path d="M5.25 5.653c0-1.44 1.567-2.342 2.806-1.606l9.05 5.347a1.875 1.875 0 010 3.212l-9.05 5.347c-1.239.732-2.806-.166-2.806-1.606V5.653z" />
                                             </svg>
                                         </button>
                                     ) : (
                                         <span
-                                            className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-800/80 text-gray-400"
+                                            className="flex size-6 items-center justify-center rounded-full bg-gray-800/80 text-gray-400"
                                             aria-hidden
                                         >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
                                                 viewBox="0 0 24 24"
                                                 fill="currentColor"
-                                                className="h-3.5 w-3.5"
+                                                className="size-3.5"
                                             >
                                                 <path d="M5.25 5.653c0-1.44 1.567-2.342 2.806-1.606l9.05 5.347a1.875 1.875 0 010 3.212l-9.05 5.347c-1.239.732-2.806-.166-2.806-1.606V5.653z" />
                                             </svg>
@@ -171,7 +171,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                             fill="none"
                                             stroke="currentColor"
                                             strokeWidth={1.5}
-                                            className="h-5 w-5"
+                                            className="size-5"
                                         >
                                             <path
                                                 strokeLinecap="round"
@@ -195,7 +195,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                             xmlns="http://www.w3.org/2000/svg"
                                             viewBox="0 0 20 20"
                                             fill="currentColor"
-                                            className="h-4 w-4"
+                                            className="size-4"
                                         >
                                             <path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" />
                                             <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0010 3H4.75A2.75 2.75 0 002 5.75v9.5A2.75 2.75 0 004.75 18h9.5A2.75 2.75 0 0017 15.25V10a.75.75 0 00-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5z" />
@@ -218,7 +218,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                             fill="none"
                                             stroke="currentColor"
                                             strokeWidth={1.5}
-                                            className="h-4 w-4"
+                                            className="size-4"
                                         >
                                             <path
                                                 strokeLinecap="round"
@@ -253,7 +253,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                             fill="none"
                                             stroke="currentColor"
                                             strokeWidth={1.5}
-                                            className="h-4 w-4"
+                                            className="size-4"
                                         >
                                             <path
                                                 strokeLinecap="round"

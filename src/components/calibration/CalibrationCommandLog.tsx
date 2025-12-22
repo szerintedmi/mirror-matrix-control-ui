@@ -92,7 +92,7 @@ const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({
                             >
                                 <button
                                     type="button"
-                                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-300 hover:bg-gray-800"
+                                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold tracking-wide text-gray-300 uppercase hover:bg-gray-800"
                                     onClick={() =>
                                         setCollapsedGroups((prev) => ({
                                             ...prev,
@@ -131,11 +131,11 @@ const CalibrationCommandLog: React.FC<CalibrationCommandLogProps> = ({
                                                         {entry.hint}
                                                     </span>
                                                     {tileLabel && (
-                                                        <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-300">
+                                                        <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] tracking-wide text-gray-300 uppercase">
                                                             {tileLabel}
                                                         </span>
                                                     )}
-                                                    <span className="ml-auto text-[10px] uppercase tracking-wide text-gray-500">
+                                                    <span className="ml-auto text-[10px] tracking-wide text-gray-500 uppercase">
                                                         {entry.phase}
                                                     </span>
                                                 </div>

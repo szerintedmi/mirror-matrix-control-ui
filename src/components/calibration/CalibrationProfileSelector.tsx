@@ -40,7 +40,7 @@ const CalibrationProfileSelector: React.FC<CalibrationProfileSelectorProps> = ({
                 <div className="flex flex-1 items-center">
                     <select
                         id={selectId}
-                        className={`rounded-md border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm text-gray-100 ${selectClassName ?? 'flex-1 min-w-0'}`}
+                        className={`rounded-md border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm text-gray-100 ${selectClassName ?? 'min-w-0 flex-1'}`}
                         value={hasOptions ? resolvedValue : ''}
                         onChange={(event) => onSelect(event.target.value)}
                         disabled={!hasOptions}

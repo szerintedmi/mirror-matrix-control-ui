@@ -505,7 +505,7 @@ const PlaybackSequenceManager = React.forwardRef<
                     </div>
                 )}
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-h-[1.75rem]">
+                    <div className="flex min-h-[1.75rem] items-center gap-3">
                         {isEditMode && activeSequence && (
                             <span className="rounded bg-cyan-900/50 px-2 py-0.5 text-xs text-cyan-200">
                                 Editing
@@ -739,7 +739,7 @@ const PlaybackSequenceManager = React.forwardRef<
                                                                 {entry.name}
                                                             </span>
                                                             {isActive && (
-                                                                <span className="flex-none rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs uppercase tracking-wide text-cyan-100">
+                                                                <span className="flex-none rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs tracking-wide text-cyan-100 uppercase">
                                                                     Loaded
                                                                 </span>
                                                             )}
@@ -786,7 +786,7 @@ const PlaybackSequenceManager = React.forwardRef<
                                                             fill="none"
                                                             stroke="currentColor"
                                                             strokeWidth={1.5}
-                                                            className="h-4 w-4"
+                                                            className="size-4"
                                                         >
                                                             <path
                                                                 strokeLinecap="round"
@@ -815,7 +815,7 @@ const PlaybackSequenceManager = React.forwardRef<
                                                             fill="none"
                                                             stroke="currentColor"
                                                             strokeWidth={1.5}
-                                                            className="h-4 w-4"
+                                                            className="size-4"
                                                         >
                                                             <path
                                                                 strokeLinecap="round"

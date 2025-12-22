@@ -49,7 +49,7 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
         <Modal open={open} onClose={onClose} title="Calibration summary – debug">
             <div className="space-y-6 text-sm text-gray-200">
                 <section>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Grid blueprint</p>
+                    <p className="text-xs tracking-wide text-gray-500 uppercase">Grid blueprint</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                         <SummaryStat
                             label="Adjusted width"
@@ -94,7 +94,7 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
                     </div>
                 </section>
                 <section>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">
+                    <p className="text-xs tracking-wide text-gray-500 uppercase">
                         Tiles & measurements
                     </p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -112,7 +112,7 @@ const CalibrationSummaryModal: React.FC<CalibrationSummaryModalProps> = ({
                 </section>
                 {stepSettings && (
                     <section>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">
+                        <p className="text-xs tracking-wide text-gray-500 uppercase">
                             Step test settings
                         </p>
                         <div className="mt-2 grid gap-2 sm:grid-cols-1">
@@ -137,7 +137,7 @@ interface SummaryStatProps {
 
 const SummaryStat: React.FC<SummaryStatProps> = ({ label, value, formula }) => (
     <div className="rounded-md border border-gray-800/70 bg-gray-950/50 p-3">
-        <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="text-xs tracking-wide text-gray-500 uppercase">{label}</p>
         <p className="mt-1 font-mono text-base text-gray-100">{value}</p>
         <p className="mt-1 text-xs text-gray-400">{formula}</p>
     </div>

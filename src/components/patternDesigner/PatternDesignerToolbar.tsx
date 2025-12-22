@@ -65,7 +65,7 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
         <div className="flex flex-col gap-3 text-xs">
             {/* Row 1: Edit Mode + Show Bounds */}
             <div className="flex flex-wrap items-center gap-3 font-semibold text-gray-200">
-                <span className="uppercase tracking-wide text-gray-400">Mode</span>
+                <span className="tracking-wide text-gray-400 uppercase">Mode</span>
                 <div className="inline-flex rounded-md bg-gray-800/70 p-1">
                     {(['placement', 'erase'] as PatternEditMode[]).map((mode) => {
                         const isActive = editMode === mode;

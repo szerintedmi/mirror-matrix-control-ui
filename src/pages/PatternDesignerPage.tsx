@@ -270,7 +270,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     }, [onHoverPointChange]);
 
     return (
-        <div className="relative flex h-full w-full items-center justify-center bg-gray-900">
+        <div className="relative flex size-full items-center justify-center bg-gray-900">
             <div
                 ref={containerRef}
                 className={`aspect-square h-full max-h-full max-w-full select-none ${
@@ -282,11 +282,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                 onMouseLeave={handleMouseLeave}
                 role="presentation"
             >
-                <svg
-                    viewBox="0 0 1 1"
-                    preserveAspectRatio="xMidYMid meet"
-                    className="h-full w-full"
-                >
+                <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="size-full">
                     <defs>
                         <filter
                             id={overlapFilterId}
@@ -839,7 +835,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     <button
                         type="button"
                         onClick={handleCreatePattern}
-                        className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-cyan-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-600"
+                        className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-cyan-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-600"
                     >
                         New
                     </button>
@@ -853,7 +849,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     onRename={handleOpenRenameModal}
                     onPlay={handleQuickPlay}
                     getValidationStatus={getValidationStatus}
-                    className="flex-1 min-h-0 overflow-y-auto"
+                    className="min-h-0 flex-1 overflow-y-auto"
                 />
             </div>
 
@@ -958,7 +954,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                                 type="text"
                                 value={renameState.value}
                                 onChange={handleRenameInputChange}
-                                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                             />
                         </div>
                         <div className="flex justify-end gap-3">

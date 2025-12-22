@@ -39,7 +39,7 @@ const SequencePreview: React.FC<SequencePreviewProps> = ({
                 >
                     <PatternPreview
                         pattern={pattern}
-                        className="h-full w-full rounded-sm border border-gray-700/50"
+                        className="size-full rounded-sm border border-gray-700/50"
                     />
                     {index < patternIds.length - 1 && index === previewPatterns.length - 1 && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-[10px] font-bold text-white">

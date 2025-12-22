@@ -40,7 +40,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
                 className="flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-gray-900/50"
             >
                 <div className="flex items-center gap-2">
-                    {icon && <span className="h-4 w-4 text-gray-400">{icon}</span>}
+                    {icon && <span className="size-4 text-gray-400">{icon}</span>}
                     <span className="text-sm font-medium text-gray-200">{title}</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -49,7 +49,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
                     )}
                     {headerActions}
                     <svg
-                        className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        className={`size-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"

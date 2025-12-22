@@ -88,7 +88,7 @@ const PatternThumbnail: React.FC<{
                 <svg
                     viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
                     preserveAspectRatio="xMidYMid meet"
-                    className="absolute left-0 top-0 h-full w-full rounded-md bg-gray-800"
+                    className="absolute top-0 left-0 size-full rounded-md bg-gray-800"
                 >
                     <rect
                         x={0}
@@ -865,7 +865,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                         <div className="flex items-center justify-between">
                             <p className="text-gray-400">Targeted mirrors</p>
                             {isPlanRefreshing && (
-                                <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                                <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                                     Updating…
                                 </span>
                             )}
@@ -980,7 +980,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                     )}
             </section>
 
-            <section className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner space-y-4">
+            <section className="space-y-4 rounded-lg border border-gray-800 bg-gray-900/60 p-4 shadow-inner">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <h2 className="text-lg font-semibold text-gray-100">Projection Setup</h2>
                     {onNavigateSimulation && (
@@ -1006,7 +1006,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                                     step={0.1}
                                     value={projectionSettings.wallDistance}
                                     onChange={createNumberChangeHandler(wallDistanceInput)}
-                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                                 />
                             </label>
                             <label className="flex flex-col gap-1 text-sm text-gray-300">
@@ -1018,7 +1018,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                                     step={0.05}
                                     value={projectionSettings.projectionOffset}
                                     onChange={createNumberChangeHandler(projectionOffsetInput)}
-                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                                 />
                             </label>
                         </div>
@@ -1032,7 +1032,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                                     step={0.1}
                                     value={projectionSettings.wallOrientation.yaw}
                                     onChange={createNumberChangeHandler(wallYawInput)}
-                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                                 />
                             </label>
                             <label className="flex flex-col gap-1 text-sm text-gray-300">
@@ -1044,7 +1044,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                                     step={0.1}
                                     value={projectionSettings.wallOrientation.pitch}
                                     onChange={createNumberChangeHandler(wallPitchInput)}
-                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                                 />
                             </label>
                         </div>
@@ -1058,7 +1058,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                                     step={0.1}
                                     value={projectionSettings.sunOrientation.yaw}
                                     onChange={createNumberChangeHandler(sunYawInput)}
-                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                                 />
                             </label>
                             <label className="flex flex-col gap-1 text-sm text-gray-300">
@@ -1070,7 +1070,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                                     step={0.1}
                                     value={projectionSettings.sunOrientation.pitch}
                                     onChange={createNumberChangeHandler(sunPitchInput)}
-                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                                 />
                             </label>
                         </div>
@@ -1175,7 +1175,7 @@ const LegacyPlaybackPage: React.FC<LegacyPlaybackPageProps> = ({
                         </div>
                         <div className="overflow-x-auto rounded-md border border-gray-800">
                             <table className="min-w-full divide-y divide-gray-800 text-sm">
-                                <thead className="bg-gray-800/60 text-xs uppercase tracking-wide text-gray-400">
+                                <thead className="bg-gray-800/60 text-xs tracking-wide text-gray-400 uppercase">
                                     <tr>
                                         <th className="px-3 py-2 text-left">Tile</th>
                                         <th className="px-3 py-2 text-left">Axis</th>

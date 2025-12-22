@@ -94,12 +94,12 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
             <button
                 type="button"
                 onClick={handleToggle}
-                className="flex h-6 w-6 items-center justify-center rounded border border-gray-700 bg-gray-900/80 text-gray-400 transition hover:border-gray-600 hover:text-gray-200"
+                className="flex size-6 items-center justify-center rounded border border-gray-700 bg-gray-900/80 text-gray-400 transition hover:border-gray-600 hover:text-gray-200"
                 aria-haspopup="true"
                 aria-expanded={isOpen}
                 title="Tile actions"
             >
-                <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                     <circle cx="10" cy="4" r="1.5" />
                     <circle cx="10" cy="10" r="1.5" />
                     <circle cx="10" cy="16" r="1.5" />
@@ -120,7 +120,7 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
                         }`}
                     >
                         <svg
-                            className="h-3.5 w-3.5 flex-shrink-0"
+                            className="size-3.5 flex-shrink-0"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -154,7 +154,7 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
                         }
                     >
                         <svg
-                            className="h-3.5 w-3.5 flex-shrink-0"
+                            className="size-3.5 flex-shrink-0"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"

@@ -1,0 +1,57 @@
+{
+    "languages": {
+        "TypeScript": {
+            "language_servers": ["typescript-language-server", "eslint", "!biome"],
+            "formatter": "prettier"
+        },
+        "TSX": {
+            "language_servers": [
+                "typescript-language-server",
+                "eslint",
+                "!tailwindcss-language-server",
+                "!biome"
+            ],
+            "formatter": "prettier"
+        },
+        "JavaScript": {
+            "language_servers": ["typescript-language-server", "eslint", "!biome"],
+            "formatter": "prettier"
+        },
+        "JSON": {
+            "formatter": "prettier"
+        },
+        "CSS": {
+            "language_servers": ["tailwindcss-language-server"],
+            "formatter": "prettier"
+        }
+    },
+    "lsp": {
+        "eslint": {
+            "settings": {
+                "codeActionOnSave": {
+                    "rules": ["import/order"]
+                }
+            }
+        },
+        "tailwindcss-language-server": {
+            "settings": {
+                "tailwindCSS": {
+                    "validate": false
+                }
+            },
+            "initialization_options": {
+                "configuration": {
+                    "tailwindCSS": {
+                        "validate": false
+                    }
+                }
+            }
+        }
+    },
+    "formatter": {
+        "external": {
+            "command": "prettier",
+            "arguments": ["--stdin-filepath", "{buffer_path}"]
+        }
+    }
+}

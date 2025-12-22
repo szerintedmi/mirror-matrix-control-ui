@@ -96,7 +96,7 @@ const ArrayPersistenceControls: React.FC<ArrayPersistenceControlsProps> = ({
                 type="submit"
                 data-testid="array-save-config"
                 disabled={saveDisabled}
-                className={`rounded-md px-3 py-1.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
+                className={`rounded-md px-3 py-1.5 font-semibold transition-colors focus:ring-2 focus:ring-cyan-400 focus:outline-none ${
                     saveDisabled
                         ? 'cursor-not-allowed bg-gray-800 text-gray-500'
                         : 'bg-cyan-600/80 text-white hover:bg-cyan-500/80'
@@ -132,7 +132,7 @@ const ArrayPersistenceControls: React.FC<ArrayPersistenceControlsProps> = ({
                 data-testid="array-load-config"
                 onClick={handleLoad}
                 disabled={loadDisabled}
-                className={`rounded-md px-3 py-1.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                className={`rounded-md px-3 py-1.5 font-semibold transition-colors focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
                     loadDisabled
                         ? 'cursor-not-allowed bg-gray-800 text-gray-500'
                         : 'bg-indigo-600/80 text-white hover:bg-indigo-500/80'
@@ -143,7 +143,7 @@ const ArrayPersistenceControls: React.FC<ArrayPersistenceControlsProps> = ({
             {canUseStorage && hasUnsavedChanges ? (
                 <span
                     data-testid="array-unsaved-indicator"
-                    className="rounded-full border border-amber-400/70 bg-amber-900/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-100"
+                    className="rounded-full border border-amber-400/70 bg-amber-900/40 px-3 py-1 text-xs font-semibold tracking-wide text-amber-100 uppercase"
                 >
                     Unsaved changes
                 </span>
@@ -151,7 +151,7 @@ const ArrayPersistenceControls: React.FC<ArrayPersistenceControlsProps> = ({
             {!canUseStorage && (
                 <span
                     data-testid="array-storage-unavailable"
-                    className="rounded-full border border-red-500/70 bg-red-900/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-100"
+                    className="rounded-full border border-red-500/70 bg-red-900/40 px-3 py-1 text-xs font-semibold tracking-wide text-red-100 uppercase"
                 >
                     Storage unavailable
                 </span>

@@ -70,7 +70,7 @@ const AnimationPathLibrary: React.FC<AnimationPathLibraryProps> = ({
                             className={`group flex w-full items-center justify-between rounded-md px-3 py-2 text-left ${
                                 selectedPathId === path.id
                                     ? 'bg-cyan-600/20 ring-1 ring-cyan-500'
-                                    : 'bg-gray-800 hover:bg-gray-750'
+                                    : 'hover:bg-gray-750 bg-gray-800'
                             } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                             onClick={() => !disabled && onSelectPath(path.id)}
                             disabled={disabled}
@@ -111,7 +111,7 @@ const AnimationPathLibrary: React.FC<AnimationPathLibraryProps> = ({
                                         title="Rename"
                                     >
                                         <svg
-                                            className="h-4 w-4"
+                                            className="size-4"
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"
@@ -134,7 +134,7 @@ const AnimationPathLibrary: React.FC<AnimationPathLibraryProps> = ({
                                         title="Delete"
                                     >
                                         <svg
-                                            className="h-4 w-4"
+                                            className="size-4"
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"

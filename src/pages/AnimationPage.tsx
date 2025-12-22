@@ -488,7 +488,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                     className={`group flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-left ${
                                         selectedAnimationId === anim.id
                                             ? 'bg-cyan-600/20 ring-1 ring-cyan-500'
-                                            : 'bg-gray-800 hover:bg-gray-750'
+                                            : 'hover:bg-gray-750 bg-gray-800'
                                     }`}
                                 >
                                     <div>
@@ -513,7 +513,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                             title="Rename"
                                         >
                                             <svg
-                                                className="h-4 w-4"
+                                                className="size-4"
                                                 fill="none"
                                                 viewBox="0 0 24 24"
                                                 stroke="currentColor"
@@ -536,7 +536,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                             title="Delete"
                                         >
                                             <svg
-                                                className="h-4 w-4"
+                                                className="size-4"
                                                 fill="none"
                                                 viewBox="0 0 24 24"
                                                 stroke="currentColor"
@@ -695,7 +695,7 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                     <div className="flex flex-1 items-center justify-center">
                         <div className="text-center">
                             <svg
-                                className="mx-auto h-16 w-16 text-gray-600"
+                                className="mx-auto size-16 text-gray-600"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"

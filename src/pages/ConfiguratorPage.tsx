@@ -488,11 +488,11 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         <>
             {modalState.isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
                     aria-modal="true"
                     role="dialog"
                 >
-                    <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700">
+                    <div className="w-full max-w-md rounded-lg border border-gray-700 bg-gray-800 p-6 shadow-xl">
                         <h2 className="text-xl font-bold text-white">{modalState.title}</h2>
                         <p className="mt-2 text-gray-300">{modalState.message}</p>
                         <div className="mt-6 flex justify-end space-x-4">
@@ -509,7 +509,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                         cancelLabel: undefined,
                                     });
                                 }}
-                                className="px-4 py-2 rounded-md bg-gray-600 text-white font-semibold hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                className="rounded-md bg-gray-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-gray-500 focus:ring-2 focus:ring-gray-400 focus:outline-none"
                             >
                                 {modalState.cancelLabel ?? 'Cancel'}
                             </button>
@@ -526,7 +526,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                         cancelLabel: undefined,
                                     });
                                 }}
-                                className="px-4 py-2 rounded-md bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400"
+                                className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-red-500 focus:ring-2 focus:ring-red-400 focus:outline-none"
                             >
                                 {modalState.confirmLabel ?? 'Confirm'}
                             </button>
@@ -557,7 +557,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
+                                    className="size-5"
                                     viewBox="0 0 20 20"
                                     fill="currentColor"
                                 >
@@ -572,7 +572,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
+                                    className="size-5"
                                     viewBox="0 0 20 20"
                                     fill="currentColor"
                                 >
@@ -652,8 +652,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                     </div>
                 </section>
 
-                <div className="flex flex-col lg:flex-row flex-grow gap-8">
-                    <main className="flex-grow lg:w-2/3 flex flex-col bg-gray-800/50 rounded-lg p-4 shadow-lg ring-1 ring-white/10">
+                <div className="flex flex-grow flex-col gap-8 lg:flex-row">
+                    <main className="flex flex-grow flex-col rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10 lg:w-2/3">
                         <GridConfigurator
                             rows={gridSize.rows}
                             cols={gridSize.cols}
@@ -692,7 +692,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 ))}
                             </div>
                         </div>
-                        <div className="flex-grow mt-4 overflow-auto p-2 bg-black/20 rounded-md">
+                        <div className="mt-4 flex-grow overflow-auto rounded-md bg-black/20 p-2">
                             <MirrorGrid
                                 rows={gridSize.rows}
                                 cols={gridSize.cols}
@@ -705,8 +705,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                         </div>
                     </main>
 
-                    <aside className="lg:w-1/3 flex flex-col bg-gray-800/50 rounded-lg p-4 shadow-lg ring-1 ring-white/10">
-                        <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
+                    <aside className="flex flex-col rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10 lg:w-1/3">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                             <div>
                                 <h2 className="text-2xl font-semibold text-gray-100">Nodes</h2>
                                 <p className="text-xs text-gray-400">
@@ -722,8 +722,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                         data-testid={`node-filter-${option.id}`}
                                         className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                                             activeFilter === option.id
-                                                ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
-                                                : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'
+                                                ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200'
+                                                : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-500'
                                         }`}
                                     >
                                         {option.label}

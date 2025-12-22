@@ -396,12 +396,12 @@ const LegacyPatternEditorPage: React.FC<LegacyPatternEditorPageProps> = ({
                     Save Pattern
                 </button>
             </div>
-            <div className="flex flex-grow flex-col gap-6 min-h-0 md:flex-row">
+            <div className="flex min-h-0 flex-grow flex-col gap-6 md:flex-row">
                 <LegacyPatternEditorSidebar {...sidebarProps} />
-                <main className="flex-grow bg-gray-800/50 rounded-lg ring-1 ring-white/10 p-4 flex items-center justify-center min-h-0">
+                <main className="flex min-h-0 flex-grow items-center justify-center rounded-lg bg-gray-800/50 p-4 ring-1 ring-white/10">
                     <div
                         ref={containerRef}
-                        className="w-full h-full flex min-h-0 min-w-0 items-center justify-center"
+                        className="flex size-full min-h-0 min-w-0 items-center justify-center"
                     >
                         <div style={surfaceStyle} className="relative max-h-full max-w-full">
                             <LegacyPatternCanvas

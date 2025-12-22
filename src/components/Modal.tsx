@@ -66,7 +66,7 @@ const Modal: React.FC<ModalProps> = ({
         >
             {disableOverlayClose ? (
                 <div
-                    className="absolute inset-0 h-full w-full bg-black/60"
+                    className="absolute inset-0 size-full bg-black/60"
                     aria-hidden="true"
                     data-testid="modal-overlay"
                 />
@@ -74,7 +74,7 @@ const Modal: React.FC<ModalProps> = ({
                 <button
                     type="button"
                     aria-label="Close modal overlay"
-                    className="absolute inset-0 h-full w-full bg-black/60"
+                    className="absolute inset-0 size-full bg-black/60"
                     onClick={onClose}
                     data-testid="modal-overlay"
                 />

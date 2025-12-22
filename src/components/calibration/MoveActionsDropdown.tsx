@@ -290,7 +290,7 @@ const MoveActionsDropdown: React.FC<MoveActionsDropdownProps> = ({
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center gap-1.5 rounded-md border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-200 transition hover:bg-gray-700"
             >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -300,7 +300,7 @@ const MoveActionsDropdown: React.FC<MoveActionsDropdownProps> = ({
                 </svg>
                 Move
                 <svg
-                    className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    className={`size-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -315,7 +315,7 @@ const MoveActionsDropdown: React.FC<MoveActionsDropdownProps> = ({
             </button>
 
             {isOpen && (
-                <div className="absolute left-0 top-full z-10 mt-1 min-w-[180px] rounded-md border border-gray-700 bg-gray-900 py-1 shadow-lg">
+                <div className="absolute top-full left-0 z-10 mt-1 min-w-[180px] rounded-md border border-gray-700 bg-gray-900 py-1 shadow-lg">
                     <button
                         type="button"
                         onClick={handleCalibratedHome}
@@ -324,7 +324,7 @@ const MoveActionsDropdown: React.FC<MoveActionsDropdownProps> = ({
                         title="Move all calibrated tiles to their aligned home positions"
                     >
                         <span
-                            className={`h-2 w-2 rounded-full ${calibratedAxisTargets.length > 0 ? 'bg-emerald-500' : 'bg-gray-600'}`}
+                            className={`size-2 rounded-full ${calibratedAxisTargets.length > 0 ? 'bg-emerald-500' : 'bg-gray-600'}`}
                         />
                         To calibrated home
                     </button>
@@ -335,7 +335,7 @@ const MoveActionsDropdown: React.FC<MoveActionsDropdownProps> = ({
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                         title="Move every motor back to its mechanical zero"
                     >
-                        <span className="h-2 w-2 rounded-full bg-gray-400" />
+                        <span className="size-2 rounded-full bg-gray-400" />
                         To physical home
                     </button>
                     <button
@@ -345,7 +345,7 @@ const MoveActionsDropdown: React.FC<MoveActionsDropdownProps> = ({
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                         title="Move tiles to staging position based on calibration settings"
                     >
-                        <span className="h-2 w-2 rounded-full bg-sky-500" />
+                        <span className="size-2 rounded-full bg-sky-500" />
                         To stage position
                     </button>
                 </div>

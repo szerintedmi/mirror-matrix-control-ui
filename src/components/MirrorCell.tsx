@@ -199,7 +199,7 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
     return (
         <div className="space-y-2">
             <div className="flex items-center gap-2">
-                <span className="w-5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                <span className="w-5 text-center text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
                     {axis.toUpperCase()}
                 </span>
                 <div
@@ -210,7 +210,7 @@ const MotorSlot: React.FC<MotorSlotProps> = ({
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     aria-disabled={!motor}
-                    className={`flex flex-1 h-10 items-center justify-center rounded transition-colors duration-200 border ${borderClasses} ${baseBg} ${draggableClasses}`}
+                    className={`flex h-10 flex-1 items-center justify-center rounded border transition-colors duration-200 ${borderClasses} ${baseBg} ${draggableClasses}`}
                     title={slotTitle}
                 >
                     {motor ? (
@@ -303,14 +303,14 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
             role="button"
             aria-pressed={isSelected}
             tabIndex={0}
-            className={`relative flex flex-col rounded-md p-1.5 gap-1 transition-all duration-200 outline-none ${ringClasses} ${backgroundClass} ${borderVisualClass} ${nodeHighlightClass}`}
+            className={`relative flex flex-col gap-1 rounded-md p-1.5 transition-all duration-200 outline-none ${ringClasses} ${backgroundClass} ${borderVisualClass} ${nodeHighlightClass}`}
         >
             <div className="text-center text-xs font-semibold text-gray-400 select-none">
                 [{position.row},{position.col}]
             </div>
 
             {analysis.warningBadges.length > 0 && (
-                <div className="flex flex-wrap gap-1 text-[10px] font-semibold uppercase tracking-wide">
+                <div className="flex flex-wrap gap-1 text-[10px] font-semibold tracking-wide uppercase">
                     {analysis.warningBadges.map((badge) => (
                         <span
                             key={badge.label}
@@ -322,7 +322,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                 </div>
             )}
 
-            <div className="w-full flex flex-col gap-1.5 mt-1">
+            <div className="mt-1 flex w-full flex-col gap-1.5">
                 <MotorSlot
                     axis="x"
                     motor={assignment.x}

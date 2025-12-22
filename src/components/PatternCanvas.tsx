@@ -59,7 +59,7 @@ const LegacyPatternCanvas: React.FC<LegacyPatternCanvasProps> = (props) => {
                 width="100%"
                 height="100%"
                 viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-                className="w-full h-full touch-none cursor-crosshair"
+                className="size-full cursor-crosshair touch-none"
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}

@@ -66,7 +66,7 @@ const UnassignedMotorTray: React.FC<UnassignedMotorTrayProps> = ({
                     >
                         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-300">
                             <span
-                                className={`h-2.5 w-2.5 rounded-full ${presenceDotClass(group.presence)}`}
+                                className={`size-2.5 rounded-full ${presenceDotClass(group.presence)}`}
                             />
                             <span className="font-mono text-sm text-emerald-300">{macLabel}</span>
                             <span>{presenceDescription}</span>
@@ -125,7 +125,7 @@ const UnassignedMotorTray: React.FC<UnassignedMotorTrayProps> = ({
             data-testid="unassigned-motor-tray"
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-gray-100 uppercase tracking-wide">
+                <h3 className="text-sm font-semibold tracking-wide text-gray-100 uppercase">
                     Unassigned Motors
                 </h3>
                 <span className="text-xs text-gray-300" data-testid="unassigned-axes-summary">

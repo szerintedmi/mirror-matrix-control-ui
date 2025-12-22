@@ -86,7 +86,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                     <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
                         <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                             <span className="font-mono text-lg text-gray-100">{tileLabel}</span>
-                            <span className="text-xs uppercase tracking-wide text-gray-400">
+                            <span className="text-xs tracking-wide text-gray-400 uppercase">
                                 Status:{' '}
                                 <span className="text-gray-100 capitalize">{entry.status}</span>
                             </span>
@@ -135,7 +135,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                             <div className="grid gap-4 lg:grid-cols-2">
                                 <div className="space-y-4">
                                     <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        <p className="mb-2 text-xs tracking-wide text-gray-500 uppercase">
                                             Measurements (normalized)
                                         </p>
                                         <div className="grid gap-2 sm:grid-cols-2">
@@ -168,7 +168,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                     </section>
                                     {measurementStats ? (
                                         <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                            <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                            <p className="mb-2 text-xs tracking-wide text-gray-500 uppercase">
                                                 Detection stability
                                             </p>
                                             <div className="grid gap-2 sm:grid-cols-2">
@@ -213,7 +213,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                         </section>
                                     ) : null}
                                     <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        <p className="mb-2 text-xs tracking-wide text-gray-500 uppercase">
                                             Step measurements
                                         </p>
                                         <div className="grid gap-2 sm:grid-cols-2">
@@ -243,7 +243,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                 </div>
                                 <div className="space-y-4">
                                     <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        <p className="mb-2 text-xs tracking-wide text-gray-500 uppercase">
                                             Derived offsets
                                         </p>
                                         <div className="grid gap-2 sm:grid-cols-2">
@@ -266,12 +266,12 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                         </div>
                                     </section>
                                     <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4">
-                                        <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                        <p className="mb-2 text-xs tracking-wide text-gray-500 uppercase">
                                             Step conversions (derived)
                                         </p>
                                         <div className="grid gap-4">
                                             <div>
-                                                <p className="mb-1 text-[10px] uppercase tracking-wide text-emerald-300">
+                                                <p className="mb-1 text-[10px] tracking-wide text-emerald-300 uppercase">
                                                     Per-step factors
                                                 </p>
                                                 <div className="grid gap-2 sm:grid-cols-2">
@@ -292,7 +292,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                 </div>
                                             </div>
                                             <div>
-                                                <p className="mb-1 text-[10px] uppercase tracking-wide text-emerald-300">
+                                                <p className="mb-1 text-[10px] tracking-wide text-emerald-300 uppercase">
                                                     Step scale (steps per normalized unit)
                                                 </p>
                                                 <div className="grid gap-2 sm:grid-cols-2">
@@ -313,7 +313,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                                 </div>
                                             </div>
                                             <div>
-                                                <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-300">
+                                                <p className="mb-1 text-[10px] tracking-wide text-gray-300 uppercase">
                                                     Alignment steps
                                                 </p>
                                                 <div className="grid gap-2">
@@ -335,7 +335,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                             </div>
                             {combinedBounds ? (
                                 <section className="rounded-lg border border-gray-800/70 bg-gray-950/40 p-4 text-sm text-gray-100">
-                                    <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                                    <p className="mb-2 text-xs tracking-wide text-gray-500 uppercase">
                                         Reach estimates (normalized)
                                     </p>
                                     <div className="grid gap-2 sm:grid-cols-2">
@@ -375,7 +375,7 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                                 </section>
                             ) : null}
                             <section className="rounded-lg border border-amber-600/40 bg-amber-500/10 p-4 text-sm text-amber-100">
-                                <p className="mb-2 text-xs uppercase tracking-wide">
+                                <p className="mb-2 text-xs tracking-wide uppercase">
                                     Informational (not used)
                                 </p>
                                 <div className="grid gap-2 sm:grid-cols-2">

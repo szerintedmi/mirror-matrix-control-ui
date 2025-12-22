@@ -35,8 +35,8 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
     const overRecommended = recommendedTileCapacity > 0 && tileCount > recommendedTileCapacity;
 
     return (
-        <div className="flex flex-col gap-3 p-3 rounded-md bg-black/20 mb-4">
-            <div className="flex items-center flex-wrap gap-x-6 gap-y-4">
+        <div className="mb-4 flex flex-col gap-3 rounded-md bg-black/20 p-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
                 <div className="flex items-center gap-2">
                     <label htmlFor="rows" className="font-medium text-gray-400">
                         Rows:
@@ -46,7 +46,7 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
                         id="rows"
                         value={rows}
                         onChange={handleRowsChange}
-                        className="w-20 bg-gray-700 border border-gray-600 rounded-md p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                        className="w-20 rounded-md border border-gray-600 bg-gray-700 p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                         min="1"
                         max="32"
                     />
@@ -60,7 +60,7 @@ const GridConfigurator: React.FC<GridConfiguratorProps> = ({
                         id="cols"
                         value={cols}
                         onChange={handleColsChange}
-                        className="w-20 bg-gray-700 border border-gray-600 rounded-md p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                        className="w-20 rounded-md border border-gray-600 bg-gray-700 p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                         min="1"
                         max="32"
                     />

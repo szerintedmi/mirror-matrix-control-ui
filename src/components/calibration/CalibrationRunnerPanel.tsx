@@ -72,7 +72,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
         <>
             <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
                 {/* Section header */}
-                <h2 className="text-lg font-semibold text-emerald-300 mb-4">Calibration</h2>
+                <h2 className="mb-4 text-lg font-semibold text-emerald-300">Calibration</h2>
 
                 <div className="space-y-4">
                     {/* Calibration Settings - collapsed by default */}

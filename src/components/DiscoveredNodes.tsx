@@ -209,7 +209,7 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
                 return (
                     <div
                         key={node.macAddress}
-                        className={`rounded-lg border border-gray-700 bg-gray-900/50 p-4 transition-all ${selectedNodeMac === node.macAddress ? 'ring-2 ring-emerald-400 shadow-lg shadow-emerald-500/20' : 'hover:border-gray-500'}`}
+                        className={`rounded-lg border border-gray-700 bg-gray-900/50 p-4 transition-all ${selectedNodeMac === node.macAddress ? 'shadow-lg ring-2 shadow-emerald-500/20 ring-emerald-400' : 'hover:border-gray-500'}`}
                     >
                         <div className="flex items-start justify-between gap-3">
                             <button
@@ -219,16 +219,16 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
                                 className="flex flex-1 items-start gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
                             >
                                 <span
-                                    className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${statusIndicatorClass}`}
+                                    className={`mt-1 size-2.5 flex-shrink-0 rounded-full ${statusIndicatorClass}`}
                                     title={`Status: ${node.presence}`}
                                 ></span>
                                 <div className="flex flex-col gap-1">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="break-all font-mono text-lg text-emerald-400">
+                                        <h3 className="font-mono text-lg break-all text-emerald-400">
                                             {node.macLabel}
                                         </h3>
                                         {node.isNew && (
-                                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+                                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold tracking-wide text-emerald-200 uppercase">
                                                 New
                                             </span>
                                         )}
@@ -262,7 +262,7 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
                                 >
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
-                                        className="h-5 w-5"
+                                        className="size-5"
                                         viewBox="0 0 20 20"
                                         fill="currentColor"
                                     >

@@ -129,7 +129,7 @@ const AnimationMirrorAssignments: React.FC<AnimationMirrorAssignmentsProps> = ({
                                         className={`relative aspect-square rounded-md border ${
                                             assignedPath
                                                 ? 'border-gray-600'
-                                                : 'border-gray-700 border-dashed'
+                                                : 'border-dashed border-gray-700'
                                         } ${disabled ? 'opacity-50' : ''}`}
                                         style={{
                                             backgroundColor: assignedPath
@@ -143,7 +143,7 @@ const AnimationMirrorAssignments: React.FC<AnimationMirrorAssignmentsProps> = ({
                                                 handleAssignmentChange(row, col, e.target.value)
                                             }
                                             disabled={disabled}
-                                            className="absolute inset-0 h-full w-full cursor-pointer bg-transparent text-center text-xs text-gray-300 opacity-0 hover:opacity-100 focus:opacity-100"
+                                            className="absolute inset-0 size-full cursor-pointer bg-transparent text-center text-xs text-gray-300 opacity-0 hover:opacity-100 focus:opacity-100"
                                             title={`Mirror ${row}-${col}`}
                                         >
                                             <option value="">None</option>
@@ -179,7 +179,7 @@ const AnimationMirrorAssignments: React.FC<AnimationMirrorAssignmentsProps> = ({
                                 className="flex items-center gap-1 rounded bg-gray-800 px-2 py-1"
                             >
                                 <span
-                                    className="inline-block h-3 w-3 rounded-full"
+                                    className="inline-block size-3 rounded-full"
                                     style={{ backgroundColor: getPathColor(path.id) }}
                                 />
                                 <span className="text-xs text-gray-300">

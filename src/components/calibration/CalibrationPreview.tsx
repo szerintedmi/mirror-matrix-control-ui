@@ -207,7 +207,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
 
                 {/* Overlays */}
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                    <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                         Overlays
                     </span>
                     <div className="flex gap-1">
@@ -264,7 +264,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
 
                 {/* ROI Controls */}
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-gray-500">ROI</span>
+                    <span className="text-[10px] tracking-wide text-gray-500 uppercase">ROI</span>
                     <button
                         type="button"
                         onClick={onToggleRoiView}
@@ -315,19 +315,19 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                             ref={bindVideoRef}
                             muted
                             playsInline
-                            className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                rawVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                            className={`absolute inset-0 size-full object-contain transition-opacity ${
+                                rawVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
                             }`}
                         />
                         <canvas
                             ref={bindProcessedCanvasRef}
-                            className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
-                                processedVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                            className={`absolute inset-0 size-full object-contain transition-opacity ${
+                                processedVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
                             }`}
                         />
                         <canvas
                             ref={bindDetectionOverlayRef}
-                            className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
+                            className={`pointer-events-none absolute inset-0 size-full object-contain transition-opacity ${
                                 processedFeedReady && showFullFrame ? 'opacity-100' : 'opacity-0'
                             }`}
                         />
@@ -336,13 +336,13 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     {/* ROI Canvas and Overlay are OUTSIDE the rotated wrapper, so they are Screen Aligned */}
                     <canvas
                         ref={bindRoiCanvasRef}
-                        className={`absolute inset-0 h-full w-full object-contain transition-opacity ${
-                            showFullFrame ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                        className={`absolute inset-0 size-full object-contain transition-opacity ${
+                            showFullFrame ? 'pointer-events-none opacity-0' : 'opacity-100'
                         }`}
                     />
                     <canvas
                         ref={bindRoiOverlayRef}
-                        className={`pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity ${
+                        className={`pointer-events-none absolute inset-0 size-full object-contain transition-opacity ${
                             showFullFrame ? 'opacity-0' : 'opacity-100'
                         }`}
                     />
@@ -377,7 +377,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                                         <span
                                             key={handle}
                                             data-roi-handle={handle}
-                                            className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-400 bg-gray-900"
+                                            className="absolute size-3 -translate-1/2 rounded-full border border-emerald-400 bg-gray-900"
                                             style={{
                                                 left:
                                                     handle === 'nw' ||
@@ -418,7 +418,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                     )}
                     {workerOverlayActive && (
                         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/85 px-6 text-center">
-                            <div className="rounded-xl border border-emerald-400/60 bg-black/60 px-6 py-4 text-2xl font-bold uppercase tracking-wide text-white drop-shadow-[0_0_12px_rgba(16,185,129,0.65)]">
+                            <div className="rounded-xl border border-emerald-400/60 bg-black/60 px-6 py-4 text-2xl font-bold tracking-wide text-white uppercase drop-shadow-[0_0_12px_rgba(16,185,129,0.65)]">
                                 {workerOverlayMessage}
                             </div>
                         </div>

@@ -102,8 +102,8 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
                 }`}
             >
                 <span
-                    className={`h-2.5 w-2.5 rounded-full ${
-                        detectionReady ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
+                    className={`size-2.5 rounded-full ${
+                        detectionReady ? 'bg-emerald-400' : 'animate-pulse bg-amber-400'
                     }`}
                 />
                 <span
@@ -385,7 +385,7 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
                     </button>
                     {showAdvancedDetection && (
                         <div className="grid gap-4 md:grid-cols-2">
-                            <label className="md:col-span-2 flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2">
+                            <label className="flex flex-col gap-2 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2 md:col-span-2">
                                 <div className="flex items-center justify-between gap-2">
                                     <span>Use WASM detector</span>
                                     <input

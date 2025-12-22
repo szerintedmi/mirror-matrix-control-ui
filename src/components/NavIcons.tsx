@@ -8,7 +8,7 @@ export const PatternsIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <rect x="4" y="4" width="6" height="6" rx="1.5" />
         <rect x="14" y="4" width="6" height="6" rx="1.5" />
@@ -25,7 +25,7 @@ export const SimulationIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <circle cx="8" cy="12" r="2.5" />
         <circle cx="16" cy="8" r="2.5" />
@@ -43,7 +43,7 @@ export const ArrayConfigIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <path d="M4 5.5h16" />
         <path d="M4 12h16" />
@@ -62,7 +62,7 @@ export const ConnectionIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <path d="M2.5 9.75c5-4.75 14-4.75 19 0" strokeLinecap="round" />
         <path d="M6 13.25c3.2-3.2 8.8-3.2 12 0" strokeLinecap="round" />
@@ -79,7 +79,7 @@ export const LegacyPlaybackIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <rect x="3.5" y="5" width="4" height="14" rx="1" />
         <path d="M10 6.5v11l9-5.5-9-5.5z" />
@@ -94,7 +94,7 @@ export const PlaybackIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M8 9h4" strokeLinecap="round" />
@@ -111,7 +111,7 @@ export const CalibrationIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <circle cx="12" cy="12" r="6" />
         <path d="M12 3v2" strokeLinecap="round" />
@@ -130,7 +130,7 @@ export const AnimationIcon: React.FC = () => (
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="h-5 w-5"
+        className="size-5"
     >
         <path d="M5 12h14" strokeLinecap="round" />
         <circle cx="6" cy="12" r="2" />

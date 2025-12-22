@@ -21,7 +21,7 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
 
     return (
         <div className={`relative aspect-square bg-gray-900 select-none ${className}`}>
-            <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="h-full w-full">
+            <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="size-full">
                 <rect x={0} y={0} width={1} height={1} fill="rgb(15,23,42)" />
                 {/* Grid lines */}
                 <line

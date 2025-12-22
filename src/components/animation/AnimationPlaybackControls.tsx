@@ -92,7 +92,7 @@ const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
                         onClick={onStop}
                         className="flex flex-1 items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
                     >
-                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
                             <rect x="6" y="6" width="12" height="12" rx="1" />
                         </svg>
                         Stop
@@ -104,7 +104,7 @@ const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
                         disabled={!canPlay || !hasAnimation || !hasCalibration}
                         className="flex flex-1 items-center justify-center gap-2 rounded-md bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500"
                     >
-                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z" />
                         </svg>
                         Play

@@ -72,9 +72,9 @@ const SliderControl: React.FC<SliderControlProps> = ({
     onChange,
 }) => (
     <div className="flex flex-col gap-1">
-        <div className="flex justify-between items-baseline">
-            <label className="text-sm text-gray-300 font-medium">{label}</label>
-            <span className="font-mono text-cyan-300 bg-gray-900 px-2 py-0.5 rounded-md text-sm">
+        <div className="flex items-baseline justify-between">
+            <label className="text-sm font-medium text-gray-300">{label}</label>
+            <span className="rounded-md bg-gray-900 px-2 py-0.5 font-mono text-sm text-cyan-300">
                 {value.toFixed(2)}
                 {unit}
             </span>
@@ -87,7 +87,7 @@ const SliderControl: React.FC<SliderControlProps> = ({
             value={value}
             data-testid={dataTestId}
             onChange={(event) => onChange(Number(event.target.value))}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+            className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-700 accent-cyan-500"
         />
     </div>
 );
@@ -135,7 +135,7 @@ const NumberField: React.FC<NumberFieldProps> = ({
                 }
                 onChange(nextValue);
             }}
-            className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
         />
     </label>
 );
@@ -206,10 +206,10 @@ const OrientationControl: React.FC<OrientationControlProps> = ({
     };
 
     return (
-        <div className="border border-gray-700/60 rounded-lg p-3 bg-gray-900/40 space-y-3">
+        <div className="space-y-3 rounded-lg border border-gray-700/60 bg-gray-900/40 p-3">
             <div className="flex items-center justify-between gap-2">
                 <h4 className="text-sm font-semibold text-gray-200">{label}</h4>
-                <div className="flex bg-gray-800 rounded-md overflow-hidden text-xs">
+                <div className="flex overflow-hidden rounded-md bg-gray-800 text-xs">
                     <button
                         type="button"
                         data-testid={`${dataTestId}-mode-angles`}
@@ -277,7 +277,7 @@ const OrientationControl: React.FC<OrientationControlProps> = ({
                                     }
                                     handleVectorChange(axis)(nextValue);
                                 }}
-                                className="bg-gray-900 border border-gray-700 rounded-md px-2 py-1 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                             />
                         </div>
                     ))}
@@ -288,7 +288,7 @@ const OrientationControl: React.FC<OrientationControlProps> = ({
                 type="button"
                 data-testid={`${dataTestId}-reset`}
                 onClick={handleReset}
-                className="text-xs text-cyan-300 hover:text-cyan-200 underline underline-offset-2"
+                className="text-xs text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
             >
                 Reset to neutral
             </button>
@@ -475,14 +475,14 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
 
     return (
         <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
-            <main className="flex flex-col gap-8 min-h-0 md:flex-row">
-                <aside className="w-full md:w-96 bg-gray-800/50 rounded-lg p-6 shadow-lg ring-1 ring-white/10 flex flex-col gap-4 overflow-y-auto flex-shrink-0">
+            <main className="flex min-h-0 flex-col gap-8 md:flex-row">
+                <aside className="flex w-full flex-shrink-0 flex-col gap-4 overflow-y-auto rounded-lg bg-gray-800/50 p-6 shadow-lg ring-1 ring-white/10 md:w-96">
                     <h2 className="text-xl font-semibold text-gray-100">Controls</h2>
 
                     {projectionError && (
                         <div
                             data-testid="projection-error-banner"
-                            className="bg-amber-500/15 border border-amber-400/60 rounded-md p-3 text-amber-100 text-sm flex items-start justify-between gap-3"
+                            className="flex items-start justify-between gap-3 rounded-md border border-amber-400/60 bg-amber-500/15 p-3 text-sm text-amber-100"
                         >
                             <span>{projectionError}</span>
                             {onClearProjectionError && (
@@ -499,7 +499,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
 
                     <div className="space-y-6">
                         <div>
-                            <h3 className="text-lg font-semibold text-gray-200 mb-3">
+                            <h3 className="mb-3 text-lg font-semibold text-gray-200">
                                 Pattern Source
                             </h3>
                             {!hasUserPatterns && (
@@ -510,7 +510,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                                 </p>
                             )}
                             <select
-                                className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
+                                className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500"
                                 value={activePatternId ?? ''}
                                 onChange={(event) =>
                                     onSelectPattern(
@@ -525,7 +525,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                                     </option>
                                 ))}
                             </select>
-                            <div className="mt-3 text-xs text-gray-400 border border-gray-700/60 rounded-md p-2 bg-gray-900/60 space-y-1">
+                            <div className="mt-3 space-y-1 rounded-md border border-gray-700/60 bg-gray-900/60 p-2 text-xs text-gray-400">
                                 <div className="flex justify-between">
                                     <span>Rows</span>
                                     <span className="font-mono text-cyan-300">
@@ -654,26 +654,26 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             />
                         </div>
 
-                        <div className="pt-2 border-t border-gray-700/50">
-                            <h3 className="text-lg font-semibold text-gray-200 mb-3">
+                        <div className="border-t border-gray-700/50 pt-2">
+                            <h3 className="mb-3 text-lg font-semibold text-gray-200">
                                 Projected Pattern Size
                             </h3>
-                            <div className="bg-gray-900/70 p-3 rounded-md space-y-2 text-sm">
-                                <div className="flex justify-between items-center">
+                            <div className="space-y-2 rounded-md bg-gray-900/70 p-3 text-sm">
+                                <div className="flex items-center justify-between">
                                     <span className="text-gray-400">Est. Width:</span>
-                                    <span className="font-mono text-cyan-300 text-base">
+                                    <span className="font-mono text-base text-cyan-300">
                                         {formattedWidth}
                                     </span>
                                 </div>
-                                <div className="flex justify-between items-center">
+                                <div className="flex items-center justify-between">
                                     <span className="text-gray-400">Est. Height:</span>
-                                    <span className="font-mono text-cyan-300 text-base">
+                                    <span className="font-mono text-base text-cyan-300">
                                         {formattedHeight}
                                     </span>
                                 </div>
-                                <div className="flex justify-between items-center">
+                                <div className="flex items-center justify-between">
                                     <span className="text-gray-400">Wall Distance:</span>
-                                    <span className="font-mono text-cyan-300 text-base">
+                                    <span className="font-mono text-base text-cyan-300">
                                         {projectionSettings.wallDistance.toFixed(1)} m
                                     </span>
                                 </div>
@@ -682,7 +682,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                     </div>
                 </aside>
 
-                <div className="flex-grow flex flex-col min-h-0 min-w-0 gap-4">
+                <div className="flex min-h-0 min-w-0 flex-grow flex-col gap-4">
                     <div className="flex flex-col gap-2.5">
                         <BabylonSimView
                             gridSize={gridSize}
@@ -702,7 +702,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             <label className="inline-flex items-center gap-2">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    className="size-4 rounded border-gray-600 bg-gray-900"
                                     checked={visualizationToggles.showRays}
                                     onChange={handleToggleChange('showRays')}
                                     data-testid="toggle-rays"
@@ -712,7 +712,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             <label className="inline-flex items-center gap-2">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    className="size-4 rounded border-gray-600 bg-gray-900"
                                     checked={visualizationToggles.showNormals}
                                     onChange={handleToggleChange('showNormals')}
                                     data-testid="toggle-normals"
@@ -722,7 +722,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             <label className="inline-flex items-center gap-2">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    className="size-4 rounded border-gray-600 bg-gray-900"
                                     checked={visualizationToggles.showEllipses}
                                     onChange={handleToggleChange('showEllipses')}
                                     data-testid="toggle-ellipses"
@@ -732,7 +732,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                             <label className="inline-flex items-center gap-2">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900"
+                                    className="size-4 rounded border-gray-600 bg-gray-900"
                                     checked={visualizationToggles.showIncomingRays}
                                     onChange={handleToggleChange('showIncomingRays')}
                                     data-testid="toggle-incoming-rays"

@@ -48,9 +48,9 @@ const ProjectionPreview: React.FC<ProjectionPreviewProps> = ({ settings, footpri
         const mirrorThickness = 14;
 
         return (
-            <div className="relative w-full h-full bg-gray-900/50 rounded-md border border-gray-700 overflow-hidden">
+            <div className="relative size-full overflow-hidden rounded-md border border-gray-700 bg-gray-900/50">
                 <span className="absolute top-2 left-3 text-xs text-gray-500">Top View</span>
-                <svg viewBox={`0 0 ${viewBox.width} ${viewBox.height}`} className="w-full h-full">
+                <svg viewBox={`0 0 ${viewBox.width} ${viewBox.height}`} className="size-full">
                     <rect
                         x={mirrorPlaneX - mirrorThickness / 2}
                         y={mirrorTop}
@@ -116,9 +116,9 @@ const ProjectionPreview: React.FC<ProjectionPreviewProps> = ({ settings, footpri
         const mirrorThickness = 14;
 
         return (
-            <div className="relative w-full h-full bg-gray-900/50 rounded-md border border-gray-700 overflow-hidden">
+            <div className="relative size-full overflow-hidden rounded-md border border-gray-700 bg-gray-900/50">
                 <span className="absolute top-2 left-3 text-xs text-gray-500">Side View</span>
-                <svg viewBox={`0 0 ${viewBox.width} ${viewBox.height}`} className="w-full h-full">
+                <svg viewBox={`0 0 ${viewBox.width} ${viewBox.height}`} className="size-full">
                     <line
                         x1={0}
                         y1={centerY + footprint.arrayHeight * verticalScale + 20}
@@ -186,7 +186,7 @@ const ProjectionPreview: React.FC<ProjectionPreviewProps> = ({ settings, footpri
     };
 
     return (
-        <div className="flex flex-col gap-4 w-full h-full">
+        <div className="flex size-full flex-col gap-4">
             {renderTopView()}
             {renderSideView()}
         </div>

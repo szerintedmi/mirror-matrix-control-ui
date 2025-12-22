@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import betterTailwindPlugin from 'eslint-plugin-better-tailwindcss';
 import importPlugin from 'eslint-plugin-import';
 import jsxA11yPlugin from 'eslint-plugin-jsx-a11y';
 import reactPlugin from 'eslint-plugin-react';
@@ -48,10 +49,15 @@ export default [
             'react-hooks': reactHooksPlugin,
             'jsx-a11y': jsxA11yPlugin,
             import: importPlugin,
+            'better-tailwindcss': betterTailwindPlugin,
         },
         settings: {
             react: {
                 version: 'detect',
+            },
+            'better-tailwindcss': {
+                // Tailwind CSS 4 uses CSS file as config
+                entryPoint: 'src/index.css',
             },
         },
         rules: {
@@ -87,6 +93,13 @@ export default [
                     pathGroupsExcludedImportTypes: ['builtin'],
                 },
             ],
+            // Tailwind CSS rules (better-tailwindcss)
+            'better-tailwindcss/enforce-consistent-class-order': 'warn',
+            'better-tailwindcss/enforce-shorthand-classes': 'warn',
+            'better-tailwindcss/no-conflicting-classes': 'error',
+            'better-tailwindcss/no-duplicate-classes': 'warn',
+            'better-tailwindcss/no-unnecessary-whitespace': 'warn',
+            'better-tailwindcss/no-unregistered-classes': 'off',
         },
     },
     {

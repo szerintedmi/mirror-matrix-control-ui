@@ -37,7 +37,7 @@ const GeometryDebugPanel: React.FC<GeometryDebugPanelProps> = ({ mirror, isStale
             ) : (
                 <div className="mt-4 space-y-4 text-sm text-gray-200">
                     <div>
-                        <h4 className="text-xs uppercase tracking-wide text-gray-400">
+                        <h4 className="text-xs tracking-wide text-gray-400 uppercase">
                             Orientation
                         </h4>
                         <dl className="mt-2 grid grid-cols-2 gap-2">
@@ -57,7 +57,7 @@ const GeometryDebugPanel: React.FC<GeometryDebugPanelProps> = ({ mirror, isStale
                     </div>
 
                     <div>
-                        <h4 className="text-xs uppercase tracking-wide text-gray-400">
+                        <h4 className="text-xs tracking-wide text-gray-400 uppercase">
                             Wall Hit (world m)
                         </h4>
                         <dl className="mt-2 grid grid-cols-3 gap-2">
@@ -83,7 +83,7 @@ const GeometryDebugPanel: React.FC<GeometryDebugPanelProps> = ({ mirror, isStale
                     </div>
 
                     <div>
-                        <h4 className="text-xs uppercase tracking-wide text-gray-400">Ellipse</h4>
+                        <h4 className="text-xs tracking-wide text-gray-400 uppercase">Ellipse</h4>
                         <dl className="mt-2 grid grid-cols-3 gap-2">
                             <div>
                                 <dt className="text-gray-400">Major D</dt>

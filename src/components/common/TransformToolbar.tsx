@@ -109,7 +109,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Shift up"
                         title="Shift up"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path
                                 fillRule="evenodd"
                                 d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
@@ -125,7 +125,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Shift down"
                         title="Shift down"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path
                                 fillRule="evenodd"
                                 d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
@@ -141,7 +141,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Shift left"
                         title="Shift left"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path
                                 fillRule="evenodd"
                                 d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z"
@@ -157,7 +157,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Shift right"
                         title="Shift right"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path
                                 fillRule="evenodd"
                                 d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"
@@ -194,7 +194,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Scale down"
                         title="Scale down (uniform)"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M4 10a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 10z" />
                         </svg>
                     </button>
@@ -206,7 +206,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Scale up"
                         title="Scale up (uniform)"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
                         </svg>
                     </button>
@@ -286,7 +286,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         aria-label="Rotate counter-clockwise"
                         title="Rotate counter-clockwise"
                     >
-                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path
                                 fillRule="evenodd"
                                 d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-9.172-6.313a.75.75 0 01.75-.75h4.243a.75.75 0 010 1.5H8.703l.311.31a5.5 5.5 0 019.201 2.467.75.75 0 001.449-.39A7 7 0 007.952 5.11l-.31-.31v2.432a.75.75 0 01-1.5 0V3.361z"
@@ -303,7 +303,7 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                         title="Rotate clockwise"
                     >
                         <svg
-                            className="h-3.5 w-3.5"
+                            className="size-3.5"
                             fill="currentColor"
                             viewBox="0 0 20 20"
                             style={{ transform: 'scaleX(-1)' }}

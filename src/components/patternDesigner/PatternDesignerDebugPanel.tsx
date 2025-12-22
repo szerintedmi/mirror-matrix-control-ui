@@ -35,18 +35,18 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
             <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                     <h3 className="text-base font-semibold text-gray-100">Debug View</h3>
-                    <span className="text-xs uppercase tracking-wide text-gray-500">
+                    <span className="text-xs tracking-wide text-gray-500 uppercase">
                         Normalized Coordinates
                     </span>
                 </div>
                 <p className="text-xs text-gray-500">Range: -1.000 – 1.000 on both axes.</p>
                 <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="rounded-md bg-gray-800/60 p-3">
-                        <dt className="text-xs uppercase tracking-wide text-gray-400">Mode</dt>
+                        <dt className="text-xs tracking-wide text-gray-400 uppercase">Mode</dt>
                         <dd className="font-mono text-sm text-gray-100">{formatMode(editMode)}</dd>
                     </div>
                     <div className="rounded-md bg-gray-800/60 p-3">
-                        <dt className="text-xs uppercase tracking-wide text-gray-400">
+                        <dt className="text-xs tracking-wide text-gray-400 uppercase">
                             Blob Radius
                         </dt>
                         <dd className="font-mono text-sm text-gray-100">
@@ -56,8 +56,8 @@ const PatternDesignerDebugPanel: React.FC<PatternDesignerDebugPanelProps> = ({
                 </dl>
                 <dl className="grid grid-cols-1 gap-3">
                     <div className="rounded-md bg-gray-800/60 p-3">
-                        <dt className="text-xs uppercase tracking-wide text-gray-400">Pointer</dt>
-                        <dd className="font-mono text-sm text-gray-100 min-w-[200px]">
+                        <dt className="text-xs tracking-wide text-gray-400 uppercase">Pointer</dt>
+                        <dd className="min-w-[200px] font-mono text-sm text-gray-100">
                             {hoverPoint
                                 ? `x: ${formatCoordinate(hoverPoint.x)}  y: ${formatCoordinate(hoverPoint.y)}`
                                 : '—'}

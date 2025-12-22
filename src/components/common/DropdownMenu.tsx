@@ -67,11 +67,11 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
             <button
                 type="button"
                 onClick={handleToggle}
-                className={`flex h-7 w-7 items-center justify-center rounded-md border border-gray-700 bg-gray-900 text-gray-400 transition hover:border-gray-600 hover:text-gray-200 ${triggerClassName}`}
+                className={`flex size-7 items-center justify-center rounded-md border border-gray-700 bg-gray-900 text-gray-400 transition hover:border-gray-600 hover:text-gray-200 ${triggerClassName}`}
                 aria-haspopup="true"
                 aria-expanded={isOpen}
             >
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="size-4" fill="currentColor" viewBox="0 0 20 20">
                     <circle cx="10" cy="4" r="1.5" />
                     <circle cx="10" cy="10" r="1.5" />
                     <circle cx="10" cy="16" r="1.5" />
@@ -99,7 +99,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
                             }`}
                         >
                             {item.icon && (
-                                <span className="h-3.5 w-3.5 flex-shrink-0">{item.icon}</span>
+                                <span className="size-3.5 flex-shrink-0">{item.icon}</span>
                             )}
                             <span>{item.label}</span>
                         </button>

@@ -168,7 +168,7 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
             <div className="mt-4 space-y-4 text-sm text-gray-300">
                 <div className="flex flex-wrap items-end gap-4">
                     <label className="flex flex-1 flex-col gap-1">
-                        <span className="text-xs uppercase tracking-wide text-gray-500">
+                        <span className="text-xs tracking-wide text-gray-500 uppercase">
                             Profile name
                         </span>
                         <input
@@ -255,7 +255,7 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                         <button
                             type="button"
                             onClick={onDismissFeedback}
-                            className="ml-3 text-[10px] uppercase tracking-wide text-gray-400 hover:text-gray-200"
+                            className="ml-3 text-[10px] tracking-wide text-gray-400 uppercase hover:text-gray-200"
                         >
                             Dismiss
                         </button>
@@ -266,7 +266,7 @@ const CalibrationProfileManager: React.FC<CalibrationProfileManagerProps> = ({
                 {sortedProfiles.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
                         <svg
-                            className="h-10 w-10 text-gray-700"
+                            className="size-10 text-gray-700"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -542,7 +542,7 @@ const ProfileStat: React.FC<ProfileStatProps> = ({ label, value, hint, status })
                 : 'text-gray-100';
     return (
         <div className="rounded-md border border-gray-800/70 bg-gray-950/40 p-2">
-            <p className="text-[10px] uppercase tracking-wide text-gray-500">{label}</p>
+            <p className="text-[10px] tracking-wide text-gray-500 uppercase">{label}</p>
             <p className={`font-mono text-sm ${toneClass}`}>{value}</p>
             <p className="text-[10px] text-gray-500">{hint}</p>
         </div>

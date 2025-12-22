@@ -715,7 +715,7 @@ const BabylonSimView: React.FC<BabylonSimViewProps> = ({
 
     return (
         <div ref={containerRef} className={containerClassName} style={{ height: heightHint }}>
-            <canvas ref={canvasRef} className="h-full w-full" />
+            <canvas ref={canvasRef} className="size-full" />
             {isPreviewStale && (
                 <div className="pointer-events-none absolute inset-0 flex items-start justify-end p-4">
                     <div className="rounded-md border border-amber-400/60 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">

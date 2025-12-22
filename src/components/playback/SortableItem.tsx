@@ -75,7 +75,7 @@ const SortableItem: React.FC<SortableItemProps> = ({
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 20 20"
                         fill="currentColor"
-                        className="h-5 w-5"
+                        className="size-5"
                     >
                         <path
                             fillRule="evenodd"
@@ -94,7 +94,7 @@ const SortableItem: React.FC<SortableItemProps> = ({
                             updatedAt: '',
                         }
                     }
-                    className="h-12 w-12 flex-none rounded border border-gray-800/70 shadow-inner"
+                    className="size-12 flex-none rounded border border-gray-800/70 shadow-inner"
                 />
                 <div className="flex flex-1 flex-col gap-1 text-sm text-gray-200">
                     <span className="font-semibold text-gray-100">
@@ -119,7 +119,7 @@ const SortableItem: React.FC<SortableItemProps> = ({
                 <button
                     type="button"
                     onClick={() => onRemove(entry.id)}
-                    className="rounded p-1.5 text-gray-400 hover:bg-red-900/40 hover:text-red-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
+                    className="rounded p-1.5 text-gray-400 hover:bg-red-900/40 hover:text-red-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500"
                     aria-label="Remove from sequence"
                     title="Remove from sequence"
                 >
@@ -129,7 +129,7 @@ const SortableItem: React.FC<SortableItemProps> = ({
                         fill="none"
                         stroke="currentColor"
                         strokeWidth={1.5}
-                        className="h-5 w-5"
+                        className="size-5"
                     >
                         <path
                             strokeLinecap="round"

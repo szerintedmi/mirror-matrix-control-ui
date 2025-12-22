@@ -43,7 +43,7 @@ const PatternPreview: React.FC<{ pattern: LegacyPattern }> = ({ pattern }) => {
             <svg
                 viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
                 preserveAspectRatio="xMidYMid meet"
-                className="absolute top-0 left-0 w-full h-full bg-gray-800"
+                className="absolute top-0 left-0 size-full bg-gray-800"
             >
                 <rect
                     x={0}
@@ -119,12 +119,12 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
 
             <main className="flex flex-col gap-4 rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10">
                 <h2 className="text-lg font-semibold text-gray-100">Saved Patterns</h2>
-                <div className="flex-grow overflow-y-auto pr-2 -mr-2">
+                <div className="-mr-2 flex-grow overflow-y-auto pr-2">
                     {patterns.length === 0 ? (
                         <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-gray-500">
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
-                                className="h-12 w-12"
+                                className="size-12"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -157,31 +157,31 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                 return (
                                     <div
                                         key={pattern.id}
-                                        className="bg-gray-900/50 rounded-lg overflow-hidden border border-gray-700 hover:border-cyan-500 transition-colors group flex flex-col"
+                                        className="group flex flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50 transition-colors hover:border-cyan-500"
                                     >
                                         <div className="p-1">
                                             <PatternPreview pattern={pattern} />
                                         </div>
-                                        <div className="p-3 flex flex-col flex-grow gap-2">
-                                            <h3 className="font-semibold text-gray-200 truncate">
+                                        <div className="flex flex-grow flex-col gap-2 p-3">
+                                            <h3 className="truncate font-semibold text-gray-200">
                                                 {pattern.name}
                                             </h3>
-                                            <p className="text-sm text-gray-400 font-mono">
+                                            <p className="font-mono text-sm text-gray-400">
                                                 {inferredRows}x{inferredCols} -{' '}
                                                 {pattern.tiles.length} tiles
                                             </p>
                                             {isActive && (
-                                                <span className="inline-flex items-center gap-1 text-xs text-cyan-300 font-semibold uppercase tracking-wide">
-                                                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                                                <span className="inline-flex items-center gap-1 text-xs font-semibold tracking-wide text-cyan-300 uppercase">
+                                                    <span className="size-2 animate-pulse rounded-full bg-cyan-400" />
                                                     Active in Simulation
                                                 </span>
                                             )}
 
-                                            <div className="mt-2 pt-2 border-t border-gray-700/50 text-xs">
-                                                <p className="text-gray-400 mb-1">
+                                            <div className="mt-2 border-t border-gray-700/50 pt-2 text-xs">
+                                                <p className="mb-1 text-gray-400">
                                                     Est. Projection (WxH @ Dist):
                                                 </p>
-                                                <p className="font-mono text-cyan-400 text-sm">
+                                                <p className="font-mono text-sm text-cyan-400">
                                                     {projectedSize.width} &times;{' '}
                                                     {projectedSize.height} @{' '}
                                                     {projectedSize.distance}
@@ -194,10 +194,10 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                         onSelectActivePattern(pattern.id)
                                                     }
                                                     disabled={isActive}
-                                                    className={`text-sm px-3 py-1 rounded-md border transition-colors ${
+                                                    className={`rounded-md border px-3 py-1 text-sm transition-colors ${
                                                         isActive
-                                                            ? 'bg-cyan-900/40 border-cyan-500/30 text-cyan-100 cursor-default'
-                                                            : 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700'
+                                                            ? 'cursor-default border-cyan-500/30 bg-cyan-900/40 text-cyan-100'
+                                                            : 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
                                                     }`}
                                                 >
                                                     {isActive ? 'Active' : 'Set Active'}
@@ -206,7 +206,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                     onClick={() =>
                                                         navigation.editPattern(pattern.id)
                                                     }
-                                                    className="text-sm px-3 py-1 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                                                    className="rounded-md bg-gray-700 px-3 py-1 text-sm text-gray-200 transition-colors hover:bg-gray-600"
                                                 >
                                                     Edit
                                                 </button>
@@ -219,7 +219,7 @@ const PatternLibraryPage: React.FC<PatternLibraryPageProps> = (props) => {
                                                         )
                                                             onDeletePattern(pattern.id);
                                                     }}
-                                                    className="text-sm px-3 py-1 rounded-md bg-red-800/70 text-red-200 hover:bg-red-700/80 transition-colors"
+                                                    className="rounded-md bg-red-800/70 px-3 py-1 text-sm text-red-200 transition-colors hover:bg-red-700/80"
                                                 >
                                                     Delete
                                                 </button>

@@ -44,7 +44,7 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
     } = props;
 
     return (
-        <aside className="w-full md:w-72 lg:w-80 bg-gray-800/50 rounded-lg p-4 ring-1 ring-white/10 flex-shrink-0 flex flex-col gap-6">
+        <aside className="flex w-full flex-shrink-0 flex-col gap-6 rounded-lg bg-gray-800/50 p-4 ring-1 ring-white/10 md:w-72 lg:w-80">
             <div>
                 <label htmlFor="patternName" className="block text-sm font-medium text-gray-300">
                     Pattern Name
@@ -54,15 +54,15 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                     id="patternName"
                     value={name}
                     onChange={(event) => onNameChange(event.target.value)}
-                    className="mt-1 w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                    className="mt-1 w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                 />
             </div>
 
-            <div className="text-center bg-gray-800/50 ring-1 ring-white/10 p-3 rounded-lg shadow-md">
-                <p className="text-gray-400 text-sm">Active Tiles</p>
+            <div className="rounded-lg bg-gray-800/50 p-3 text-center shadow-md ring-1 ring-white/10">
+                <p className="text-sm text-gray-400">Active Tiles</p>
                 <p
                     data-testid="active-tile-count"
-                    className={`font-mono text-2xl font-bold mt-1 transition-colors ${
+                    className={`mt-1 font-mono text-2xl font-bold transition-colors ${
                         pixelCountError ? 'text-red-500' : 'text-cyan-300'
                     }`}
                 >
@@ -76,10 +76,10 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         type="button"
                         onClick={() => onToolChange('place')}
                         aria-pressed={activeTool === 'place'}
-                        className={`px-3 py-1.5 rounded-md border transition-colors ${
+                        className={`rounded-md border px-3 py-1.5 transition-colors ${
                             activeTool === 'place'
-                                ? 'bg-cyan-600 border-cyan-400 text-white'
-                                : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                                ? 'border-cyan-400 bg-cyan-600 text-white'
+                                : 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
                         }`}
                     >
                         Place (P)
@@ -88,10 +88,10 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         type="button"
                         onClick={() => onToolChange('remove')}
                         aria-pressed={activeTool === 'remove'}
-                        className={`px-3 py-1.5 rounded-md border transition-colors ${
+                        className={`rounded-md border px-3 py-1.5 transition-colors ${
                             activeTool === 'remove'
-                                ? 'bg-rose-600 border-rose-400 text-white'
-                                : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                                ? 'border-rose-400 bg-rose-600 text-white'
+                                : 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
                         }`}
                     >
                         Remove (R)
@@ -105,10 +105,10 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         aria-pressed={isSnapMode}
                         aria-label="Toggle snap to grid (S)"
                         data-testid="snap-toggle"
-                        className={`px-3 py-1 rounded-md border text-sm transition-colors ${
+                        className={`rounded-md border px-3 py-1 text-sm transition-colors ${
                             isSnapMode
-                                ? 'bg-cyan-700/60 border-cyan-400 text-white'
-                                : 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                                ? 'border-cyan-400 bg-cyan-700/60 text-white'
+                                : 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
                         }`}
                     >
                         {isSnapMode ? 'On' : 'Off'}
@@ -119,7 +119,7 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-300">Canvas Size</h3>
                 <div className="flex items-center gap-2">
-                    <label htmlFor="canvasRows" className="font-medium text-gray-400 w-12">
+                    <label htmlFor="canvasRows" className="w-12 font-medium text-gray-400">
                         Rows:
                     </label>
                     <input
@@ -127,13 +127,13 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         id="canvasRows"
                         value={canvasSize.rows}
                         onChange={(event) => onCanvasSizeChange('rows', event.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                        className="w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                         min={MIN_CANVAS_CELLS}
                         max={MAX_CANVAS_CELLS}
                     />
                 </div>
                 <div className="flex items-center gap-2">
-                    <label htmlFor="canvasCols" className="font-medium text-gray-400 w-12">
+                    <label htmlFor="canvasCols" className="w-12 font-medium text-gray-400">
                         Cols:
                     </label>
                     <input
@@ -141,7 +141,7 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         id="canvasCols"
                         value={canvasSize.cols}
                         onChange={(event) => onCanvasSizeChange('cols', event.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                        className="w-full rounded-md border border-gray-600 bg-gray-700 p-2 text-center text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                         min={MIN_CANVAS_CELLS}
                         max={MAX_CANVAS_CELLS}
                     />
@@ -154,12 +154,12 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                     <div />
                     <button
                         onClick={() => onShift('up')}
-                        className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                        className="rounded-md bg-gray-700 p-2 text-gray-200 transition-colors hover:bg-gray-600"
                         aria-label="Shift all tiles up"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5"
+                            className="size-5"
                             viewBox="0 0 20 20"
                             fill="currentColor"
                         >
@@ -173,12 +173,12 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                     <div />
                     <button
                         onClick={() => onShift('left')}
-                        className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                        className="rounded-md bg-gray-700 p-2 text-gray-200 transition-colors hover:bg-gray-600"
                         aria-label="Shift all tiles left"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5"
+                            className="size-5"
                             viewBox="0 0 20 20"
                             fill="currentColor"
                         >
@@ -191,12 +191,12 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                     </button>
                     <button
                         onClick={() => onShift('down')}
-                        className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                        className="rounded-md bg-gray-700 p-2 text-gray-200 transition-colors hover:bg-gray-600"
                         aria-label="Shift all tiles down"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5"
+                            className="size-5"
                             viewBox="0 0 20 20"
                             fill="currentColor"
                         >
@@ -209,12 +209,12 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                     </button>
                     <button
                         onClick={() => onShift('right')}
-                        className="p-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                        className="rounded-md bg-gray-700 p-2 text-gray-200 transition-colors hover:bg-gray-600"
                         aria-label="Shift all tiles right"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5"
+                            className="size-5"
                             viewBox="0 0 20 20"
                             fill="currentColor"
                         >
@@ -228,7 +228,7 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                 </div>
                 <button
                     onClick={onClear}
-                    className="w-full px-3 py-2 rounded-md bg-red-800/70 text-red-200 hover:bg-red-700/80 transition-colors"
+                    className="w-full rounded-md bg-red-800/70 px-3 py-2 text-red-200 transition-colors hover:bg-red-700/80"
                 >
                     Clear Canvas
                 </button>
@@ -238,10 +238,10 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         onClick={onUndo}
                         disabled={!historyState.canUndo}
                         data-testid="undo-button"
-                        className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                        className={`flex-1 rounded-md border px-3 py-1.5 text-sm transition-colors ${
                             historyState.canUndo
-                                ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
-                                : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
+                                ? 'border-gray-500 bg-gray-700 text-gray-100 hover:bg-gray-600'
+                                : 'cursor-not-allowed border-gray-700 bg-gray-800/70 text-gray-500'
                         }`}
                     >
                         Undo (⌘Z / Ctrl+Z)
@@ -251,10 +251,10 @@ const LegacyPatternEditorSidebar: React.FC<LegacyPatternEditorSidebarProps> = (p
                         onClick={onRedo}
                         disabled={!historyState.canRedo}
                         data-testid="redo-button"
-                        className={`flex-1 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                        className={`flex-1 rounded-md border px-3 py-1.5 text-sm transition-colors ${
                             historyState.canRedo
-                                ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600'
-                                : 'bg-gray-800/70 border-gray-700 text-gray-500 cursor-not-allowed'
+                                ? 'border-gray-500 bg-gray-700 text-gray-100 hover:bg-gray-600'
+                                : 'cursor-not-allowed border-gray-700 bg-gray-800/70 text-gray-500'
                         }`}
                     >
                         Redo (⇧⌘Z / Ctrl+Shift+Z)

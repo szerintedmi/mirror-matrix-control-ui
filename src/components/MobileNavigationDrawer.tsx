@@ -35,7 +35,7 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
         <div className="fixed inset-0 z-50 flex md:hidden" role="dialog" aria-modal="true">
             <div className="relative h-full w-72 flex-shrink-0 bg-gray-950 px-5 py-6 shadow-lg">
                 <div className="mb-6 flex items-center justify-between">
-                    <span className="text-sm font-semibold uppercase tracking-wide text-gray-400">
+                    <span className="text-sm font-semibold tracking-wide text-gray-400 uppercase">
                         Navigation
                     </span>
                     <button
@@ -64,7 +64,7 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
                                     }`}
                                 >
                                     <span
-                                        className={`flex h-9 w-9 items-center justify-center rounded-md bg-gray-800 ${
+                                        className={`flex size-9 items-center justify-center rounded-md bg-gray-800 ${
                                             isActive ? 'text-emerald-300' : 'text-gray-300'
                                         }`}
                                     >
@@ -88,9 +88,9 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
                                         : 'border-transparent text-gray-500 hover:bg-gray-800 hover:text-gray-300'
                                 }`}
                             >
-                                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-gray-800 text-gray-500">
+                                <span className="flex size-9 items-center justify-center rounded-md bg-gray-800 text-gray-500">
                                     <svg
-                                        className={`h-4 w-4 transition-transform ${legacyExpanded ? 'rotate-90' : ''}`}
+                                        className={`size-4 transition-transform ${legacyExpanded ? 'rotate-90' : ''}`}
                                         fill="none"
                                         viewBox="0 0 24 24"
                                         stroke="currentColor"
@@ -107,7 +107,7 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
                             </button>
 
                             {legacyExpanded && (
-                                <ul className="ml-4 mt-1 flex flex-col gap-1 border-l border-gray-800 pl-2">
+                                <ul className="mt-1 ml-4 flex flex-col gap-1 border-l border-gray-800 pl-2">
                                     {legacyItems.map((item) => {
                                         const isActive = item.page === activePage;
                                         return (
@@ -125,7 +125,7 @@ const MobileNavigationDrawer: React.FC<MobileNavigationDrawerProps> = ({
                                                     }`}
                                                 >
                                                     <span
-                                                        className={`flex h-7 w-7 items-center justify-center rounded-md bg-gray-800 ${
+                                                        className={`flex size-7 items-center justify-center rounded-md bg-gray-800 ${
                                                             isActive
                                                                 ? 'text-emerald-300'
                                                                 : 'text-gray-400'

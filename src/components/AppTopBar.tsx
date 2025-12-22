@@ -63,7 +63,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                     <button
                         type="button"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-800 text-gray-300 hover:border-gray-600 hover:text-gray-100 md:hidden"
+                        className="inline-flex size-10 items-center justify-center rounded-md border border-gray-800 text-gray-300 hover:border-gray-600 hover:text-gray-100 md:hidden"
                         aria-label="Open navigation"
                         onClick={onMenuClick}
                     >
@@ -75,7 +75,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                             viewBox="0 0 24 24"
                             strokeWidth={1.5}
                             stroke="currentColor"
-                            className="h-6 w-6"
+                            className="size-6"
                         >
                             <path
                                 strokeLinecap="round"
@@ -87,7 +87,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                     <div className="min-w-0">
                         <nav aria-label="Breadcrumb">
                             <ol className="flex flex-wrap items-center gap-2 text-sm text-gray-300">
-                                <li className="font-semibold uppercase tracking-wide text-emerald-300">
+                                <li className="font-semibold tracking-wide text-emerald-300 uppercase">
                                     Mirror Matrix
                                 </li>
                                 {showPageTitle ? (
@@ -112,7 +112,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                                                 <span
                                                     className={`px-1.5 py-0.5 ${
                                                         crumb.current
-                                                            ? 'text-gray-100 font-semibold'
+                                                            ? 'font-semibold text-gray-100'
                                                             : 'text-gray-500'
                                                     }`}
                                                     title={crumb.label}
@@ -139,7 +139,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                         title={`${statusLabel} · ${connectionUrl}`}
                     >
                         <span
-                            className={`h-2.5 w-2.5 rounded-full ${
+                            className={`size-2.5 rounded-full ${
                                 offline ? 'bg-red-400' : 'bg-emerald-400'
                             } ${state.status === 'reconnecting' ? 'animate-pulse' : ''}`}
                         />

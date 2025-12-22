@@ -216,7 +216,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                                 onRecalibrateTile={onRecalibrateTile}
                                             />
                                         )}
-                                        <span className="text-xs capitalize font-medium">
+                                        <span className="text-xs font-medium capitalize">
                                             {entry.status}
                                         </span>
                                     </div>
@@ -252,7 +252,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                                 motor={entry.assignment.x}
                                                 telemetry={getTelemetryForMotor(entry.assignment.x)}
                                                 layout="inline"
-                                                className="flex-1 min-w-[120px]"
+                                                className="min-w-[120px] flex-1"
                                                 showHomeButton
                                             />
                                             <TileAxisAction
@@ -260,7 +260,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                                 motor={entry.assignment.y}
                                                 telemetry={getTelemetryForMotor(entry.assignment.y)}
                                                 layout="inline"
-                                                className="flex-1 min-w-[120px]"
+                                                className="min-w-[120px] flex-1"
                                                 showHomeButton
                                             />
                                         </div>
@@ -273,27 +273,27 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                 {/* Color legend - synced with TILE_STATUS_CLASSES */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-800 pt-3 text-[10px] text-gray-400">
                     <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm border border-gray-700 bg-gray-900/60" />
+                        <span className="size-2.5 rounded-sm border border-gray-700 bg-gray-900/60" />
                         Pending
                     </span>
                     <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm border border-amber-500/60 bg-amber-500/10" />
+                        <span className="size-2.5 rounded-sm border border-amber-500/60 bg-amber-500/10" />
                         Staged
                     </span>
                     <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm border border-sky-500/60 bg-sky-500/10" />
+                        <span className="size-2.5 rounded-sm border border-sky-500/60 bg-sky-500/10" />
                         Measuring
                     </span>
                     <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm border border-emerald-600/60 bg-emerald-500/10" />
+                        <span className="size-2.5 rounded-sm border border-emerald-600/60 bg-emerald-500/10" />
                         Completed
                     </span>
                     <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm border border-rose-600/60 bg-rose-500/10" />
+                        <span className="size-2.5 rounded-sm border border-rose-600/60 bg-rose-500/10" />
                         Failed
                     </span>
                     <span className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm border border-gray-800 bg-gray-900" />
+                        <span className="size-2.5 rounded-sm border border-gray-800 bg-gray-900" />
                         Skipped
                     </span>
                 </div>

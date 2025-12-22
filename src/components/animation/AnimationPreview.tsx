@@ -31,7 +31,7 @@ const AnimationPreview: React.FC<AnimationPreviewProps> = ({
             <div className="flex aspect-video items-center justify-center rounded-md bg-gray-900/50">
                 <div className="text-center">
                     <svg
-                        className="mx-auto h-12 w-12 text-gray-600"
+                        className="mx-auto size-12 text-gray-600"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"

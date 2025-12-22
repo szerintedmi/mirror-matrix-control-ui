@@ -60,11 +60,11 @@ const SelectedMotorPanel: React.FC<{
                     <span className="flex items-center gap-2">
                         {indicator && (
                             <span
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-900/60"
+                                className="inline-flex size-5 items-center justify-center rounded-full bg-gray-900/60"
                                 title={indicator.title}
                             >
                                 <span
-                                    className={`h-3 w-3 rounded-full ${indicator.colorClass} ${indicator.animate ? 'animate-pulse' : ''} ${indicator.extraClass ?? ''}`}
+                                    className={`size-3 rounded-full ${indicator.colorClass} ${indicator.animate ? 'animate-pulse' : ''} ${indicator.extraClass ?? ''}`}
                                     aria-hidden
                                 />
                                 <span className="sr-only">{indicator.title}</span>
@@ -87,7 +87,7 @@ const SelectedMotorPanel: React.FC<{
                     {positionSteps !== null ? (
                         <div className="grid gap-3 text-gray-200 sm:grid-cols-2">
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
                                     Current Position
                                 </p>
                                 <p className="font-mono text-lg text-cyan-200">
@@ -95,7 +95,7 @@ const SelectedMotorPanel: React.FC<{
                                 </p>
                             </div>
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
                                     Inferred {axisLabel}
                                 </p>
                                 <p className="font-mono text-lg text-cyan-200">
@@ -328,19 +328,19 @@ const MotorStatusOverview: React.FC<MotorStatusOverviewProps> = ({
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
                     <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400" /> Assigned
+                        <span className="size-2 rounded-full bg-emerald-400" /> Assigned
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-cyan-400" /> Moving
+                        <span className="size-2 rounded-full bg-cyan-400" /> Moving
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-amber-400" /> Stale
+                        <span className="size-2 rounded-full bg-amber-400" /> Stale
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-red-500" /> Offline
+                        <span className="size-2 rounded-full bg-red-500" /> Offline
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-slate-600" /> Unassigned
+                        <span className="size-2 rounded-full bg-slate-600" /> Unassigned
                     </span>
                 </div>
             </div>

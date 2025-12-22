@@ -128,7 +128,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 {/* Progress indicator */}
                 <div className="flex items-center gap-3">
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                        <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                             Progress
                         </span>
                         <div className="flex items-baseline gap-1.5">
@@ -174,7 +174,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 {tileLabel && isActive && (
                     <>
                         <div className="flex flex-col">
-                            <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                            <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                                 Tile
                             </span>
                             <span className="font-mono text-sm font-semibold text-sky-300">
@@ -189,7 +189,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 {isActive && currentStepLabel && !overallStatus ? (
                     <div className="flex min-w-0 flex-col">
                         <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                            <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                                 Current
                             </span>
                             <span
@@ -218,7 +218,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                     </div>
                 ) : isActive && !overallStatus ? (
                     <div className="flex min-w-0 flex-col">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                        <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                             Phase
                         </span>
                         <span className="truncate text-sm font-medium text-gray-200">
@@ -227,7 +227,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                     </div>
                 ) : (
                     <div className="flex min-w-0 flex-col">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                        <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                             Status
                         </span>
                         <span
@@ -243,7 +243,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
 
                 {/* Mode toggle */}
                 <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-gray-500">Mode</span>
+                    <span className="text-[10px] tracking-wide text-gray-500 uppercase">Mode</span>
                     <div className="flex rounded-md border border-gray-700 bg-gray-800 text-xs font-semibold">
                         {(['auto', 'step'] as CalibrationMode[]).map((m) => (
                             <button
@@ -345,13 +345,13 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
             {/* Status indicator line */}
             {isActive && stepStatus === 'running' && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-amber-300">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                    <span className="size-2 animate-pulse rounded-full bg-amber-400" />
                     <span>Step in progress...</span>
                 </div>
             )}
             {isPaused && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-amber-300">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" />
+                    <span className="size-2 rounded-full bg-amber-400" />
                     <span>Calibration paused — press Resume to continue</span>
                 </div>
             )}
@@ -361,7 +361,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                 <div className="mt-3 rounded-md border border-amber-500/50 bg-amber-900/30 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                            <span className="size-2 animate-pulse rounded-full bg-amber-400" />
                             <span className="text-sm font-medium text-amber-200">
                                 {pendingDecision.kind === 'command-failure'
                                     ? pendingDecision.tile

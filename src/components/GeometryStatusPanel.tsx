@@ -52,7 +52,7 @@ const GeometryStatusPanel: React.FC<GeometryStatusPanelProps> = ({ errors, onFoc
                 {error.message}
                 {error.mirrorId ? ` (Mirror ${error.mirrorId.replace('mirror-', '')})` : ''}
             </p>
-            <p className="text-xs text-amber-200 mt-1">
+            <p className="mt-1 text-xs text-amber-200">
                 {ERROR_HINTS[error.code] ?? 'Adjust the geometry parameters and try again.'}
             </p>
         </div>

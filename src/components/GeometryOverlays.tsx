@@ -173,7 +173,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
 
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-gray-400 uppercase">
                         Array layout
                     </p>
                     <div className="rounded-lg border border-gray-700/60 bg-gray-950/60 p-3">
@@ -205,7 +205,7 @@ const GeometryOverlays: React.FC<GeometryOverlaysProps> = ({
                 </div>
 
                 <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-gray-400 uppercase">
                         Wall footprint
                     </p>
                     <div className="rounded-lg border border-gray-700/60 bg-gray-950/60 p-3">

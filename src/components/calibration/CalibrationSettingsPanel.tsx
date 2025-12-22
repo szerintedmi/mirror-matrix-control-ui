@@ -168,7 +168,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                 {/* Array Rotation */}
                 <fieldset className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
-                        <legend className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        <legend className="text-xs font-medium tracking-wide text-gray-500 uppercase">
                             Array Rotation
                         </legend>
                         <span className="text-xs text-gray-500">
@@ -206,7 +206,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                 {/* Staging Position */}
                 <fieldset className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
-                        <legend className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        <legend className="text-xs font-medium tracking-wide text-gray-500 uppercase">
                             Staging Position
                         </legend>
                         <span className="text-xs text-gray-500">{stagingLabel}</span>
@@ -241,7 +241,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                 {/* Step Delta Settings */}
                 <div className="grid gap-4 sm:grid-cols-3">
                     <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                        <span className="mb-1 block text-xs tracking-wide text-gray-500 uppercase">
                             1st Tile Interim Step
                         </span>
                         <input
@@ -258,7 +258,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                         />
                     </label>
                     <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                        <span className="mb-1 block text-xs tracking-wide text-gray-500 uppercase">
                             Step Delta
                         </span>
                         <input
@@ -275,7 +275,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                         />
                     </label>
                     <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                        <span className="mb-1 block text-xs tracking-wide text-gray-500 uppercase">
                             Grid gap (%)
                         </span>
                         <input
@@ -295,7 +295,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                 {/* Tolerance Settings */}
                 <div className="grid gap-4 sm:grid-cols-2">
                     <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                        <span className="mb-1 block text-xs tracking-wide text-gray-500 uppercase">
                             1st Tile Tolerance (%)
                         </span>
                         <input
@@ -312,7 +312,7 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                         />
                     </label>
                     <label className="text-sm text-gray-300">
-                        <span className="mb-1 block text-xs uppercase tracking-wide text-gray-500">
+                        <span className="mb-1 block text-xs tracking-wide text-gray-500 uppercase">
                             Tile Tolerance (%)
                         </span>
                         <input

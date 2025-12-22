@@ -41,7 +41,7 @@ const LogConsole: React.FC<LogConsoleProps> = ({ scope, maxEntries = 50, title =
                     type="button"
                     onClick={clear}
                     disabled={entries.length === 0}
-                    className={`text-xs uppercase tracking-wide ${
+                    className={`text-xs tracking-wide uppercase ${
                         entries.length === 0
                             ? 'cursor-not-allowed text-gray-600'
                             : 'text-gray-400 transition hover:text-gray-200'
@@ -66,7 +66,7 @@ const LogConsole: React.FC<LogConsoleProps> = ({ scope, maxEntries = 50, title =
                             >
                                 {entry.message}
                             </span>
-                            <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                            <span className="text-[10px] tracking-wide text-gray-500 uppercase">
                                 {entry.scope}
                             </span>
                         </article>

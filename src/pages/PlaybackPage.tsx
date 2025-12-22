@@ -265,7 +265,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
                         <div className="mt-3 overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-800 text-sm">
                                 <thead>
-                                    <tr className="text-left text-xs uppercase text-gray-400">
+                                    <tr className="text-left text-xs text-gray-400 uppercase">
                                         <th className="px-3 py-2">Mirror</th>
                                         <th className="px-3 py-2">Pattern Point</th>
                                         <th className="px-3 py-2">Target (x, y)</th>

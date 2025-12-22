@@ -116,14 +116,14 @@ export const MotorActionButtons: React.FC<MotorActionButtonsProps> = ({
                 {label && showLabel && <div className="text-xs text-gray-300">{label}</div>}
                 {showStepsBadge && (
                     <span
-                        className={`inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wide ${badge.className} ${badgePaddingClass}`}
+                        className={`inline-flex items-center gap-1 rounded-full font-semibold tracking-wide uppercase ${badge.className} ${badgePaddingClass}`}
                         title={badge.title}
                         data-testid={dataTestIdPrefix ? `${dataTestIdPrefix}-steps` : undefined}
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 20 20"
-                            className="h-3 w-3"
+                            className="size-3"
                             fill="currentColor"
                             aria-hidden
                         >

@@ -289,11 +289,7 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseLeave}
             >
-                <svg
-                    viewBox="0 0 1 1"
-                    preserveAspectRatio="xMidYMid meet"
-                    className="h-full w-full"
-                >
+                <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="size-full">
                     {/* Background */}
                     <rect x={0} y={0} width={1} height={1} fill="rgb(15,23,42)" />
 
@@ -479,7 +475,7 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
                 )}
 
                 {path && path.waypoints.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <p className="text-sm text-gray-500">Click to add waypoints</p>
                     </div>
                 )}
@@ -488,11 +484,11 @@ const AnimationPathEditor: React.FC<AnimationPathEditorProps> = ({
             {/* Legend */}
             <div className="flex gap-4 text-xs text-gray-500">
                 <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
+                    <span className="inline-block size-2 rounded-full bg-green-400" />
                     Start
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
+                    <span className="inline-block size-2 rounded-full bg-red-400" />
                     End
                 </span>
             </div>
