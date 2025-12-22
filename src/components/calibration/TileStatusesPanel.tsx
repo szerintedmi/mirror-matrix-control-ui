@@ -9,10 +9,33 @@ import {
     TILE_WARNING_TEXT_CLASS,
     type TileDisplayStatus,
 } from '@/constants/calibrationUiThemes';
+import { STEPS_SINCE_HOME_CRITICAL, STEPS_SINCE_HOME_WARNING } from '@/constants/control';
 import type { DriverView } from '@/context/StatusContext';
 import type { TileAddress } from '@/services/calibration/types';
 import type { CalibrationRunSummary, TileRunState } from '@/services/calibration/types';
 import type { Motor, MotorTelemetry } from '@/types';
+
+/** Render steps-since-home warning icon if motor has drifted */
+const StepsWarningIcon: React.FC<{ telemetry?: MotorTelemetry; className?: string }> = ({
+    telemetry,
+    className = '',
+}) => {
+    if (!telemetry) return null;
+    const steps = telemetry.stepsSinceHome;
+    if (steps < STEPS_SINCE_HOME_WARNING) return null;
+
+    const isCritical = steps >= STEPS_SINCE_HOME_CRITICAL;
+    const colorClass = isCritical ? 'text-red-400' : 'text-amber-400';
+    const title = `${steps.toLocaleString()} steps since last home${isCritical ? ' (critical)' : ''}`;
+
+    return (
+        <span title={title} className={`${colorClass} ${className}`.trim()}>
+            <svg className="size-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path d="M10 2a1 1 0 01.894.553l6 12A1 1 0 0116 16H4a1 1 0 01-.894-1.447l6-12A1 1 0 0110 2zM10 5.618L5.764 14h8.472L10 5.618z" />
+            </svg>
+        </span>
+    );
+};
 
 interface TileStatusesPanelProps {
     tileEntries: TileRunState[];
@@ -290,11 +313,16 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                     <div className="mt-2 space-y-1.5 rounded-md border border-gray-800/70 bg-gray-950/60 p-2 text-gray-200">
                                         {/* X axis row */}
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="font-mono text-sm text-gray-300">
+                                            <span className="flex items-center gap-1 font-mono text-sm text-gray-300">
                                                 X{' '}
                                                 <span className="text-cyan-300">
                                                     {formatMotorId(entry.assignment.x) ?? '--'}
                                                 </span>
+                                                <StepsWarningIcon
+                                                    telemetry={getTelemetryForMotor(
+                                                        entry.assignment.x,
+                                                    )}
+                                                />
                                             </span>
                                             {entry.assignment.x &&
                                                 onNudgeMotor &&
@@ -336,11 +364,16 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                         </div>
                                         {/* Y axis row */}
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="font-mono text-sm text-gray-300">
+                                            <span className="flex items-center gap-1 font-mono text-sm text-gray-300">
                                                 Y{' '}
                                                 <span className="text-cyan-300">
                                                     {formatMotorId(entry.assignment.y) ?? '--'}
                                                 </span>
+                                                <StepsWarningIcon
+                                                    telemetry={getTelemetryForMotor(
+                                                        entry.assignment.y,
+                                                    )}
+                                                />
                                             </span>
                                             {entry.assignment.y &&
                                                 onNudgeMotor &&
@@ -420,9 +453,16 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                 open={Boolean(debugTileKey)}
                 entry={debugTileEntry}
                 summaryTile={debugTileSummary}
+                displayStatus={debugTileEntry ? getDisplayStatus(debugTileEntry) : undefined}
                 onClose={closeDebugModal}
                 stepTestSettings={stepTestSnapshot}
                 getTelemetryForMotor={getTelemetryForMotor}
+                isCalibrationActive={isCalibrationActive}
+                onHomeMotor={onHomeMotor}
+                onHomeTile={onHomeTile}
+                onMoveToStage={onMoveToStage}
+                onNudgeMotor={onNudgeMotor}
+                onRecalibrateTile={onRecalibrateTile}
             />
         </>
     );
