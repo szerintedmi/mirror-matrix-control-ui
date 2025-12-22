@@ -3,9 +3,12 @@ import React, { useCallback, useMemo, useState } from 'react';
 import ArrayPersistenceControls from '../components/ArrayPersistenceControls';
 import DiscoveredNodes, { type DiscoveredNode } from '../components/DiscoveredNodes';
 import GridConfigurator from '../components/GridConfigurator';
+import { analyzeMirrorCell } from '../components/MirrorCell';
 import MirrorGrid from '../components/MirrorGrid';
+import TileInfoModal from '../components/TileInfoModal';
 import UnassignedMotorTray from '../components/UnassignedMotorTray';
 import { useStatusStore } from '../context/StatusContext';
+import { useMotorCommands } from '../hooks/useMotorCommands';
 import {
     isMotorAssigned as checkMotorAssigned,
     moveMotorToPosition,
@@ -86,6 +89,8 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         staleThresholdMs,
     } = useStatusStore();
 
+    const { nudgeMotor, homeMotor } = useMotorCommands();
+
     const [selectedNodeMac, setSelectedNodeMac] = useState<string | null>(null);
     const [activeFilter, setActiveFilter] = useState<DiscoveryFilter>('online');
     const [modalState, setModalState] = useState<ModalState>({
@@ -98,6 +103,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         cancelLabel: undefined,
     });
     const [gridViewMode, setGridViewMode] = useState<'mirror' | 'projection'>('mirror');
+    const [tileInfoModalPosition, setTileInfoModalPosition] = useState<GridPosition | null>(null);
 
     const assignmentMetrics = useMemo(() => {
         let assignedAxes = 0;
@@ -462,6 +468,72 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         performLoad();
     };
 
+    // Motor command handlers for grid tiles
+    const handleHomeMotor = useCallback(
+        (motor: Motor) => {
+            homeMotor({ mac: motor.nodeMac, motorId: motor.motorIndex }).catch(console.error);
+        },
+        [homeMotor],
+    );
+
+    const handleHomeTile = useCallback(
+        (position: GridPosition, motors: { x: Motor | null; y: Motor | null }) => {
+            const promises: Promise<unknown>[] = [];
+            if (motors.x) {
+                promises.push(homeMotor({ mac: motors.x.nodeMac, motorId: motors.x.motorIndex }));
+            }
+            if (motors.y) {
+                promises.push(homeMotor({ mac: motors.y.nodeMac, motorId: motors.y.motorIndex }));
+            }
+            Promise.all(promises).catch(console.error);
+        },
+        [homeMotor],
+    );
+
+    const handleNudgeMotor = useCallback(
+        (motor: Motor, currentPosition: number) => {
+            nudgeMotor({
+                mac: motor.nodeMac,
+                motorId: motor.motorIndex,
+                currentPosition,
+            }).catch(console.error);
+        },
+        [nudgeMotor],
+    );
+
+    const handleOpenTileModal = useCallback((position: GridPosition) => {
+        setTileInfoModalPosition(position);
+    }, []);
+
+    const handleCloseTileModal = useCallback(() => {
+        setTileInfoModalPosition(null);
+    }, []);
+
+    // Get tile modal data
+    const tileModalData = useMemo(() => {
+        if (!tileInfoModalPosition) return null;
+
+        const key = `${tileInfoModalPosition.row}-${tileInfoModalPosition.col}`;
+        const assignment = mirrorConfig.get(key) || { x: null, y: null };
+        const analysis = analyzeMirrorCell(assignment, driverStatusByMac);
+
+        const xTelemetry = assignment.x
+            ? driverStatusByMac.get(assignment.x.nodeMac)?.motors[assignment.x.motorIndex]
+            : undefined;
+        const yTelemetry = assignment.y
+            ? driverStatusByMac.get(assignment.y.nodeMac)?.motors[assignment.y.motorIndex]
+            : undefined;
+
+        return {
+            position: tileInfoModalPosition,
+            xMotor: assignment.x,
+            yMotor: assignment.y,
+            xTelemetry,
+            yTelemetry,
+            analysis,
+        };
+    }, [tileInfoModalPosition, mirrorConfig, driverStatusByMac]);
+
     return (
         <>
             {modalState.isOpen && (
@@ -512,6 +584,22 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* Tile Info Modal */}
+            <TileInfoModal
+                open={Boolean(tileInfoModalPosition)}
+                position={tileModalData?.position ?? null}
+                xMotor={tileModalData?.xMotor ?? null}
+                yMotor={tileModalData?.yMotor ?? null}
+                xTelemetry={tileModalData?.xTelemetry}
+                yTelemetry={tileModalData?.yTelemetry}
+                analysis={tileModalData?.analysis ?? null}
+                onClose={handleCloseTileModal}
+                onHomeMotor={handleHomeMotor}
+                onHomeTile={handleHomeTile}
+                onNudgeMotor={handleNudgeMotor}
+            />
+
             <div className="flex flex-col gap-6 p-4 text-gray-200 sm:p-6 lg:p-8">
                 <section className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -646,6 +734,10 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 selectedNodeMac={selectedNodeMacEffective}
                                 driverStatuses={driverStatusByMac}
                                 orientation={gridViewMode}
+                                onOpenModal={handleOpenTileModal}
+                                onHomeMotor={handleHomeMotor}
+                                onHomeTile={handleHomeTile}
+                                onNudgeMotor={handleNudgeMotor}
                             />
                         </div>
                     </main>
