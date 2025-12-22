@@ -15,6 +15,7 @@ import { useCalibrationStateSession } from '@/hooks/useCalibrationStateSession';
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
+import { computePoseTargets, clampSteps, roundSteps } from '@/services/calibration';
 import type { CalibrationRunSummary, TileAddress } from '@/services/calibration/types';
 import {
     loadCalibrationProfiles,
@@ -273,6 +274,12 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const isCalibrationPaused = runnerState.phase === 'paused';
 
+    // True when calibration is actively running (excludes paused state)
+    // Used for disabling tile actions - actions should be allowed when paused
+    const isCalibrationBusy = !['idle', 'completed', 'error', 'aborted', 'paused'].includes(
+        runnerState.phase,
+    );
+
     // Persist calibration state to sessionStorage
     useCalibrationStateSession(runnerState, gridFingerprint);
 
@@ -358,6 +365,68 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             Promise.all(homePromises).catch(console.error);
         },
         [motorCommands],
+    );
+
+    // Handler to home a single motor
+    const handleHomeMotor = useCallback(
+        (motor: Motor) => {
+            motorCommands
+                .homeMotor({
+                    mac: motor.nodeMac,
+                    motorId: motor.motorIndex,
+                })
+                .catch(console.error);
+        },
+        [motorCommands],
+    );
+
+    // Handler to nudge a single motor
+    const handleNudgeMotor = useCallback(
+        (motor: Motor, currentPosition: number) => {
+            motorCommands
+                .nudgeMotor({
+                    mac: motor.nodeMac,
+                    motorId: motor.motorIndex,
+                    currentPosition,
+                })
+                .catch(console.error);
+        },
+        [motorCommands],
+    );
+
+    // Handler to move a tile to staging position
+    const handleMoveToStage = useCallback(
+        (tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => {
+            const targets = computePoseTargets({ row: tile.row, col: tile.col }, 'aside', {
+                gridSize,
+                arrayRotation,
+                stagingPosition,
+            });
+
+            const movePromises: Promise<unknown>[] = [];
+            if (motors.x) {
+                const xTarget = clampSteps(roundSteps(targets.x));
+                movePromises.push(
+                    motorCommands.moveMotor({
+                        mac: motors.x.nodeMac,
+                        motorId: motors.x.motorIndex,
+                        positionSteps: xTarget,
+                    }),
+                );
+            }
+            if (motors.y) {
+                const yTarget = clampSteps(roundSteps(targets.y));
+                movePromises.push(
+                    motorCommands.moveMotor({
+                        mac: motors.y.nodeMac,
+                        motorId: motors.y.motorIndex,
+                        positionSteps: yTarget,
+                    }),
+                );
+            }
+            Promise.all(movePromises).catch(console.error);
+        },
+        [motorCommands, gridSize, arrayRotation, stagingPosition],
     );
 
     const alignmentSourceSummary =
@@ -502,8 +571,11 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                         ? new Set(runnerState.summary.outlierAnalysis.outlierTileKeys)
                         : undefined
                 }
-                isCalibrationActive={isCalibrationActive}
+                isCalibrationActive={isCalibrationBusy}
+                onNudgeMotor={handleNudgeMotor}
+                onHomeMotor={handleHomeMotor}
                 onHomeTile={handleHomeTile}
+                onMoveToStage={handleMoveToStage}
                 onRecalibrateTile={startSingleTileRecalibration}
             />
             <CalibrationRunnerPanel

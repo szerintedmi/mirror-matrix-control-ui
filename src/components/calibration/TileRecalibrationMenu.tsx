@@ -11,8 +11,12 @@ export interface TileRecalibrationMenuProps {
     hasProfile: boolean;
     /** Whether calibration is currently active (disables all actions) */
     isCalibrationActive: boolean;
+    /** Callback to home a single motor axis */
+    onHomeMotor?: (motor: Motor) => void;
     /** Callback to home the tile (both axes) */
     onHomeTile: (tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => void;
+    /** Callback to move tile to staging position */
+    onMoveToStage?: (tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => void;
     /** Callback to start single-tile recalibration */
     onRecalibrateTile: (tile: TileAddress) => void;
 }
@@ -27,7 +31,9 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
     yMotor,
     hasProfile,
     isCalibrationActive,
+    onHomeMotor,
     onHomeTile,
+    onMoveToStage,
     onRecalibrateTile,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -45,6 +51,39 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
             setIsOpen(false);
         },
         [onHomeTile, tile, xMotor, yMotor],
+    );
+
+    const handleHomeX = useCallback(
+        (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (xMotor && onHomeMotor) {
+                onHomeMotor(xMotor);
+            }
+            setIsOpen(false);
+        },
+        [onHomeMotor, xMotor],
+    );
+
+    const handleHomeY = useCallback(
+        (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (yMotor && onHomeMotor) {
+                onHomeMotor(yMotor);
+            }
+            setIsOpen(false);
+        },
+        [onHomeMotor, yMotor],
+    );
+
+    const handleMoveToStage = useCallback(
+        (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (onMoveToStage) {
+                onMoveToStage(tile, { x: xMotor, y: yMotor });
+            }
+            setIsOpen(false);
+        },
+        [onMoveToStage, tile, xMotor, yMotor],
     );
 
     const handleRecalibrate = useCallback(
@@ -87,6 +126,9 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
 
     const hasMotors = Boolean(xMotor || yMotor);
     const canHome = hasMotors && !isCalibrationActive;
+    const canHomeX = Boolean(xMotor) && !isCalibrationActive && Boolean(onHomeMotor);
+    const canHomeY = Boolean(yMotor) && !isCalibrationActive && Boolean(onHomeMotor);
+    const canMoveToStage = hasMotors && !isCalibrationActive && Boolean(onMoveToStage);
     const canRecalibrate = hasProfile && hasMotors && !isCalibrationActive;
 
     return (
@@ -133,6 +175,88 @@ const TileRecalibrationMenu: React.FC<TileRecalibrationMenuProps> = ({
                             />
                         </svg>
                         <span>Home Tile</span>
+                    </button>
+
+                    {/* Home X */}
+                    <button
+                        type="button"
+                        onClick={handleHomeX}
+                        disabled={!canHomeX}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                            canHomeX
+                                ? 'text-gray-300 hover:bg-gray-800'
+                                : 'cursor-not-allowed text-gray-600'
+                        }`}
+                    >
+                        <svg
+                            className="size-3.5 flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                            />
+                        </svg>
+                        <span>Home X</span>
+                    </button>
+
+                    {/* Home Y */}
+                    <button
+                        type="button"
+                        onClick={handleHomeY}
+                        disabled={!canHomeY}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                            canHomeY
+                                ? 'text-gray-300 hover:bg-gray-800'
+                                : 'cursor-not-allowed text-gray-600'
+                        }`}
+                    >
+                        <svg
+                            className="size-3.5 flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                            />
+                        </svg>
+                        <span>Home Y</span>
+                    </button>
+
+                    {/* Move to Stage */}
+                    <button
+                        type="button"
+                        onClick={handleMoveToStage}
+                        disabled={!canMoveToStage}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                            canMoveToStage
+                                ? 'text-gray-300 hover:bg-gray-800'
+                                : 'cursor-not-allowed text-gray-600'
+                        }`}
+                        title="Move tile to staging position"
+                    >
+                        <svg
+                            className="size-3.5 flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                            />
+                        </svg>
+                        <span>Move to Stage</span>
                     </button>
 
                     {/* Recalibrate Tile */}

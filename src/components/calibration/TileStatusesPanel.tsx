@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
-import TileAxisAction from '@/components/calibration/TileAxisAction';
 import TileDebugModal from '@/components/calibration/TileDebugModal';
 import TileRecalibrationMenu from '@/components/calibration/TileRecalibrationMenu';
 import CollapsibleSection from '@/components/common/CollapsibleSection';
@@ -8,6 +7,7 @@ import {
     getTileStatusClasses,
     getTileErrorTextClass,
     TILE_WARNING_TEXT_CLASS,
+    type TileDisplayStatus,
 } from '@/constants/calibrationUiThemes';
 import type { DriverView } from '@/context/StatusContext';
 import type { TileAddress } from '@/services/calibration/types';
@@ -23,8 +23,14 @@ interface TileStatusesPanelProps {
     outlierTileKeys?: Set<string>;
     /** Whether calibration is currently active (disables tile actions) */
     isCalibrationActive?: boolean;
+    /** Callback to nudge a single motor */
+    onNudgeMotor?: (motor: Motor, currentPosition: number) => void;
+    /** Callback to home a single motor */
+    onHomeMotor?: (motor: Motor) => void;
     /** Callback to home a tile (both axes) */
     onHomeTile?: (tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => void;
+    /** Callback to move tile to staging position */
+    onMoveToStage?: (tile: TileAddress, motors: { x: Motor | null; y: Motor | null }) => void;
     /** Callback to start single-tile recalibration */
     onRecalibrateTile?: (tile: TileAddress) => void;
 }
@@ -36,7 +42,10 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
     deltaSteps,
     outlierTileKeys,
     isCalibrationActive = false,
+    onNudgeMotor,
+    onHomeMotor,
     onHomeTile,
+    onMoveToStage,
     onRecalibrateTile,
 }) => {
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
@@ -93,6 +102,26 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
         [telemetryMap],
     );
 
+    /**
+     * Compute display status for a tile.
+     * When not actively calibrating and a profile is loaded, show "calibrated" instead of "pending"
+     * if the tile has calibration data in the summary.
+     */
+    const getDisplayStatus = useCallback(
+        (entry: TileRunState): TileDisplayStatus => {
+            // If calibration is active or status is not pending, use the actual status
+            if (isCalibrationActive || entry.status !== 'pending') {
+                return entry.status;
+            }
+            // If we have a loaded profile with data for this tile, show as calibrated
+            if (runnerSummary?.tiles?.[entry.tile.key]) {
+                return 'calibrated';
+            }
+            return entry.status;
+        },
+        [isCalibrationActive, runnerSummary],
+    );
+
     const handleTileCardClick = useCallback(
         (event: React.MouseEvent<HTMLDivElement>, tileKey: string) => {
             const target = event.target as HTMLElement | null;
@@ -123,9 +152,9 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
     const gridColumnCount =
         tileEntries.reduce((max, entry) => (entry.tile.col > max ? entry.tile.col : max), 0) + 1;
 
-    // Count tiles by status for header summary
+    // Count tiles by display status for header summary
     const statusCounts = useMemo(() => {
-        const counts: Record<TileRunState['status'], number> = {
+        const counts: Record<TileRunState['status'] | 'calibrated', number> = {
             pending: 0,
             staged: 0,
             measuring: 0,
@@ -133,16 +162,19 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
             partial: 0,
             failed: 0,
             skipped: 0,
+            calibrated: 0,
         };
         tileEntries.forEach((entry) => {
-            counts[entry.status]++;
+            const displayStatus = getDisplayStatus(entry);
+            counts[displayStatus]++;
         });
         return counts;
-    }, [tileEntries]);
+    }, [tileEntries, getDisplayStatus]);
 
     // Build collapsed summary showing only non-zero counts
     const collapsedSummary = useMemo(() => {
         const parts: string[] = [];
+        if (statusCounts.calibrated > 0) parts.push(`${statusCounts.calibrated} calibrated`);
         if (statusCounts.completed > 0) parts.push(`${statusCounts.completed} done`);
         if (statusCounts.partial > 0) parts.push(`${statusCounts.partial} partial`);
         if (statusCounts.failed > 0) parts.push(`${statusCounts.failed} failed`);
@@ -180,6 +212,9 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                         const isOutlier = outlierTileKeys?.has(entry.tile.key) ?? false;
                         const isHovered = hoveredTileKey === entry.tile.key;
                         const showMenu = isHovered && onHomeTile && onRecalibrateTile;
+                        const displayStatus = getDisplayStatus(entry);
+                        const formatMotorId = (motor: Motor | null) =>
+                            motor ? `${motor.nodeMac.slice(-5)}:${motor.motorIndex}` : null;
                         return (
                             <div
                                 key={entry.tile.key}
@@ -190,9 +225,25 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                 onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
                                 onMouseEnter={() => setHoveredTileKey(entry.tile.key)}
                                 onMouseLeave={() => setHoveredTileKey(null)}
-                                className={`rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(entry.status)} ${entry.status === 'completed' ? 'cursor-pointer' : 'cursor-help'} ${isOutlier ? 'ring-2 ring-amber-500/60 ring-offset-1 ring-offset-gray-950' : ''}`}
+                                className={`relative rounded-md border px-2 py-1.5 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${getTileStatusClasses(displayStatus)} ${displayStatus === 'completed' || displayStatus === 'calibrated' ? 'cursor-pointer' : 'cursor-help'} ${isOutlier ? 'ring-2 ring-amber-500/60 ring-offset-1 ring-offset-gray-950' : ''}`}
                             >
-                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] font-semibold">
+                                {/* Menu in top right corner */}
+                                {showMenu && (
+                                    <div className="absolute top-1.5 right-1.5">
+                                        <TileRecalibrationMenu
+                                            tile={entry.tile}
+                                            xMotor={entry.assignment.x}
+                                            yMotor={entry.assignment.y}
+                                            hasProfile={Boolean(runnerSummary)}
+                                            isCalibrationActive={isCalibrationActive}
+                                            onHomeMotor={onHomeMotor}
+                                            onHomeTile={onHomeTile}
+                                            onMoveToStage={onMoveToStage}
+                                            onRecalibrateTile={onRecalibrateTile}
+                                        />
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm font-semibold">
                                     <span className="font-mono">
                                         [{entry.tile.row},{entry.tile.col}]
                                         {isOutlier && (
@@ -204,22 +255,13 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                             </span>
                                         )}
                                     </span>
-                                    <div className="flex items-center gap-1">
-                                        {showMenu && (
-                                            <TileRecalibrationMenu
-                                                tile={entry.tile}
-                                                xMotor={entry.assignment.x}
-                                                yMotor={entry.assignment.y}
-                                                hasProfile={Boolean(runnerSummary)}
-                                                isCalibrationActive={isCalibrationActive}
-                                                onHomeTile={onHomeTile}
-                                                onRecalibrateTile={onRecalibrateTile}
-                                            />
+                                    {/* Only show status for non-calibrated tiles */}
+                                    {displayStatus !== 'calibrated' &&
+                                        displayStatus !== 'completed' && (
+                                            <span className="text-xs font-medium capitalize">
+                                                {displayStatus}
+                                            </span>
                                         )}
-                                        <span className="text-xs font-medium capitalize">
-                                            {entry.status}
-                                        </span>
-                                    </div>
                                 </div>
                                 {entry.error && (
                                     <div
@@ -245,24 +287,98 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                     </div>
                                 )}
                                 {(entry.assignment.x || entry.assignment.y) && (
-                                    <div className="mt-2 rounded-md border border-gray-800/70 bg-gray-950/60 p-1.5 text-[10px] text-gray-200">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <TileAxisAction
-                                                axis="x"
-                                                motor={entry.assignment.x}
-                                                telemetry={getTelemetryForMotor(entry.assignment.x)}
-                                                layout="inline"
-                                                className="min-w-[120px] flex-1"
-                                                showHomeButton
-                                            />
-                                            <TileAxisAction
-                                                axis="y"
-                                                motor={entry.assignment.y}
-                                                telemetry={getTelemetryForMotor(entry.assignment.y)}
-                                                layout="inline"
-                                                className="min-w-[120px] flex-1"
-                                                showHomeButton
-                                            />
+                                    <div className="mt-2 space-y-1.5 rounded-md border border-gray-800/70 bg-gray-950/60 p-2 text-gray-200">
+                                        {/* X axis row */}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-mono text-sm text-gray-300">
+                                                X{' '}
+                                                <span className="text-cyan-300">
+                                                    {formatMotorId(entry.assignment.x) ?? '--'}
+                                                </span>
+                                            </span>
+                                            {entry.assignment.x &&
+                                                onNudgeMotor &&
+                                                (() => {
+                                                    const telemetry = getTelemetryForMotor(
+                                                        entry.assignment.x,
+                                                    );
+                                                    const position = telemetry?.position ?? 0;
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onNudgeMotor(
+                                                                    entry.assignment.x!,
+                                                                    position,
+                                                                );
+                                                            }}
+                                                            className="flex size-6 items-center justify-center rounded border border-cyan-700 bg-cyan-900/40 text-cyan-200 transition hover:bg-cyan-700/40"
+                                                            title={`Nudge X motor (${formatMotorId(entry.assignment.x)})`}
+                                                        >
+                                                            {/* Finger tap / poke icon */}
+                                                            <svg
+                                                                className="size-3.5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                                strokeWidth={2}
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    );
+                                                })()}
+                                        </div>
+                                        {/* Y axis row */}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-mono text-sm text-gray-300">
+                                                Y{' '}
+                                                <span className="text-cyan-300">
+                                                    {formatMotorId(entry.assignment.y) ?? '--'}
+                                                </span>
+                                            </span>
+                                            {entry.assignment.y &&
+                                                onNudgeMotor &&
+                                                (() => {
+                                                    const telemetry = getTelemetryForMotor(
+                                                        entry.assignment.y,
+                                                    );
+                                                    const position = telemetry?.position ?? 0;
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onNudgeMotor(
+                                                                    entry.assignment.y!,
+                                                                    position,
+                                                                );
+                                                            }}
+                                                            className="flex size-6 items-center justify-center rounded border border-cyan-700 bg-cyan-900/40 text-cyan-200 transition hover:bg-cyan-700/40"
+                                                            title={`Nudge Y motor (${formatMotorId(entry.assignment.y)})`}
+                                                        >
+                                                            {/* Finger tap / poke icon */}
+                                                            <svg
+                                                                className="size-3.5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                                strokeWidth={2}
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    );
+                                                })()}
                                         </div>
                                     </div>
                                 )}
@@ -270,33 +386,35 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                         );
                     })}
                 </div>
-                {/* Color legend - synced with TILE_STATUS_CLASSES */}
-                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-800 pt-3 text-[10px] text-gray-400">
-                    <span className="flex items-center gap-1.5">
-                        <span className="size-2.5 rounded-sm border border-gray-700 bg-gray-900/60" />
-                        Pending
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="size-2.5 rounded-sm border border-amber-500/60 bg-amber-500/10" />
-                        Staged
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="size-2.5 rounded-sm border border-sky-500/60 bg-sky-500/10" />
-                        Measuring
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="size-2.5 rounded-sm border border-emerald-600/60 bg-emerald-500/10" />
-                        Completed
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="size-2.5 rounded-sm border border-rose-600/60 bg-rose-500/10" />
-                        Failed
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="size-2.5 rounded-sm border border-gray-800 bg-gray-900" />
-                        Skipped
-                    </span>
-                </div>
+                {/* Color legend - synced with TILE_STATUS_CLASSES (only shows during calibration) */}
+                {isCalibrationActive && (
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-800 pt-3 text-[10px] text-gray-400">
+                        <span className="flex items-center gap-1.5">
+                            <span className="size-2.5 rounded-sm border border-gray-700 bg-gray-900/60" />
+                            Pending
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="size-2.5 rounded-sm border border-amber-500/60 bg-amber-500/10" />
+                            Staged
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="size-2.5 rounded-sm border border-sky-500/60 bg-sky-500/10" />
+                            Measuring
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="size-2.5 rounded-sm border border-emerald-600/60 bg-emerald-500/10" />
+                            Completed
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="size-2.5 rounded-sm border border-rose-600/60 bg-rose-500/10" />
+                            Failed
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="size-2.5 rounded-sm border border-gray-800 bg-gray-900" />
+                            Skipped
+                        </span>
+                    </div>
+                )}
             </CollapsibleSection>
             <TileDebugModal
                 open={Boolean(debugTileKey)}

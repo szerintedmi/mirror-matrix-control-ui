@@ -1,11 +1,15 @@
 import type { TileRunState } from '@/services/calibration/types';
 
+/** Display status includes 'calibrated' for tiles with loaded profile data */
+export type TileDisplayStatus = TileRunState['status'] | 'calibrated';
+
 /**
  * CSS class mappings for tile calibration status states.
  * Used across CalibrationRunnerPanel, TileDebugModal, and related components.
  */
-export const TILE_STATUS_CLASSES: Record<TileRunState['status'], string> = {
+export const TILE_STATUS_CLASSES: Record<TileDisplayStatus, string> = {
     completed: 'border-emerald-600/60 bg-emerald-500/10 text-emerald-200',
+    calibrated: 'border-emerald-600/60 bg-emerald-500/10 text-emerald-200',
     partial: 'border-yellow-500/60 bg-yellow-500/10 text-yellow-100',
     measuring: 'border-sky-500/60 bg-sky-500/10 text-sky-100',
     failed: 'border-rose-600/60 bg-rose-500/10 text-rose-100',
@@ -18,7 +22,7 @@ export const TILE_STATUS_CLASSES: Record<TileRunState['status'], string> = {
  * Get CSS classes for a tile calibration status.
  * Falls back to 'pending' styling for unknown statuses.
  */
-export const getTileStatusClasses = (status: TileRunState['status']): string => {
+export const getTileStatusClasses = (status: TileDisplayStatus): string => {
     return TILE_STATUS_CLASSES[status] ?? TILE_STATUS_CLASSES.pending;
 };
 
