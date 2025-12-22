@@ -14,7 +14,12 @@ import { useCalibrationStateSession } from '@/hooks/useCalibrationStateSession';
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
 import { useMotorCommands } from '@/hooks/useMotorCommands';
-import type { TileAddress } from '@/services/calibration/types';
+import type { CalibrationRunSummary, TileAddress } from '@/services/calibration/types';
+import {
+    loadCalibrationProfiles,
+    loadLastCalibrationProfileId,
+    profileToRunSummary,
+} from '@/services/calibrationProfileStorage';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
 import type { Motor } from '@/types';
 import type {
@@ -222,6 +227,19 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         [setExpectedBlobPosition],
     );
 
+    // Compute initial active profile summary on mount (before hooks)
+    // This enables single-tile recalibration for loaded profiles
+    const [loadedProfileSummary, setLoadedProfileSummary] = useState<CalibrationRunSummary | null>(
+        () => {
+            const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
+            const profiles = loadCalibrationProfiles(storage);
+            const lastId = loadLastCalibrationProfileId(storage);
+            const activeProfile =
+                (lastId && profiles.find((p) => p.id === lastId)) || profiles[0] || null;
+            return activeProfile ? profileToRunSummary(activeProfile) : null;
+        },
+    );
+
     const calibrationController = useCalibrationController({
         gridSize,
         mirrorConfig,
@@ -232,6 +250,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         stagingPosition,
         roi,
         initialSessionState,
+        loadedProfileSummary,
         onExpectedPositionChange: handleExpectedPositionChange,
     });
 
@@ -247,6 +266,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         resume: resumeCalibration,
         advance: advanceCalibration,
         abort: abortCalibration,
+        reset: resetCalibration,
         startSingleTileRecalibration,
     } = calibrationController;
 
@@ -268,6 +288,34 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         mirrorConfig,
         arrayRotation,
     });
+
+    // Wrapper for loadProfile that resets the controller and updates loaded profile summary
+    // This enables recalibration when loading a different profile
+    const handleLoadProfile = useCallback(
+        (profileId: string) => {
+            const profile = calibrationProfilesController.loadProfile(profileId);
+            if (profile) {
+                // Reset controller to clear existing summary, then update with new profile
+                resetCalibration();
+                setLoadedProfileSummary(profileToRunSummary(profile));
+            }
+            return profile;
+        },
+        [calibrationProfilesController, resetCalibration],
+    );
+
+    // Wrapper for importProfileFromJson that updates loaded profile summary
+    const handleImportProfile = useCallback(
+        (payload: string) => {
+            const profile = calibrationProfilesController.importProfileFromJson(payload);
+            if (profile) {
+                resetCalibration();
+                setLoadedProfileSummary(profileToRunSummary(profile));
+            }
+            return profile;
+        },
+        [calibrationProfilesController, resetCalibration],
+    );
 
     const runSummary = {
         total: runnerState.progress.total,
@@ -434,12 +482,12 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 activeProfileId={calibrationProfilesController.activeProfileId}
                 selectedProfileId={calibrationProfilesController.selectedProfileId}
                 onDeleteProfile={calibrationProfilesController.deleteProfile}
-                onLoadProfile={calibrationProfilesController.loadProfile}
+                onLoadProfile={handleLoadProfile}
                 profileName={calibrationProfilesController.profileNameInput}
                 onProfileNameChange={calibrationProfilesController.setProfileNameInput}
                 onSaveProfile={calibrationProfilesController.saveProfile}
                 onSaveAsNewProfile={calibrationProfilesController.saveAsNewProfile}
-                onImportProfile={calibrationProfilesController.importProfileFromJson}
+                onImportProfile={handleImportProfile}
                 canSave={calibrationProfilesController.canSaveProfile}
                 saveFeedback={calibrationProfilesController.saveFeedback}
                 onDismissFeedback={calibrationProfilesController.dismissFeedback}

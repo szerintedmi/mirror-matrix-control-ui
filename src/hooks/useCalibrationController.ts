@@ -22,6 +22,7 @@ import {
 import {
     type CalibrationCommandLogEntry,
     type CalibrationRunnerState,
+    type CalibrationRunSummary,
     type CalibrationStepState,
     type TileAddress,
     type TileRunState,
@@ -65,6 +66,12 @@ interface UseCalibrationControllerParams {
         tiles: CalibrationRunnerState['tiles'];
         progress: CalibrationRunnerState['progress'];
     } | null;
+    /**
+     * Loaded profile summary from storage. When provided and no calibration is
+     * running, this is synced to runnerState.summary to enable single-tile
+     * recalibration on loaded profiles.
+     */
+    loadedProfileSummary?: CalibrationRunSummary | null;
     /**
      * Callback to update the expected blob position overlay.
      * Position is in viewport coordinates (0 to 1).
@@ -126,6 +133,7 @@ export const useCalibrationController = ({
     stagingPosition,
     roi,
     initialSessionState,
+    loadedProfileSummary,
     onExpectedPositionChange,
 }: UseCalibrationControllerParams): CalibrationController => {
     const [mode, setMode] = useState<CalibrationMode>('auto');
@@ -196,6 +204,24 @@ export const useCalibrationController = ({
         // eslint-disable-next-line react-hooks/set-state-in-effect
         resetState();
     }, [gridSize, mirrorConfig, resetState]);
+
+    // Sync loaded profile summary to runnerState when idle
+    // This enables single-tile recalibration for loaded profiles
+    useEffect(() => {
+        // Only sync when idle (not running calibration)
+        const isIdle = ['idle', 'completed', 'error', 'aborted'].includes(runnerState.phase);
+        if (!isIdle) {
+            return;
+        }
+        // If we have a loaded profile summary but no current summary, sync it
+        if (loadedProfileSummary && !runnerState.summary) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setRunnerState((prev) => ({
+                ...prev,
+                summary: loadedProfileSummary,
+            }));
+        }
+    }, [loadedProfileSummary, runnerState.phase, runnerState.summary]);
 
     const appendLogEntry = useCallback((entry: CalibrationCommandLogEntry) => {
         setCommandLog((prev) => [entry, ...prev].slice(0, MAX_LOG_ENTRIES));
