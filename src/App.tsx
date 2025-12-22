@@ -377,6 +377,8 @@ const App: React.FC = () => {
                                                 }
                                                 pageTitle={pageTitle}
                                                 breadcrumbs={breadcrumbs}
+                                                gridSize={gridSize}
+                                                mirrorConfig={mirrorConfig}
                                             />
                                             <main
                                                 data-testid="app-root"

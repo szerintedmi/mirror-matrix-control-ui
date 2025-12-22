@@ -145,7 +145,6 @@ const renderPanel = async (
         const element = (
             <CalibrationRunnerPanel
                 controller={controller}
-                gridSize={{ rows: 2, cols: 2 }}
                 arrayRotation={0}
                 onArrayRotationChange={noop}
                 stagingPosition="nearest-corner"
@@ -178,108 +177,6 @@ beforeEach(() => {
 
 afterEach(() => {
     document.body.innerHTML = '';
-});
-
-describe('CalibrationRunnerPanel homing actions', () => {
-    it('hides calibrated homing button when summary is missing', async () => {
-        const container = await renderPanel({
-            runnerState: { ...runnerState, summary: undefined },
-        });
-        // Open the Move dropdown first
-        const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Move'),
-        );
-        expect(moveDropdownButton).toBeTruthy();
-        await act(async () => {
-            moveDropdownButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-        // The calibrated home button should be disabled (shown with indicator dot)
-        const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('To calibrated home'),
-        );
-        expect(calibratedButton?.hasAttribute('disabled')).toBe(true);
-    });
-
-    it('homes all motors to physical zero', async () => {
-        const container = await renderPanel();
-        // Open the Move dropdown first
-        const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Move'),
-        );
-        expect(moveDropdownButton).toBeTruthy();
-        await act(async () => {
-            moveDropdownButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-        const physicalButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('To physical home'),
-        );
-        expect(physicalButton).toBeTruthy();
-        expect(physicalButton?.hasAttribute('disabled')).toBe(false);
-        await act(async () => {
-            physicalButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            await Promise.resolve();
-        });
-        expect(moveMotorMock).toHaveBeenCalledTimes(2);
-        expect(moveMotorMock.mock.calls).toEqual(
-            expect.arrayContaining([
-                [
-                    {
-                        mac: 'mac-1',
-                        motorId: 1,
-                        positionSteps: 0,
-                    },
-                ],
-                [
-                    {
-                        mac: 'mac-2',
-                        motorId: 2,
-                        positionSteps: 0,
-                    },
-                ],
-            ]),
-        );
-        expect(homeAllMock).not.toHaveBeenCalled();
-    });
-
-    it('applies calibrated home offsets via move commands', async () => {
-        const container = await renderPanel();
-        // Open the Move dropdown first
-        const moveDropdownButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Move'),
-        );
-        expect(moveDropdownButton).toBeTruthy();
-        await act(async () => {
-            moveDropdownButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-        const calibratedButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('To calibrated home'),
-        );
-        expect(calibratedButton).toBeTruthy();
-        expect(calibratedButton?.hasAttribute('disabled')).toBe(false);
-        await act(async () => {
-            calibratedButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            await Promise.resolve();
-        });
-        expect(moveMotorMock).toHaveBeenCalledTimes(2);
-        expect(moveMotorMock.mock.calls).toEqual(
-            expect.arrayContaining([
-                [
-                    {
-                        mac: 'mac-1',
-                        motorId: 1,
-                        positionSteps: -40,
-                    },
-                ],
-                [
-                    {
-                        mac: 'mac-2',
-                        motorId: 2,
-                        positionSteps: -50,
-                    },
-                ],
-            ]),
-        );
-    });
 });
 
 describe('CalibrationRunnerPanel pending decision UI', () => {

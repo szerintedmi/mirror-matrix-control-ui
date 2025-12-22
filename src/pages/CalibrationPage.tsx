@@ -508,8 +508,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             />
             <CalibrationRunnerPanel
                 controller={calibrationController}
-                loadedProfileSummary={calibrationProfilesController.activeProfileSummary}
-                gridSize={gridSize}
                 arrayRotation={arrayRotation}
                 onArrayRotationChange={setArrayRotation}
                 stagingPosition={stagingPosition}

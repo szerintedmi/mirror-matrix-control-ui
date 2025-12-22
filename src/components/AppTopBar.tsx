@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import CalibrationProfileDropdown from '@/components/calibration/CalibrationProfileDropdown';
+import GlobalMoveDropdown from '@/components/GlobalMoveDropdown';
+import type { MirrorConfig } from '@/types';
 
 import { useMqtt } from '../context/MqttContext';
 import {
@@ -22,6 +24,8 @@ interface AppTopBarProps {
     pageTitle: string;
     breadcrumbs?: AppTopBarBreadcrumb[];
     showProfileSelector?: boolean;
+    gridSize: { rows: number; cols: number };
+    mirrorConfig: MirrorConfig;
 }
 
 const AppTopBar: React.FC<AppTopBarProps> = ({
@@ -31,6 +35,8 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
     pageTitle,
     breadcrumbs = [],
     showProfileSelector = true,
+    gridSize,
+    mirrorConfig,
 }) => {
     const { state, connectionUrl, settings } = useMqtt();
     const [heartbeat, setHeartbeat] = useState(() => Date.now());
@@ -135,7 +141,12 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                 </div>
                 <div className="flex flex-1 items-center justify-end gap-3">
                     {showProfileSelector && onOpenProfileManagement && (
-                        <CalibrationProfileDropdown onOpenManagement={onOpenProfileManagement} />
+                        <>
+                            <CalibrationProfileDropdown
+                                onOpenManagement={onOpenProfileManagement}
+                            />
+                            <GlobalMoveDropdown gridSize={gridSize} mirrorConfig={mirrorConfig} />
+                        </>
                     )}
                     <button
                         type="button"
