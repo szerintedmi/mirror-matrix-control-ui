@@ -4,7 +4,7 @@ import ReactDOM from 'react-dom';
 interface ModalProps {
     open: boolean;
     onClose: () => void;
-    title?: string;
+    title?: React.ReactNode;
     children: React.ReactNode;
     contentClassName?: string;
     bodyClassName?: string;

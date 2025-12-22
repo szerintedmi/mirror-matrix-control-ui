@@ -189,28 +189,43 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
     // Only show timestamp if it's valid (not epoch 0)
     const showTimestamp = homeTimestamp && homeTimestamp > 86400000; // > 1 day from epoch
 
+    // Format status as a badge color
+    const statusBadgeClass =
+        effectiveStatus === 'calibrated' || effectiveStatus === 'completed'
+            ? 'bg-emerald-900/60 text-emerald-300 border-emerald-700/50'
+            : effectiveStatus === 'failed'
+              ? 'bg-red-900/60 text-red-300 border-red-700/50'
+              : effectiveStatus === 'partial'
+                ? 'bg-amber-900/60 text-amber-300 border-amber-700/50'
+                : effectiveStatus === 'measuring'
+                  ? 'bg-cyan-900/60 text-cyan-300 border-cyan-700/50'
+                  : 'bg-gray-800/60 text-gray-300 border-gray-700/50';
+
     return (
         <Modal
             open={open}
             onClose={onClose}
-            title={`Tile ${tileLabel}`}
+            title={
+                <span className="flex items-center gap-3">
+                    <span>Tile {tileLabel}</span>
+                    <span
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${statusBadgeClass}`}
+                    >
+                        {effectiveStatus}
+                    </span>
+                </span>
+            }
             contentClassName="w-auto max-w-4xl resize overflow-auto"
             bodyClassName="px-0 py-0 max-h-[80vh] overflow-y-auto"
         >
             <div className="px-5 py-6">
                 <div className="space-y-5 text-sm text-gray-200">
-                    {/* Header with status */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-xs tracking-wide text-gray-400 uppercase">
-                            Status:{' '}
-                            <span className="text-gray-100 capitalize">{effectiveStatus}</span>
-                        </span>
-                        {showTimestamp && (
-                            <span className="text-xs text-gray-500">
-                                Last calibration: {formatTimestamp(homeTimestamp)}
-                            </span>
-                        )}
-                    </div>
+                    {/* Timestamp if available */}
+                    {showTimestamp && (
+                        <div className="text-xs text-gray-500">
+                            Last calibration: {formatTimestamp(homeTimestamp)}
+                        </div>
+                    )}
 
                     {entry.error && <p className="text-sm text-amber-200">{entry.error}</p>}
 
@@ -218,13 +233,16 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
                     <div className="grid gap-3 sm:grid-cols-2">
                         {/* X Axis */}
                         <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-                            <div className="mb-3 flex items-center justify-between">
-                                <span className="text-sm font-semibold text-gray-200">X Axis</span>
-                                <span className="font-mono text-xs text-gray-500">
-                                    {getAxisAssignmentLabel(entry, 'x')}
-                                </span>
+                            <div className="mb-3 border-b border-gray-800 pb-3">
+                                <span className="text-sm font-semibold text-gray-100">X Axis</span>
                             </div>
                             <div className="mb-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-400">Controller</span>
+                                    <span className="font-mono text-sm text-gray-100">
+                                        {getAxisAssignmentLabel(entry, 'x')}
+                                    </span>
+                                </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-gray-400">Position</span>
                                     <span className="font-mono text-sm text-gray-100">
@@ -282,13 +300,16 @@ const TileDebugModal: React.FC<TileDebugModalProps> = ({
 
                         {/* Y Axis */}
                         <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-                            <div className="mb-3 flex items-center justify-between">
-                                <span className="text-sm font-semibold text-gray-200">Y Axis</span>
-                                <span className="font-mono text-xs text-gray-500">
-                                    {getAxisAssignmentLabel(entry, 'y')}
-                                </span>
+                            <div className="mb-3 border-b border-gray-800 pb-3">
+                                <span className="text-sm font-semibold text-gray-100">Y Axis</span>
                             </div>
                             <div className="mb-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-400">Controller</span>
+                                    <span className="font-mono text-sm text-gray-100">
+                                        {getAxisAssignmentLabel(entry, 'y')}
+                                    </span>
+                                </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-gray-400">Position</span>
                                     <span className="font-mono text-sm text-gray-100">
