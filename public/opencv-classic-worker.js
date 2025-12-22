@@ -1,4 +1,3 @@
-/* eslint-env worker */
 /* global importScripts */
 'use strict';
 
