@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import CalibrationCommandLog from '@/components/calibration/CalibrationCommandLog';
 import CalibrationPreview from '@/components/calibration/CalibrationPreview';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
@@ -266,6 +267,8 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         advance: advanceCalibration,
         abort: abortCalibration,
         startSingleTileRecalibration,
+        commandLog,
+        mode: calibrationMode,
     } = calibrationController;
 
     const isCalibrationPaused = runnerState.phase === 'paused';
@@ -568,30 +571,35 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                         nativeBlobDetectorAvailable={nativeBlobDetectorAvailable}
                     />
                 </div>
-                <CalibrationPreview
-                    previewMode={previewMode}
-                    onPreviewModeChange={setPreviewMode}
-                    roi={roi}
-                    roiViewEnabled={roiViewEnabled}
-                    onToggleRoiView={toggleRoiView}
-                    onResetRoi={resetRoi}
-                    previewRefs={previewRefs}
-                    overlayHandlers={overlayHandlers}
-                    rotationDegrees={rotationDegrees}
-                    rotationOverlayVisible={rotationOverlayVisible}
-                    roiEditingMode={roiEditingMode}
-                    opencvStatus={opencvStatus}
-                    opencvError={opencvError}
-                    videoDimensions={videoDimensions}
-                    blobsOverlayEnabled={blobsOverlayEnabled}
-                    onToggleBlobsOverlay={() => setBlobsOverlayEnabled(!blobsOverlayEnabled)}
-                    alignmentOverlayEnabled={displayedAlignmentOverlayEnabled}
-                    alignmentOverlayAvailable={alignmentOverlayAvailable}
-                    onToggleAlignmentOverlay={() => setAlignmentOverlayVisible((prev) => !prev)}
-                    tileBoundsOverlayEnabled={displayedTileBoundsOverlayEnabled}
-                    tileBoundsOverlayAvailable={tileBoundsOverlayAvailable}
-                    onToggleTileBoundsOverlay={() => setTileBoundsOverlayVisible((prev) => !prev)}
-                />
+                <div className="flex min-w-0 flex-1 flex-col gap-4">
+                    <CalibrationPreview
+                        previewMode={previewMode}
+                        onPreviewModeChange={setPreviewMode}
+                        roi={roi}
+                        roiViewEnabled={roiViewEnabled}
+                        onToggleRoiView={toggleRoiView}
+                        onResetRoi={resetRoi}
+                        previewRefs={previewRefs}
+                        overlayHandlers={overlayHandlers}
+                        rotationDegrees={rotationDegrees}
+                        rotationOverlayVisible={rotationOverlayVisible}
+                        roiEditingMode={roiEditingMode}
+                        opencvStatus={opencvStatus}
+                        opencvError={opencvError}
+                        videoDimensions={videoDimensions}
+                        blobsOverlayEnabled={blobsOverlayEnabled}
+                        onToggleBlobsOverlay={() => setBlobsOverlayEnabled(!blobsOverlayEnabled)}
+                        alignmentOverlayEnabled={displayedAlignmentOverlayEnabled}
+                        alignmentOverlayAvailable={alignmentOverlayAvailable}
+                        onToggleAlignmentOverlay={() => setAlignmentOverlayVisible((prev) => !prev)}
+                        tileBoundsOverlayEnabled={displayedTileBoundsOverlayEnabled}
+                        tileBoundsOverlayAvailable={tileBoundsOverlayAvailable}
+                        onToggleTileBoundsOverlay={() =>
+                            setTileBoundsOverlayVisible((prev) => !prev)
+                        }
+                    />
+                    <CalibrationCommandLog entries={commandLog} mode={calibrationMode} />
+                </div>
             </div>
         </div>
     );

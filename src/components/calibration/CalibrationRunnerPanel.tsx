@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-import CalibrationCommandLog from '@/components/calibration/CalibrationCommandLog';
 import CalibrationSettingsPanel from '@/components/calibration/CalibrationSettingsPanel';
 import CalibrationStatusBar from '@/components/calibration/CalibrationStatusBar';
-import CalibrationSummaryModal from '@/components/calibration/CalibrationSummaryModal';
 import MoveActionsDropdown from '@/components/calibration/MoveActionsDropdown';
 import type { CalibrationController } from '@/hooks/useCalibrationController';
 import type { CalibrationRunSummary, CalibrationStepState } from '@/services/calibration/types';
@@ -53,20 +51,13 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     onAbort,
     onAdvance,
 }) => {
-    const { runnerState, runnerSettings, updateSetting, commandLog, tileEntries, mode, setMode } =
-        controller;
+    const { runnerState, runnerSettings, updateSetting, tileEntries, mode, setMode } = controller;
 
     const isRunnerBusy =
         runnerState.phase === 'homing' ||
         runnerState.phase === 'staging' ||
         runnerState.phase === 'measuring' ||
         runnerState.phase === 'aligning';
-
-    // Use runner's blueprint if available, otherwise fall back to loaded profile's blueprint
-    const runnerBlueprint = runnerState.summary?.gridBlueprint;
-    const loadedBlueprint = loadedProfileSummary?.gridBlueprint;
-    const blueprint = runnerBlueprint ?? loadedBlueprint;
-    const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
     return (
         <>
@@ -116,36 +107,17 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                     />
 
                     {/* Actions row */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <MoveActionsDropdown
-                            runnerState={runnerState}
-                            tileEntries={tileEntries}
-                            isRunnerBusy={isRunnerBusy}
-                            loadedProfileSummary={loadedProfileSummary}
-                            gridSize={gridSize}
-                            arrayRotation={arrayRotation}
-                            stagingPosition={stagingPosition}
-                        />
-                        {blueprint && (
-                            <button
-                                type="button"
-                                onClick={() => setSummaryModalOpen(true)}
-                                className="text-xs text-gray-500 hover:text-gray-300 hover:underline"
-                            >
-                                View calibration math
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Command log - collapsed by default */}
-                    <CalibrationCommandLog entries={commandLog} mode={mode} />
+                    <MoveActionsDropdown
+                        runnerState={runnerState}
+                        tileEntries={tileEntries}
+                        isRunnerBusy={isRunnerBusy}
+                        loadedProfileSummary={loadedProfileSummary}
+                        gridSize={gridSize}
+                        arrayRotation={arrayRotation}
+                        stagingPosition={stagingPosition}
+                    />
                 </div>
             </section>
-            <CalibrationSummaryModal
-                open={summaryModalOpen}
-                summary={runnerState.summary ?? null}
-                onClose={() => setSummaryModalOpen(false)}
-            />
         </>
     );
 };
