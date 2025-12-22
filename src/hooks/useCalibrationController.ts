@@ -304,6 +304,9 @@ export const useCalibrationController = ({
 
     const abort = useCallback(() => {
         executorRef.current?.abort();
+        // Clear UI state that might be stale after abort
+        setPendingDecision(null);
+        setStepState(null);
     }, []);
 
     const reset = useCallback(() => {

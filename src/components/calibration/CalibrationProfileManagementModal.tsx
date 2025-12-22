@@ -209,7 +209,15 @@ const CalibrationProfileManagementModal: React.FC<CalibrationProfileManagementMo
                     ? `Saved as "${result.profile.name}"`
                     : `Updated "${result.profile.name}"`,
         });
-    }, [draftName, draftProfile, refreshProfiles, resolvedStorage, saveTarget, savedProfiles, selectProfile]);
+    }, [
+        draftName,
+        draftProfile,
+        refreshProfiles,
+        resolvedStorage,
+        saveTarget,
+        savedProfiles,
+        selectProfile,
+    ]);
 
     const handleDismissFeedback = useCallback(() => {
         setFeedback(null);
@@ -283,7 +291,9 @@ const CalibrationProfileManagementModal: React.FC<CalibrationProfileManagementMo
                                         htmlFor="draft-name"
                                         className="mb-1 block text-xs text-amber-300/70"
                                     >
-                                        {saveTarget === 'new' ? 'Profile name' : 'Rename (optional)'}
+                                        {saveTarget === 'new'
+                                            ? 'Profile name'
+                                            : 'Rename (optional)'}
                                     </label>
                                     <input
                                         id="draft-name"
@@ -293,8 +303,8 @@ const CalibrationProfileManagementModal: React.FC<CalibrationProfileManagementMo
                                         placeholder={
                                             saveTarget === 'new'
                                                 ? 'e.g. Production calibration'
-                                                : sortedProfiles.find((p) => p.id === saveTarget)
-                                                      ?.name ?? ''
+                                                : (sortedProfiles.find((p) => p.id === saveTarget)
+                                                      ?.name ?? '')
                                         }
                                         className="w-full rounded-md border border-amber-500/30 bg-gray-900/60 px-3 py-2 text-sm text-gray-100"
                                     />

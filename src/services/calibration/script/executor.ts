@@ -237,7 +237,15 @@ export class CalibrationExecutor {
      */
     async run(scriptFactory: CalibrationScriptFactory): Promise<void> {
         const script = scriptFactory(this.config);
-        await this.driveGenerator(script);
+        try {
+            await this.driveGenerator(script);
+        } catch (error) {
+            if (error instanceof ExecutorAbortError) {
+                this.updateState({ phase: 'aborted', activeTile: null, error: null });
+                return;
+            }
+            throw error;
+        }
     }
 
     /**
@@ -460,16 +468,25 @@ export class CalibrationExecutor {
                     : ['retry', 'abort'];
 
                 // Present decision to user
-                const decisionResult = await this.executeAwaitDecision({
-                    type: 'AWAIT_DECISION',
-                    kind: 'command-failure',
-                    tile: tileContext,
-                    error: `${command.type} failed: ${errorMessage}`,
-                    options,
-                });
-
-                const decision =
-                    decisionResult.type === 'AWAIT_DECISION' ? decisionResult.decision : 'abort';
+                let decision: DecisionOption;
+                try {
+                    const decisionResult = await this.executeAwaitDecision({
+                        type: 'AWAIT_DECISION',
+                        kind: 'command-failure',
+                        tile: tileContext,
+                        error: `${command.type} failed: ${errorMessage}`,
+                        options,
+                    });
+                    decision =
+                        decisionResult.type === 'AWAIT_DECISION'
+                            ? decisionResult.decision
+                            : 'abort';
+                } catch (error) {
+                    if (error instanceof ExecutorAbortError) {
+                        return 'abort';
+                    }
+                    throw error;
+                }
 
                 if (decision === 'retry') {
                     // Loop will retry
@@ -540,16 +557,23 @@ export class CalibrationExecutor {
             }
 
             // Homing failed during recovery - ask user what to do
-            const decisionResult = await this.executeAwaitDecision({
-                type: 'AWAIT_DECISION',
-                kind: 'command-failure',
-                tile: tileContext,
-                error: `Home during recovery failed: ${errorMessage}`,
-                options: ['retry', 'skip', 'abort'],
-            });
-
-            const decision =
-                decisionResult.type === 'AWAIT_DECISION' ? decisionResult.decision : 'abort';
+            let decision: DecisionOption;
+            try {
+                const decisionResult = await this.executeAwaitDecision({
+                    type: 'AWAIT_DECISION',
+                    kind: 'command-failure',
+                    tile: tileContext,
+                    error: `Home during recovery failed: ${errorMessage}`,
+                    options: ['retry', 'skip', 'abort'],
+                });
+                decision =
+                    decisionResult.type === 'AWAIT_DECISION' ? decisionResult.decision : 'abort';
+            } catch (decisionError) {
+                if (decisionError instanceof ExecutorAbortError) {
+                    return 'abort';
+                }
+                throw decisionError;
+            }
 
             if (decision === 'retry') {
                 // Recursively retry the home recovery
