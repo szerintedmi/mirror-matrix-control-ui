@@ -142,10 +142,10 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                 <div className="flex flex-1 items-center justify-end gap-3">
                     {showProfileSelector && onOpenProfileManagement && (
                         <>
+                            <GlobalMoveDropdown gridSize={gridSize} mirrorConfig={mirrorConfig} />
                             <CalibrationProfileDropdown
                                 onOpenManagement={onOpenProfileManagement}
                             />
-                            <GlobalMoveDropdown gridSize={gridSize} mirrorConfig={mirrorConfig} />
                         </>
                     )}
                     <button
@@ -163,7 +163,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
                                 offline ? 'bg-red-400' : 'bg-emerald-400'
                             } ${state.status === 'reconnecting' ? 'animate-pulse' : ''}`}
                         />
-                        <span className="max-w-[9rem] truncate text-sm text-inherit">
+                        <span className="hidden max-w-[9rem] truncate text-sm text-inherit sm:inline">
                             {connectionLabel}
                         </span>
                     </button>

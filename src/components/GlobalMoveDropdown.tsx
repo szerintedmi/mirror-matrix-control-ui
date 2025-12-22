@@ -350,7 +350,7 @@ const GlobalMoveDropdown: React.FC<GlobalMoveDropdownProps> = ({ gridSize, mirro
                         d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
                     />
                 </svg>
-                Move
+                <span className="hidden sm:inline">Move</span>
                 <svg
                     className={`size-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                     fill="none"

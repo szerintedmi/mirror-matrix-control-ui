@@ -1,10 +1,7 @@
-import React, { useCallback, useId, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { DRAFT_PROFILE_ID } from '@/services/draftProfileService';
-
-const MANAGE_ACTION_VALUE = '__manage__';
-const SAVE_DRAFT_ACTION_VALUE = '__save_draft__';
 
 interface CalibrationProfileDropdownProps {
     onOpenManagement: () => void;
@@ -15,7 +12,8 @@ const CalibrationProfileDropdown: React.FC<CalibrationProfileDropdownProps> = ({
     onOpenManagement,
     className = '',
 }) => {
-    const selectId = useId();
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
     const { savedProfiles, draftProfile, selectedProfileId, selectProfile } =
         useCalibrationContext();
 
@@ -30,86 +28,172 @@ const CalibrationProfileDropdown: React.FC<CalibrationProfileDropdownProps> = ({
         return saved?.name ?? 'No profile';
     }, [draftProfile, savedProfiles, selectedProfileId]);
 
-    const handleChange = useCallback(
-        (event: React.ChangeEvent<HTMLSelectElement>) => {
-            const value = event.target.value;
-            if (value === MANAGE_ACTION_VALUE || value === SAVE_DRAFT_ACTION_VALUE) {
-                // Reset dropdown to previous value
-                event.target.value = selectedProfileId ?? '';
-                onOpenManagement();
-            } else {
-                selectProfile(value);
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
             }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleSelectProfile = useCallback(
+        (profileId: string) => {
+            selectProfile(profileId);
+            setIsOpen(false);
         },
-        [onOpenManagement, selectProfile, selectedProfileId],
+        [selectProfile],
     );
 
-    const resolvedValue = useMemo(() => {
-        if (!hasProfiles) {
-            return '';
-        }
-        // Check if selectedProfileId matches a profile
-        if (draftProfile && selectedProfileId === draftProfile.id) {
-            return draftProfile.id;
-        }
-        if (savedProfiles.some((p) => p.id === selectedProfileId)) {
-            return selectedProfileId ?? '';
-        }
-        return '';
-    }, [draftProfile, hasProfiles, savedProfiles, selectedProfileId]);
+    const handleManage = useCallback(() => {
+        setIsOpen(false);
+        onOpenManagement();
+    }, [onOpenManagement]);
 
     return (
-        <div className={`flex items-center gap-2 ${className}`}>
-            <label htmlFor={selectId} className="hidden text-xs text-gray-400 sm:block">
-                Profile:
-            </label>
-            <div className="relative">
-                <select
-                    id={selectId}
-                    className={`appearance-none rounded-md border px-3 py-1.5 pr-8 text-xs font-medium transition ${
-                        isDraftSelected
-                            ? 'border-amber-500/40 bg-amber-900/30 text-amber-200'
-                            : 'border-gray-700 bg-gray-900/60 text-gray-200'
-                    } ${hasProfiles ? 'hover:border-gray-500' : 'cursor-not-allowed opacity-50'}`}
-                    value={resolvedValue}
-                    onChange={handleChange}
-                    disabled={!hasProfiles}
-                    title={selectedName}
+        <div className={`relative ${className}`} ref={dropdownRef}>
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                disabled={!hasProfiles}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                    isDraftSelected
+                        ? 'border-amber-500/40 bg-amber-900/30 text-amber-200 hover:bg-amber-900/50'
+                        : 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
+                } ${!hasProfiles ? 'cursor-not-allowed opacity-50' : ''}`}
+                title={selectedName}
+            >
+                {/* Calibration icon */}
+                <svg
+                    className="size-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
                 >
-                    {!hasProfiles && <option value="">No profiles</option>}
+                    <circle cx="12" cy="12" r="6" />
+                    <path d="M12 3v2" strokeLinecap="round" />
+                    <path d="M12 19v2" strokeLinecap="round" />
+                    <path d="M3 12h2" strokeLinecap="round" />
+                    <path d="M19 12h2" strokeLinecap="round" />
+                    <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+                </svg>
+                <span className="hidden max-w-[8rem] truncate sm:inline">{selectedName}</span>
+                <svg
+                    className={`size-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                    />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full right-0 z-50 mt-1 min-w-[180px] rounded-md border border-gray-700 bg-gray-900 py-1 shadow-lg">
+                    {/* Drafts section */}
                     {draftProfile && (
-                        <optgroup label="Drafts">
-                            <option value={draftProfile.id}>{draftProfile.name}*</option>
-                            <option value={SAVE_DRAFT_ACTION_VALUE}>Save Draft...</option>
-                        </optgroup>
+                        <>
+                            <div className="px-3 py-1 text-[10px] font-semibold tracking-wide text-gray-500 uppercase">
+                                Drafts
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleSelectProfile(draftProfile.id)}
+                                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-gray-800 ${
+                                    selectedProfileId === draftProfile.id
+                                        ? 'text-amber-200'
+                                        : 'text-gray-200'
+                                }`}
+                            >
+                                <span
+                                    className={`size-2 rounded-full ${
+                                        selectedProfileId === draftProfile.id
+                                            ? 'bg-amber-500'
+                                            : 'bg-gray-600'
+                                    }`}
+                                />
+                                {draftProfile.name}*
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleManage}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-400 transition hover:bg-gray-800 hover:text-gray-200"
+                            >
+                                <span className="size-2" />
+                                Save Draft...
+                            </button>
+                        </>
                     )}
+
+                    {/* Saved profiles section */}
                     {savedProfiles.length > 0 && (
-                        <optgroup label="Saved">
+                        <>
+                            {draftProfile && <div className="my-1 border-t border-gray-700" />}
+                            <div className="px-3 py-1 text-[10px] font-semibold tracking-wide text-gray-500 uppercase">
+                                Saved
+                            </div>
                             {savedProfiles.map((profile) => (
-                                <option key={profile.id} value={profile.id}>
+                                <button
+                                    key={profile.id}
+                                    type="button"
+                                    onClick={() => handleSelectProfile(profile.id)}
+                                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-gray-800 ${
+                                        selectedProfileId === profile.id
+                                            ? 'text-emerald-200'
+                                            : 'text-gray-200'
+                                    }`}
+                                >
+                                    <span
+                                        className={`size-2 rounded-full ${
+                                            selectedProfileId === profile.id
+                                                ? 'bg-emerald-500'
+                                                : 'bg-gray-600'
+                                        }`}
+                                    />
                                     {profile.name}
-                                </option>
+                                </button>
                             ))}
-                        </optgroup>
+                        </>
                     )}
-                    <option value={MANAGE_ACTION_VALUE}>Manage...</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                    <svg
-                        className="size-4 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+
+                    {/* Manage action */}
+                    <div className="my-1 border-t border-gray-700" />
+                    <button
+                        type="button"
+                        onClick={handleManage}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-gray-800"
                     >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                        />
-                    </svg>
+                        <svg
+                            className="size-4 text-gray-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                            />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                        </svg>
+                        Manage...
+                    </button>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
