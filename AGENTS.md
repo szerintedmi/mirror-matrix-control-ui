@@ -1,28 +1,31 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Structure
 
-- All application code sits in `src/`.
-  - `src/App.tsx` orchestrates navigation and shared state.
-  - Route-level views live in `src/pages/` (`ConfiguratorPage.tsx`, `PatternEditorPage.tsx`, `SimulationPage.tsx`, `PatternLibraryPage.tsx`).
-  - Reusable UI primitives belong in `src/components/` (`MirrorGrid.tsx`, `GridConfigurator.tsx`, etc.).
-- Keep API shims inside `src/services/`—`mockApi.ts` is the current placeholder.
-- Shared types go in `src/types.ts`.
-- Update presets in `metadata.json` when needed.
-- Configuration is centralized in `vite.config.ts` and `tsconfig.json`.
-- Primary framework: React. Vue can be introduced later, but is not configured yet. If/when introducing Vue makes sense suggest it.
-- Install: `bun install`
+See [CLAUDE.md](CLAUDE.md) for the complete directory map and architecture overview.
+
+Key entry points:
+
+- `src/App.tsx` - Root component with page routing and context providers
+- `src/pages/` - Top-level page components
+- `src/components/` - Reusable UI components (organized by domain)
+- `src/services/` - Business logic, storage, and MQTT communication
+- `src/hooks/` - React hooks for state management and side effects
+- `src/context/` - React context providers for global state
+
+Configuration: `vite.config.ts`, `tsconfig.json`, `eslint.config.js`, `prettier.config.cjs`
 
 ## Build, Test, and Development Commands
 
+- Install: `bun install`
+- Dev server: `bun dev` (port 3000, TypeScript errors shown in-browser via `vite-plugin-checker`)
 - Run `bun run format` / `bun run format:fix` → Prettier checks after changes in markdown files and other non code files.
 - Run all these after changes in code or configuration:
   - `bun run build` → builds with Vite. A `prebuild` hook runs `tsc --noEmit` to fail on type errors.
   - `bun run test` → Vitest unit tests.
   - `bun run lint` / `bun run lint:fix` → ESLint checks and safe autofixes.
   - `bun run format` / `bun run format:fix` → Prettier checks and safe autofixes.
-- Your should resolve any errors and warnings from the above pre-checks before hand-off.
-- Dev server error overlay: TypeScript errors are shown in-browser via `vite-plugin-checker`.
+- Resolve any errors and warnings from the above pre-checks before hand-off.
 
 ## Working Practices
 
@@ -104,20 +107,22 @@ You proceed to next step without user input unless you miss information to proce
 
 ## Testing Guidelines
 
-- Tooling: Vitest + JSDOM.
+- Tooling: Vitest + JSDOM for unit tests, Playwright for E2E.
 - Commands:
   - `bun run test` → single run.
   - `bun run test:watch` → watch mode during development.
+  - `bun run test:e2e` → Playwright E2E tests.
+  - `bun run test:e2e:ui` → Playwright UI mode for debugging.
 - Requirements:
   - Run the full suite before every commit or review request.
   - Document test results in hand-off notes.
   - Add/adjust specs for every new feature or change to existing behavior.
-- Structure: place tests alongside their implementation (`App.test.tsx` next to `App.tsx`); avoid shared `__tests__` folders or repo-root specs.
+- Structure: unit tests in `__tests__/` directories adjacent to source; E2E tests in `e2e/` directory.
 - Coverage: keep trending toward ≥80%.
 
 ## OpenCV / Blob Detection
 
-- The calibration worker (`public/opencv-classic-worker.js`) always runs the same pre-processing pipeline (RGBA → grayscale → CLAHE) and then tries to use OpenCV’s `SimpleBlobDetector`. If the native WASM detector is missing or fails we fall back to the JS implementation in `public/simple-blob-detector.js`.
+- The calibration worker (`public/opencv-classic-worker.js`) always runs the same pre-processing pipeline (RGBA → grayscale → CLAHE) and then tries to use OpenCV's `SimpleBlobDetector`. If the native WASM detector is missing or fails we fall back to the JS implementation in `public/simple-blob-detector.js`.
 - We host both `public/opencv.js` (from `@techstark/opencv-js`) and a custom `public/opencv_js.wasm` build that actually contains `SimpleBlobDetector`. The worker prefers the WASM detector whenever `cv.SimpleBlobDetector` exists; otherwise it sticks to the JS fallback, so keep both assets in sync when touching blob detection logic.
 
 ## Commit & Pull Request Guidelines
