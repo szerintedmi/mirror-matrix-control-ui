@@ -15,6 +15,19 @@ import type { TileAddress } from '@/services/calibration/types';
 import type { CalibrationRunSummary, TileRunState } from '@/services/calibration/types';
 import type { Motor, MotorTelemetry } from '@/types';
 
+const gridViewOptions = [
+    {
+        id: 'mirror' as const,
+        label: 'Mirror view',
+        helper: 'Physical mirror layout • [0,0] is top-right when you face the array.',
+    },
+    {
+        id: 'projection' as const,
+        label: 'Projection view',
+        helper: 'Wall projection layout • [0,0] is top-left when you face the wall.',
+    },
+];
+
 /** Render steps-since-home warning icon if motor has drifted */
 const StepsWarningIcon: React.FC<{ telemetry?: MotorTelemetry; className?: string }> = ({
     telemetry,
@@ -73,6 +86,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
 }) => {
     const [debugTileKey, setDebugTileKey] = useState<string | null>(null);
     const [hoveredTileKey, setHoveredTileKey] = useState<string | null>(null);
+    const [gridViewMode, setGridViewMode] = useState<'mirror' | 'projection'>('projection');
 
     const debugTileEntry = useMemo(() => {
         if (!debugTileKey) {
@@ -225,10 +239,28 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                     </svg>
                 }
             >
+                {/* View mode switcher */}
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2 text-xs text-gray-400">
+                    <p>{gridViewOptions.find((option) => option.id === gridViewMode)?.helper}</p>
+                    <div className="inline-flex rounded-full border border-gray-700 bg-gray-900/60 p-1 text-sm">
+                        {gridViewOptions.map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => setGridViewMode(option.id)}
+                                className={`rounded-full px-3 py-1 font-medium transition-colors ${gridViewMode === option.id ? 'bg-emerald-500/30 text-emerald-200' : 'text-gray-300 hover:text-gray-100'}`}
+                                aria-pressed={gridViewMode === option.id}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 <div
                     className="grid gap-2"
                     style={{
                         gridTemplateColumns: `repeat(${Math.max(gridColumnCount, 1)}, minmax(0, 1fr))`,
+                        direction: gridViewMode === 'mirror' ? 'rtl' : 'ltr',
                     }}
                 >
                     {tileEntries.map((entry) => {
@@ -243,6 +275,7 @@ const TileStatusesPanel: React.FC<TileStatusesPanelProps> = ({
                                 key={entry.tile.key}
                                 role="button"
                                 tabIndex={0}
+                                dir="ltr"
                                 aria-label={`Inspect calibration metrics for tile [${entry.tile.row},${entry.tile.col}]${isOutlier ? ' (outlier)' : ''}`}
                                 onClick={(event) => handleTileCardClick(event, entry.tile.key)}
                                 onKeyDown={(event) => handleTileCardKeyDown(event, entry.tile.key)}
