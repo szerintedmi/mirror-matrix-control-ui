@@ -1,0 +1,1847 @@
+<div class="flex min-h-0 min-w-[500px] flex-1 flex-col gap-2">
+    <div class="flex min-h-0 flex-1 flex-col gap-2">
+        <div class="flex-none rounded-md bg-gray-900/60 px-4 py-2">
+            <div class="flex flex-col gap-3 text-xs">
+                <div class="flex flex-wrap items-center gap-3 font-semibold text-gray-200">
+                    <span class="tracking-wide text-gray-400 uppercase">Mode</span>
+                    <div
+                        class="inline-flex rounded-md bg-gray-800/70 p-1"
+                        title="Press Space to toggle modes"
+                    >
+                        <button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 bg-cyan-600 text-white"
+                            aria-pressed="true"
+                            title="Placement mode (P) • Space to toggle"
+                        >
+                            Placement (P)</button
+                        ><button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                            aria-pressed="false"
+                            title="Erase mode (E) • Space to toggle"
+                        >
+                            Erase (E)
+                        </button>
+                    </div>
+                    <button
+                        type="button"
+                        aria-pressed="true"
+                        class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 bg-cyan-600 text-white"
+                        title="Toggle calibration tile bounds overlay"
+                    >
+                        Show Bounds</button
+                    ><span class="ml-auto text-xs tabular-nums text-gray-400">36 / 36 spots</span>
+                </div>
+                <div
+                    class="flex flex-wrap items-center gap-4 rounded-md border border-gray-700/50 bg-gray-800/30 p-2 text-xs"
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">Shift</span>
+                        <div class="flex gap-0.5">
+                            <button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Shift up"
+                                title="Shift up"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
+                                        clip-rule="evenodd"
+                                    ></path>
+                                </svg></button
+                            ><button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Shift down"
+                                title="Shift down"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
+                                        clip-rule="evenodd"
+                                    ></path>
+                                </svg></button
+                            ><button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Shift left"
+                                title="Shift left"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z"
+                                        clip-rule="evenodd"
+                                    ></path>
+                                </svg></button
+                            ><button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Shift right"
+                                title="Shift right"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"
+                                        clip-rule="evenodd"
+                                    ></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <input
+                            inputmode="decimal"
+                            class="w-16 rounded border border-gray-600 bg-gray-700 px-1.5 py-0.5 text-center text-xs text-gray-100 focus:border-cyan-500 focus:outline-none"
+                            title="Shift step size"
+                            type="text"
+                            value="0.01"
+                        />
+                    </div>
+                    <div class="h-6 w-px bg-gray-600"></div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">Scale</span>
+                        <div class="flex gap-0.5">
+                            <button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Scale down"
+                                title="Scale down (uniform)"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        d="M4 10a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 10z"
+                                    ></path>
+                                </svg></button
+                            ><button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Scale up"
+                                title="Scale up (uniform)"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"
+                                    ></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                            title="Toggle independent X/Y scaling"
+                        >
+                            X/Y</button
+                        ><input
+                            inputmode="decimal"
+                            class="w-14 rounded border border-gray-600 bg-gray-700 px-1.5 py-0.5 text-center text-xs text-gray-100 focus:border-cyan-500 focus:outline-none"
+                            title="Scale step (e.g., 0.1 = 10%)"
+                            type="text"
+                            value="0.01"
+                        />
+                    </div>
+                    <div class="h-6 w-px bg-gray-600"></div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">Rotate</span>
+                        <div class="flex gap-0.5">
+                            <button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Rotate counter-clockwise"
+                                title="Rotate counter-clockwise"
+                            >
+                                <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-9.172-6.313a.75.75 0 01.75-.75h4.243a.75.75 0 010 1.5H8.703l.311.31a5.5 5.5 0 019.201 2.467.75.75 0 001.449-.39A7 7 0 007.952 5.11l-.31-.31v2.432a.75.75 0 01-1.5 0V3.361z"
+                                        clip-rule="evenodd"
+                                    ></path>
+                                </svg></button
+                            ><button
+                                type="button"
+                                class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                                aria-label="Rotate clockwise"
+                                title="Rotate clockwise"
+                            >
+                                <svg
+                                    class="size-3.5"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                    style="transform: scaleX(-1)"
+                                >
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-9.172-6.313a.75.75 0 01.75-.75h4.243a.75.75 0 010 1.5H8.703l.311.31a5.5 5.5 0 019.201 2.467.75.75 0 001.449-.39A7 7 0 007.952 5.11l-.31-.31v2.432a.75.75 0 01-1.5 0V3.361z"
+                                        clip-rule="evenodd"
+                                    ></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <input
+                            inputmode="decimal"
+                            class="w-14 rounded border border-gray-600 bg-gray-700 px-1.5 py-0.5 text-center text-xs text-gray-100 focus:border-cyan-500 focus:outline-none"
+                            title="Rotation angle in degrees"
+                            type="text"
+                            value="15"
+                        /><span class="text-gray-500">deg</span>
+                    </div>
+                    <div class="h-6 w-px bg-gray-600"></div>
+                    <div class="flex items-center gap-0.5">
+                        <button
+                            type="button"
+                            disabled=""
+                            class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                            aria-label="Undo"
+                            title="Undo (Cmd+Z)"
+                        >
+                            <svg class="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path
+                                    fill-rule="evenodd"
+                                    d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z"
+                                    clip-rule="evenodd"
+                                ></path>
+                            </svg></button
+                        ><button
+                            type="button"
+                            disabled=""
+                            class="rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                            aria-label="Redo"
+                            title="Redo (Cmd+Shift+Z)"
+                        >
+                            <svg
+                                class="size-3.5"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                                style="transform: scaleX(-1)"
+                            >
+                                <path
+                                    fill-rule="evenodd"
+                                    d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z"
+                                    clip-rule="evenodd"
+                                ></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex min-h-0 flex-1 items-start justify-start">
+            <div
+                class="max-h-full max-w-full overflow-hidden rounded-md bg-gray-900/60"
+                style="aspect-ratio: 1.0434 / 1"
+            >
+                <div class="relative flex size-full items-start justify-start">
+                    <div class="size-full select-none cursor-crosshair" role="presentation">
+                        <svg
+                            viewBox="0.19731922764594934 0.21403911687963 0.5925787735311051 0.5679326240612508"
+                            preserveAspectRatio="xMinYMin meet"
+                            class="size-full"
+                        >
+                            <defs>
+                                <filter
+                                    id="_r_1_"
+                                    x="0"
+                                    y="0"
+                                    width="100%"
+                                    height="100%"
+                                    filterUnits="objectBoundingBox"
+                                    color-interpolation-filters="sRGB"
+                                >
+                                    <feComponentTransfer>
+                                        <feFuncR type="identity"></feFuncR>
+                                        <feFuncG type="identity"></feFuncG>
+                                        <feFuncB type="identity"></feFuncB>
+                                        <feFuncA
+                                            type="linear"
+                                            slope="1.5149602562145086"
+                                            intercept="0"
+                                        ></feFuncA>
+                                    </feComponentTransfer>
+                                </filter>
+                            </defs>
+                            <rect x="0" y="0" width="1" height="1" fill="rgb(15,23,42)"></rect>
+                            <line
+                                x1="0"
+                                y1="0.5"
+                                x2="1"
+                                y2="0.5"
+                                stroke="rgba(148, 163, 184, 0.25)"
+                                stroke-width="0.0008518989360918762"
+                            ></line>
+                            <line
+                                x1="0.5"
+                                y1="0"
+                                x2="0.5"
+                                y2="1"
+                                stroke="rgba(148, 163, 184, 0.25)"
+                                stroke-width="0.0008518989360918762"
+                            ></line>
+                            <g filter="url(#_r_1_)">
+                                <rect
+                                    x="0.3824438336267497"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.36928731858041347"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.39505216054615533"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.40875686371942216"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.4213651906388277"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.43506989381209465"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.44822640885843085"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.46138292390476704"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.4750876270780339"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.4887923302513009"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.5288100635172404"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.5425147666905072"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.5553827697534914"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.3550102013667195"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.34219320980483553"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.32937621824295155"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.5674060615350823"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.5802230530969661"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.5927558489032184"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6048245540406904"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.3179185182726077"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.3042040806163897"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6168643188847776"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6279241501918471"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.29198177423961286"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.278848224562468"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.26433219597193947"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6382927420422246"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6521175311760613"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.24185062207486235"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6755919144047634"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.22425462644281774"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.4959563063366416"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6982501102911245"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.6675353442456794"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                                <rect
+                                    x="0.7202934759887752"
+                                    y="0.4786654368042946"
+                                    width="0.04266912639141083"
+                                    height="0.04266912639141083"
+                                    fill="#f8fafc"
+                                    fill-opacity="0.14285714285714285"
+                                    pointer-events="none"
+                                ></rect>
+                            </g>
+                            <rect
+                                data-point-id="pt-min8kog2-voaem5"
+                                x="0.3824438336267497"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8kuro-yky3u1"
+                                x="0.36928731858041347"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8leak-3whber"
+                                x="0.39505216054615533"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8llyc-v4n80w"
+                                x="0.40875686371942216"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8lneh-k0bnko"
+                                x="0.4213651906388277"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8lx6o-256col"
+                                x="0.43506989381209465"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8lz5i-yy86vr"
+                                x="0.44822640885843085"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8m1vi-edk8nd"
+                                x="0.46138292390476704"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8mb60-hd68vw"
+                                x="0.4750876270780339"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8mcot-7hctk9"
+                                x="0.4887923302513009"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8mm29-ewcser"
+                                x="0.5288100635172404"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-min8mquc-4u0g72"
+                                x="0.5425147666905072"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mindbjnj-uyzubn"
+                                x="0.5553827697534914"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-miw643s5-222h9n"
+                                x="0.3550102013667195"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-miw646qh-krj7yp"
+                                x="0.34219320980483553"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-miw648mv-1qgmm6"
+                                x="0.32937621824295155"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-miw64dlh-v376m8"
+                                x="0.5674060615350823"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-miw64fxt-4n9e2s"
+                                x="0.5802230530969661"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mix35lv5-jta4hp"
+                                x="0.5927558489032184"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mix35nya-attigm"
+                                x="0.6048245540406904"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mix35q3v-x7gdnz"
+                                x="0.3179185182726077"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mix35s96-u1xylj"
+                                x="0.3042040806163897"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vj28v-u27rep"
+                                x="0.6168643188847776"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vj4dw-nvri44"
+                                x="0.6279241501918471"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vj7rp-iw3r4f"
+                                x="0.29198177423961286"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vj9u1-gpap7b"
+                                x="0.278848224562468"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vjca8-atyjrh"
+                                x="0.26433219597193947"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vjfop-roxi8o"
+                                x="0.6382927420422246"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj0vjj9r-beadar"
+                                x="0.6521175311760613"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj6kewq6-r24nvg"
+                                x="0.24185062207486235"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj6key47-1zqg5w"
+                                x="0.6755919144047634"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj6kf1d9-suycj3"
+                                x="0.22425462644281774"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj6l0b2q-6s6b2i"
+                                x="0.4959563063366416"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj6l0fy1-75iog6"
+                                x="0.6982501102911245"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj6l0jlq-9z1xts"
+                                x="0.6675353442456794"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                data-point-id="pt-mj79skyk-kbemwl"
+                                x="0.7202934759887752"
+                                y="0.4786654368042946"
+                                width="0.04266912639141083"
+                                height="0.04266912639141083"
+                                fill="transparent"
+                                stroke="rgba(148, 163, 184, 0.35)"
+                                stroke-width="0.002271730496245003"
+                            ></rect>
+                            <rect
+                                x="0.2577375829219818"
+                                y="0.2626441538333893"
+                                width="0.2987691402435303"
+                                height="0.2935058712959289"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.29653313755989064"
+                                y="0.2713555932044983"
+                                width="0.30391129255294813"
+                                height="0.2936738967895508"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3379535377025603"
+                                y="0.26747028827667235"
+                                width="0.2893803358078004"
+                                height="0.2830916166305542"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.38703548312187197"
+                                y="0.2817463457584381"
+                                width="0.29344444274902337"
+                                height="0.29296180009841927"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3577271640300751"
+                                y="0.2409745156764984"
+                                width="0.30178000926971427"
+                                height="0.29600189924240106"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.4262116134166717"
+                                y="0.2685508251190185"
+                                width="0.3022303581237793"
+                                height="0.28444426059722905"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.2540410220623016"
+                                y="0.29750360250473024"
+                                width="0.31789114475250246"
+                                height="0.28028726577758784"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3000790894031524"
+                                y="0.306434428691864"
+                                width="0.3088764071464539"
+                                height="0.29689235687255866"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.32409819960594166"
+                                y="0.3042068600654602"
+                                width="0.3059698581695558"
+                                height="0.2937040328979493"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3695915400981903"
+                                y="0.2961777567863464"
+                                width="0.2940663576126099"
+                                height="0.29366807937622086"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.37151657938957205"
+                                y="0.282515287399292"
+                                width="0.29087278842926034"
+                                height="0.2953620195388794"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.43409232497215255"
+                                y="0.2869069576263428"
+                                width="0.3039116382598879"
+                                height="0.3024094343185425"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.2839110791683197"
+                                y="0.36270664930343627"
+                                width="0.30751817226409905"
+                                height="0.28903880119323727"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3307564437389374"
+                                y="0.3467644453048706"
+                                width="0.3093411922454833"
+                                height="0.3010885000228881"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.32905909419059753"
+                                y="0.33724141120910645"
+                                width="0.3155078649520874"
+                                height="0.2919272661209107"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.37387410998344417"
+                                y="0.32368983030319215"
+                                width="0.29572131633758547"
+                                height="0.29090943336486813"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3673761069774627"
+                                y="0.312760329246521"
+                                width="0.3000096797943116"
+                                height="0.31760823726654064"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.4365256249904632"
+                                y="0.335286021232605"
+                                width="0.3036261081695557"
+                                height="0.29124066829681394"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.26263980269432063"
+                                y="0.3750797867774963"
+                                width="0.30782628059387207"
+                                height="0.31841554641723646"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3222050845623017"
+                                y="0.3962529540061951"
+                                width="0.30915677547454823"
+                                height="0.3194449424743653"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3553673446178436"
+                                y="0.3963225245475769"
+                                width="0.31239678859710696"
+                                height="0.31220126152038585"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3631200730800629"
+                                y="0.36582958698272705"
+                                width="0.3090764999389648"
+                                height="0.306528115272522"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3684735476970673"
+                                y="0.35558121204376225"
+                                width="0.30692925453186026"
+                                height="0.3174665212631226"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.4436864078044892"
+                                y="0.3727297902107239"
+                                width="0.3047975540161132"
+                                height="0.2989026546478272"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.24409213066101076"
+                                y="0.40317462682724003"
+                                width="0.3201726257801055"
+                                height="0.3172030448913574"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.2958516776561737"
+                                y="0.39937978982925415"
+                                width="0.31643073558807366"
+                                height="0.3144142150878906"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.31874906420707694"
+                                y="0.3898419618606567"
+                                width="0.3159481048583985"
+                                height="0.32280528545379644"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3725633084774017"
+                                y="0.3976974129676819"
+                                width="0.30410904884338374"
+                                height="0.3120160102844237"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.37678536772727966"
+                                y="0.392675518989563"
+                                width="0.31243622303009033"
+                                height="0.3154755353927613"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.43484298586845394"
+                                y="0.3926517128944397"
+                                width="0.3093390464782715"
+                                height="0.3078764915466309"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.24907587170600898"
+                                y="0.4308855414390564"
+                                width="0.3177785038948058"
+                                height="0.3189030647277831"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.28618777394294737"
+                                y="0.4243702530860901"
+                                width="0.31765686273574834"
+                                height="0.32487564086914056"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.34151851534843447"
+                                y="0.4355969786643982"
+                                width="0.3133846998214721"
+                                height="0.31943936347961427"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3673480451107025"
+                                y="0.4190477013587952"
+                                width="0.3053879022598266"
+                                height="0.3163241863250732"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.3774204194545745"
+                                y="0.42878996133804326"
+                                width="0.3082069158554078"
+                                height="0.31653356552124023"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                            <rect
+                                x="0.4227328479290008"
+                                y="0.4221310019493103"
+                                width="0.3065782546997071"
+                                height="0.3137993812561035"
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.45)"
+                                stroke-width="0.0004543460992490006"
+                                pointer-events="none"
+                            ></rect>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex-none" style="">
+        <section
+            class="rounded-lg bg-gray-900/70 p-4 text-sm text-gray-200 shadow-lg ring-1 ring-white/10"
+        >
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-100">Debug View</h3>
+                    <span class="text-xs tracking-wide text-gray-500 uppercase"
+                        >Normalized Coordinates</span
+                    >
+                </div>
+                <p class="text-xs text-gray-500">Range: -1.000 – 1.000 on both axes.</p>
+                <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="rounded-md bg-gray-800/60 p-3">
+                        <dt class="text-xs tracking-wide text-gray-400 uppercase">Mode</dt>
+                        <dd class="font-mono text-sm text-gray-100">Placement</dd>
+                    </div>
+                    <div class="rounded-md bg-gray-800/60 p-3">
+                        <dt class="text-xs tracking-wide text-gray-400 uppercase">Blob Radius</dt>
+                        <dd class="font-mono text-sm text-gray-100">0.043</dd>
+                    </div>
+                </dl>
+                <dl class="grid grid-cols-1 gap-3">
+                    <div class="rounded-md bg-gray-800/60 p-3">
+                        <dt class="text-xs tracking-wide text-gray-400 uppercase">Pointer</dt>
+                        <dd class="min-w-[200px] font-mono text-sm text-gray-100">—</dd>
+                    </div>
+                </dl>
+                <details class="rounded-md bg-gray-800/60 p-3">
+                    <summary class="cursor-pointer text-sm font-semibold text-gray-100">
+                        Blobs (36)
+                    </summary>
+                    <ul class="mt-2 space-y-1 text-xs text-gray-200">
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#1</span><span>x: -0.192</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#2</span><span>x: -0.219</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#3</span><span>x: -0.167</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#4</span><span>x: -0.140</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#5</span><span>x: -0.115</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#6</span><span>x: -0.087</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#7</span><span>x: -0.061</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#8</span><span>x: -0.035</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#9</span><span>x: -0.007</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#10</span><span>x: 0.020</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#11</span><span>x: 0.100</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#12</span><span>x: 0.128</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#13</span><span>x: 0.153</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#14</span><span>x: -0.247</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#15</span><span>x: -0.273</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#16</span><span>x: -0.299</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#17</span><span>x: 0.177</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#18</span><span>x: 0.203</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#19</span><span>x: 0.228</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#20</span><span>x: 0.252</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#21</span><span>x: -0.321</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#22</span><span>x: -0.349</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#23</span><span>x: 0.276</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#24</span><span>x: 0.299</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#25</span><span>x: -0.373</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#26</span><span>x: -0.400</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#27</span><span>x: -0.429</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#28</span><span>x: 0.319</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#29</span><span>x: 0.347</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#30</span><span>x: -0.474</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#31</span><span>x: 0.394</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#32</span><span>x: -0.509</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#33</span><span>x: 0.035</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#34</span><span>x: 0.439</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#35</span><span>x: 0.378</span
+                            ><span>y: 0.000</span>
+                        </li>
+                        <li
+                            class="flex flex-wrap items-center gap-3 rounded bg-gray-900/40 px-2 py-1 font-mono"
+                        >
+                            <span class="text-gray-400">#36</span><span>x: 0.483</span
+                            ><span>y: 0.000</span>
+                        </li>
+                    </ul>
+                </details>
+                <details class="rounded-md bg-gray-800/60 p-3">
+                    <summary class="cursor-pointer text-sm font-semibold text-gray-100">
+                        Calibration Tiles (36)
+                    </summary>
+                    <div class="mt-2 space-y-2">
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 0-0</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.485</span><span>x max: 0.113</span
+                                ><span>y min: -0.475</span><span>y max: 0.112</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 0-1</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.407</span><span>x max: 0.201</span
+                                ><span>y min: -0.457</span><span>y max: 0.130</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 0-2</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.324</span><span>x max: 0.255</span
+                                ><span>y min: -0.465</span><span>y max: 0.101</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 0-3</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.226</span><span>x max: 0.361</span
+                                ><span>y min: -0.437</span><span>y max: 0.149</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 0-4</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.285</span><span>x max: 0.319</span
+                                ><span>y min: -0.518</span><span>y max: 0.074</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 0-5</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.148</span><span>x max: 0.457</span
+                                ><span>y min: -0.463</span><span>y max: 0.106</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 1-0</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.492</span><span>x max: 0.144</span
+                                ><span>y min: -0.405</span><span>y max: 0.156</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 1-1</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.400</span><span>x max: 0.218</span
+                                ><span>y min: -0.387</span><span>y max: 0.207</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 1-2</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.352</span><span>x max: 0.260</span
+                                ><span>y min: -0.392</span><span>y max: 0.196</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 1-3</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.261</span><span>x max: 0.327</span
+                                ><span>y min: -0.408</span><span>y max: 0.180</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 1-4</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.257</span><span>x max: 0.325</span
+                                ><span>y min: -0.435</span><span>y max: 0.156</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 1-5</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.132</span><span>x max: 0.476</span
+                                ><span>y min: -0.426</span><span>y max: 0.179</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 2-0</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.432</span><span>x max: 0.183</span
+                                ><span>y min: -0.275</span><span>y max: 0.303</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 2-1</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.338</span><span>x max: 0.280</span
+                                ><span>y min: -0.306</span><span>y max: 0.296</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 2-2</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.342</span><span>x max: 0.289</span
+                                ><span>y min: -0.326</span><span>y max: 0.258</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 2-3</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.252</span><span>x max: 0.339</span
+                                ><span>y min: -0.353</span><span>y max: 0.229</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 2-4</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.265</span><span>x max: 0.335</span
+                                ><span>y min: -0.374</span><span>y max: 0.261</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 2-5</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.127</span><span>x max: 0.480</span
+                                ><span>y min: -0.329</span><span>y max: 0.253</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 3-0</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.475</span><span>x max: 0.141</span
+                                ><span>y min: -0.250</span><span>y max: 0.387</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 3-1</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.356</span><span>x max: 0.263</span
+                                ><span>y min: -0.207</span><span>y max: 0.431</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 3-2</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.289</span><span>x max: 0.336</span
+                                ><span>y min: -0.207</span><span>y max: 0.417</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 3-3</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.274</span><span>x max: 0.344</span
+                                ><span>y min: -0.268</span><span>y max: 0.345</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 3-4</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.263</span><span>x max: 0.351</span
+                                ><span>y min: -0.289</span><span>y max: 0.346</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 3-5</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.113</span><span>x max: 0.497</span
+                                ><span>y min: -0.255</span><span>y max: 0.343</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 4-0</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.512</span><span>x max: 0.129</span
+                                ><span>y min: -0.194</span><span>y max: 0.441</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 4-1</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.408</span><span>x max: 0.225</span
+                                ><span>y min: -0.201</span><span>y max: 0.428</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 4-2</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.363</span><span>x max: 0.269</span
+                                ><span>y min: -0.220</span><span>y max: 0.425</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 4-3</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.255</span><span>x max: 0.353</span
+                                ><span>y min: -0.205</span><span>y max: 0.419</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 4-4</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.246</span><span>x max: 0.378</span
+                                ><span>y min: -0.215</span><span>y max: 0.416</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 4-5</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.130</span><span>x max: 0.488</span
+                                ><span>y min: -0.215</span><span>y max: 0.401</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 5-0</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.502</span><span>x max: 0.134</span
+                                ><span>y min: -0.138</span><span>y max: 0.500</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 5-1</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.428</span><span>x max: 0.208</span
+                                ><span>y min: -0.151</span><span>y max: 0.498</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 5-2</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.317</span><span>x max: 0.310</span
+                                ><span>y min: -0.129</span><span>y max: 0.510</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 5-3</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.265</span><span>x max: 0.345</span
+                                ><span>y min: -0.162</span><span>y max: 0.471</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 5-4</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.245</span><span>x max: 0.371</span
+                                ><span>y min: -0.142</span><span>y max: 0.491</span>
+                            </div>
+                        </div>
+                        <div class="rounded bg-gray-900/40 p-2 text-[11px] text-gray-200">
+                            <p class="font-mono text-[11px] text-gray-400">Tile 5-5</p>
+                            <div class="mt-1 grid grid-cols-2 gap-1 font-mono">
+                                <span>x min: -0.155</span><span>x max: 0.459</span
+                                ><span>y min: -0.156</span><span>y max: 0.472</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </section>
+    </div>
+</div>

@@ -13,7 +13,7 @@ import { loadGridState } from '@/services/gridStorage';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import { centeredBoundsToPattern, getSpaceParams } from '@/services/spaceConversion';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
-import { centeredDeltaToView, centeredToView, viewToCentered } from '@/utils/coordinates';
+import { centeredDeltaToView, centeredToView } from '@/utils/coordinates';
 import {
     createHistoryStacks,
     pushHistorySnapshot,
@@ -28,6 +28,13 @@ import {
 } from '@/utils/patternTransforms';
 
 import { calculateMaxOverlapCount } from '../utils/patternOverlaps';
+import {
+    boundsToViewBox,
+    computeAutoZoomBounds,
+    getViewBoxScale,
+    parseViewBox,
+    screenToCentered,
+} from '../utils/patternViewBox';
 
 interface PatternDesignerCanvasProps {
     pattern: Pattern;
@@ -48,6 +55,7 @@ interface PatternDesignerCanvasProps {
     }>;
     invalidPointIds: Set<string>;
     maxOverlapCount: number;
+    viewBox: string;
 }
 
 interface RenameDialogState {
@@ -87,6 +95,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     tileBounds,
     invalidPointIds,
     maxOverlapCount,
+    viewBox,
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const dragStateRef = useRef<{
@@ -96,6 +105,8 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     }>({ activePointId: null, moved: false, suppressNextPointClick: false });
     const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
 
+    const viewBoxScale = getViewBoxScale(viewBox);
+
     const overlapFilterId = useId();
     const baseFillOpacity = maxOverlapCount > 0 ? 1 / maxOverlapCount : 1;
     const maxCompositeAlpha =
@@ -103,19 +114,33 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     const alphaSlope = maxCompositeAlpha > 0 ? 1 / maxCompositeAlpha : 1;
     const normalizedAlphaSlope = Number.isFinite(alphaSlope) ? alphaSlope : 1;
 
+    // Calculate rendered SVG size based on viewBox and container (xMinYMin meet)
+    const getRenderedSvgSize = useCallback(
+        (containerBounds: DOMRect) => {
+            const vb = parseViewBox(viewBox);
+            const scale = Math.min(
+                containerBounds.width / vb.width,
+                containerBounds.height / vb.height,
+            );
+            return {
+                width: vb.width * scale,
+                height: vb.height * scale,
+            };
+        },
+        [viewBox],
+    );
+
     const handleAddPoint = useCallback(
         (event: React.MouseEvent<Element>) => {
             if (!containerRef.current) {
                 return;
             }
             const bounds = containerRef.current.getBoundingClientRect();
-            const size = Math.min(bounds.width, bounds.height);
-            const originX = bounds.left + (bounds.width - size) / 2;
-            const originY = bounds.top + (bounds.height - size) / 2;
-            const viewX = clampUnit((event.clientX - originX) / size);
-            const viewY = clampUnit((event.clientY - originY) / size);
-            const normalizedX = viewToCentered(viewX);
-            const normalizedY = viewToCentered(viewY);
+            const rendered = getRenderedSvgSize(bounds);
+            // With xMinYMin, origin is at top-left
+            const relX = clampUnit((event.clientX - bounds.left) / rendered.width);
+            const relY = clampUnit((event.clientY - bounds.top) / rendered.height);
+            const { x: normalizedX, y: normalizedY } = screenToCentered(relX, relY, viewBox);
             const now = new Date().toISOString();
             const nextPoint: PatternPoint = {
                 id: createPointId(),
@@ -129,7 +154,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
             };
             onChange(nextPattern);
         },
-        [onChange, pattern],
+        [onChange, pattern, viewBox, getRenderedSvgSize],
     );
 
     const handleMouseDownPoint = useCallback(
@@ -169,13 +194,11 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                 return;
             }
             const bounds = containerRef.current.getBoundingClientRect();
-            const size = Math.min(bounds.width, bounds.height);
-            const originX = bounds.left + (bounds.width - size) / 2;
-            const originY = bounds.top + (bounds.height - size) / 2;
-            const viewX = clampUnit((event.clientX - originX) / size);
-            const viewY = clampUnit((event.clientY - originY) / size);
-            const normalizedX = viewToCentered(viewX);
-            const normalizedY = viewToCentered(viewY);
+            const rendered = getRenderedSvgSize(bounds);
+            // With xMinYMin, origin is at top-left
+            const relX = clampUnit((event.clientX - bounds.left) / rendered.width);
+            const relY = clampUnit((event.clientY - bounds.top) / rendered.height);
+            const { x: normalizedX, y: normalizedY } = screenToCentered(relX, relY, viewBox);
             onHoverChange?.({ x: normalizedX, y: normalizedY });
             if (!draggingPointId) {
                 return;
@@ -203,7 +226,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
             };
             onChange(nextPattern);
         },
-        [draggingPointId, onChange, onHoverChange, pattern],
+        [draggingPointId, onChange, onHoverChange, pattern, viewBox, getRenderedSvgSize],
     );
 
     const handleMouseLeave = useCallback(() => {
@@ -269,10 +292,10 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     }, [onHoverPointChange]);
 
     return (
-        <div className="relative flex size-full items-center justify-center bg-gray-900">
+        <div className="relative flex size-full items-start justify-start">
             <div
                 ref={containerRef}
-                className={`aspect-square h-full max-h-full max-w-full select-none ${
+                className={`size-full select-none ${
                     editMode === 'erase' ? 'cursor-pointer' : 'cursor-crosshair'
                 }`}
                 onClick={handleCanvasClick}
@@ -281,7 +304,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                 onMouseLeave={handleMouseLeave}
                 role="presentation"
             >
-                <svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" className="size-full">
+                <svg viewBox={viewBox} preserveAspectRatio="xMinYMin meet" className="size-full">
                     <defs>
                         <filter
                             id={overlapFilterId}
@@ -307,7 +330,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                         x2={1}
                         y2={centeredToView(0)}
                         stroke="rgba(148, 163, 184, 0.25)"
-                        strokeWidth={0.0015}
+                        strokeWidth={0.0015 * viewBoxScale}
                     />
                     <line
                         x1={centeredToView(0)}
@@ -315,7 +338,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                         x2={centeredToView(0)}
                         y2={1}
                         stroke="rgba(148, 163, 184, 0.25)"
-                        strokeWidth={0.0015}
+                        strokeWidth={0.0015 * viewBoxScale}
                     />
                     <g filter={`url(#${overlapFilterId})`}>
                         {pattern.points.map((point) => {
@@ -360,7 +383,9 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                           ? '#ef4444'
                                           : 'rgba(148, 163, 184, 0.35)'
                                 }
-                                strokeWidth={isEraseHover || isInvalid ? 0.006 : 0.004}
+                                strokeWidth={
+                                    (isEraseHover || isInvalid ? 0.006 : 0.004) * viewBoxScale
+                                }
                                 onMouseEnter={() => handlePointMouseEnter(point.id)}
                                 onMouseLeave={handlePointMouseLeave}
                                 onMouseDown={(event) => {
@@ -380,8 +405,8 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                             fill="#22d3ee"
                             fillOpacity={0.3}
                             stroke="#22d3ee"
-                            strokeWidth={0.002}
-                            strokeDasharray="0.01 0.01"
+                            strokeWidth={0.002 * viewBoxScale}
+                            strokeDasharray={`${0.01 * viewBoxScale} ${0.01 * viewBoxScale}`}
                             pointerEvents="none"
                         />
                     )}
@@ -402,7 +427,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                     height={height}
                                     fill="none"
                                     stroke="rgba(250, 204, 21, 0.45)"
-                                    strokeWidth={0.0008}
+                                    strokeWidth={0.0008 * viewBoxScale}
                                     pointerEvents="none"
                                 />
                             );
@@ -450,6 +475,10 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     const [editMode, setEditMode] = useState<PatternEditMode>('placement');
     const [hoveredPatternPointId, setHoveredPatternPointId] = useState<string | null>(null);
     const [renameState, setRenameState] = useState<RenameDialogState | null>(null);
+    const mainColumnRef = useRef<HTMLDivElement | null>(null);
+    const toolbarRef = useRef<HTMLDivElement | null>(null);
+    const debugPanelRef = useRef<HTMLDivElement | null>(null);
+    const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
     // Track which profile IDs we've auto-enabled bounds for to avoid re-triggering
     const autoEnabledBoundsForRef = useRef<Set<string>>(new Set());
@@ -670,6 +699,92 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         return calculateMaxOverlapCount(selectedPattern.points, calibratedBlobRadius);
     }, [selectedPattern, calibratedBlobRadius]);
 
+    // Compute auto-zoom viewBox based on pattern and tile bounds
+    const autoZoomViewBox = useMemo(() => {
+        const bounds = computeAutoZoomBounds(
+            selectedPattern?.points ?? [],
+            calibrationTileBounds,
+            calibratedBlobRadius,
+            0.05, // 5% padding
+        );
+        return boundsToViewBox(bounds);
+    }, [selectedPattern?.points, calibrationTileBounds, calibratedBlobRadius]);
+
+    // Compute aspect ratio from viewBox for container sizing
+    const viewBoxAspectRatio = useMemo(() => {
+        const vb = parseViewBox(autoZoomViewBox);
+        return vb.width / vb.height;
+    }, [autoZoomViewBox]);
+
+    useEffect(() => {
+        const main = mainColumnRef.current;
+        if (!main) {
+            return;
+        }
+
+        const parseGap = () => {
+            if (typeof window === 'undefined') {
+                return 0;
+            }
+            const style = window.getComputedStyle(main);
+            const gapValue = style.rowGap || style.gap || '0px';
+            const parsed = Number.parseFloat(gapValue);
+            return Number.isFinite(parsed) ? parsed : 0;
+        };
+
+        const computeSize = () => {
+            const mainRect = main.getBoundingClientRect();
+            const toolbarHeight = toolbarRef.current?.getBoundingClientRect().height ?? 0;
+            const gap = parseGap();
+            const parent = main.parentElement;
+            const parentStyle = parent ? window.getComputedStyle(parent) : null;
+            const parentPaddingBottom = parentStyle
+                ? Number.parseFloat(parentStyle.paddingBottom)
+                : 0;
+            const viewportAvailable = window.innerHeight - mainRect.top - parentPaddingBottom;
+            const mainAvailable = Math.min(mainRect.height, viewportAvailable);
+            const availableHeight = Math.max(
+                0,
+                mainAvailable - toolbarHeight - gap,
+            );
+            const safeAspect = viewBoxAspectRatio > 0 ? viewBoxAspectRatio : 1;
+            const nextWidth = Math.min(mainRect.width, availableHeight * safeAspect);
+            const nextHeight = safeAspect > 0 ? nextWidth / safeAspect : 0;
+
+            if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight)) {
+                return;
+            }
+
+            setCanvasSize((prev) => {
+                if (prev.width === nextWidth && prev.height === nextHeight) {
+                    return prev;
+                }
+                return { width: nextWidth, height: nextHeight };
+            });
+        };
+
+        computeSize();
+
+        const observer = new ResizeObserver(() => {
+            computeSize();
+        });
+
+        observer.observe(main);
+        if (toolbarRef.current) {
+            observer.observe(toolbarRef.current);
+        }
+        if (debugPanelRef.current) {
+            observer.observe(debugPanelRef.current);
+        }
+
+        window.addEventListener('resize', computeSize);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', computeSize);
+        };
+    }, [viewBoxAspectRatio]);
+
     // Validation for all patterns (for pattern list warnings)
     const validationByPatternId = useMemo(() => {
         if (!selectedCalibrationProfile) return null;
@@ -850,9 +965,15 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             </div>
 
             {/* Main Content: Editor + Debug below */}
-            <div className="flex min-h-0 min-w-[500px] flex-1 flex-col gap-4">
+            <div
+                ref={mainColumnRef}
+                className="flex min-h-0 min-w-[500px] flex-1 flex-col gap-2 overflow-hidden"
+            >
                 {/* Toolbar section - fixed height */}
-                <div className="flex-none rounded-md bg-gray-900/60 p-4">
+                <div
+                    ref={toolbarRef}
+                    className="flex-none rounded-md bg-gray-900/60 px-4 py-2"
+                >
                     <PatternDesignerToolbar
                         editMode={editMode}
                         onEditModeChange={updateEditMode}
@@ -873,32 +994,42 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                     />
                 </div>
 
-                {/* Canvas - fills remaining height, constrained to viewport */}
-                <div className="flex min-h-[200px] flex-1 items-center justify-center overflow-hidden rounded-md bg-gray-900/60 p-4">
-                    {selectedPattern ? (
-                        <PatternDesignerCanvas
-                            pattern={selectedPattern}
-                            editMode={editMode}
-                            hoveredPointId={hoveredPatternPointId}
-                            hoverPoint={hoverPoint}
-                            onChange={handlePatternChange}
-                            onHoverChange={setHoverPoint}
-                            onHoverPointChange={setHoveredPatternPointId}
-                            blobRadius={calibratedBlobRadius}
-                            showBounds={
-                                showBounds && showSpotSummary && calibrationTileBounds.length > 0
-                            }
-                            tileBounds={calibrationTileBounds}
-                            invalidPointIds={invalidPointIds}
-                            maxOverlapCount={maxOverlapCount}
-                        />
-                    ) : (
-                        <p className="text-sm text-gray-500">Create a pattern to start editing.</p>
-                    )}
+                {/* Canvas - sized by viewBox aspect ratio, limited by available height */}
+                <div className="flex min-h-0 flex-none items-start justify-start">
+                    <div
+                        className="overflow-hidden rounded-md bg-gray-900/60"
+                        style={{ width: canvasSize.width, height: canvasSize.height }}
+                    >
+                        {selectedPattern ? (
+                            <PatternDesignerCanvas
+                                pattern={selectedPattern}
+                                editMode={editMode}
+                                hoveredPointId={hoveredPatternPointId}
+                                hoverPoint={hoverPoint}
+                                onChange={handlePatternChange}
+                                onHoverChange={setHoverPoint}
+                                onHoverPointChange={setHoveredPatternPointId}
+                                blobRadius={calibratedBlobRadius}
+                                showBounds={
+                                    showBounds && showSpotSummary && calibrationTileBounds.length > 0
+                                }
+                                tileBounds={calibrationTileBounds}
+                                invalidPointIds={invalidPointIds}
+                                maxOverlapCount={maxOverlapCount}
+                                viewBox={autoZoomViewBox}
+                            />
+                        ) : (
+                            <div className="flex size-full items-center justify-center">
+                                <p className="text-sm text-gray-500">
+                                    Create a pattern to start editing.
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Debug panel - below canvas */}
-                <div className="flex-none">
+                <div ref={debugPanelRef} className="flex-none">
                     <PatternDesignerDebugPanel
                         pattern={selectedPattern}
                         hoverPoint={hoverPoint}
