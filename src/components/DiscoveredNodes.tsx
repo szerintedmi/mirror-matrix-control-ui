@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 import { useCommandFeedback } from '../hooks/useCommandFeedback';
 import { useMotorCommands } from '../hooks/useMotorCommands';
-import { useMotorController } from '../hooks/useMotorController';
 import { extractCommandErrorDetail } from '../utils/commandErrors';
-import { formatRelativeTime } from '../utils/time';
 
 import { showSingleCommandErrorToast } from './common/StyledToast';
-import MotorActionButtons from './MotorActionButtons';
 import MotorChip from './MotorChip';
 
 import type { DriverPresence } from '../context/StatusContext';
-import type { DraggedMotorInfo, Motor, MotorTelemetry } from '../types';
+import type { Motor, MotorTelemetry } from '../types';
 
 export interface DiscoveredNode {
     macAddress: string;
@@ -20,7 +17,6 @@ export interface DiscoveredNode {
     nodeState: string;
     motors: Motor[];
     motorTelemetry: Record<number, MotorTelemetry | undefined>;
-    isNew: boolean;
     firstSeenAt: number;
     lastSeenAt: number;
     ip?: string;
@@ -31,13 +27,6 @@ export interface DiscoveredNode {
     unassignedMotors: number;
     staleForMs: number;
     brokerDisconnected: boolean;
-}
-
-interface NodeMotorCardProps {
-    motor: Motor;
-    telemetry?: MotorTelemetry;
-    disabled: boolean;
-    dataTestId?: string;
 }
 
 const NodeCommandBar: React.FC<{ mac: string }> = ({ mac }) => {
@@ -86,48 +75,14 @@ const NodeCommandBar: React.FC<{ mac: string }> = ({ mac }) => {
     );
 };
 
-const NodeMotorCard: React.FC<NodeMotorCardProps> = ({
-    motor,
-    telemetry,
-    disabled,
-    dataTestId,
-}) => {
-    const controller = useMotorController(motor, telemetry);
-
-    return (
-        <div className="rounded-lg border border-gray-700/70 bg-gray-900/60 p-3">
-            <div className="flex items-center justify-between gap-3">
-                <MotorChip
-                    motor={motor}
-                    disabled={disabled}
-                    label={`Motor ${motor.motorIndex}`}
-                    dataTestId={dataTestId}
-                    tooltip={`Node: ${motor.nodeMac.toUpperCase()}\nMotor: ${motor.motorIndex}`}
-                />
-            </div>
-            <div className="mt-2">
-                <MotorActionButtons
-                    motor={motor}
-                    telemetry={telemetry}
-                    controller={controller}
-                    dataTestIdPrefix={dataTestId}
-                    compact
-                    showStepsBadge={false}
-                    showHome={false}
-                />
-            </div>
-        </div>
-    );
-};
-
 interface DiscoveredNodesProps {
     nodes: DiscoveredNode[];
     isMotorAssigned: (motor: Motor) => boolean;
     selectedNodeMac: string | null;
     onNodeSelect: (mac: string | null) => void;
-    onUnassignByDrop: (dragDataString: string) => void;
     onClearNodeAssignments: (mac: string) => void;
-    staleThresholdMs: number;
+    onNudgeMotor?: (motor: Motor, currentPosition: number) => void;
+    emptyMessage?: string;
 }
 
 const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
@@ -135,134 +90,67 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
     isMotorAssigned,
     selectedNodeMac,
     onNodeSelect,
-    onUnassignByDrop,
     onClearNodeAssignments,
-    staleThresholdMs,
+    onNudgeMotor,
+    emptyMessage = 'No nodes match the current filter',
 }) => {
-    const [isDropHovering, setIsDropHovering] = useState(false);
-
     if (nodes.length === 0) {
-        return (
-            <p className="mt-8 text-center text-gray-500">
-                No tile drivers discovered yet. Waiting for MQTT status snapshots…
-            </p>
-        );
+        return <p className="py-8 text-center text-sm text-gray-500">{emptyMessage}</p>;
     }
 
-    const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        const dragData = event.dataTransfer.getData('application/json');
-        if (dragData) {
-            const parsed: DraggedMotorInfo = JSON.parse(dragData);
-            if (parsed.source === 'grid') {
-                setIsDropHovering(true);
-            }
-        }
-    };
-
-    const handleDragLeave = () => {
-        setIsDropHovering(false);
-    };
-
-    const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        setIsDropHovering(false);
-        const dragData = event.dataTransfer.getData('application/json');
-        if (dragData) {
-            onUnassignByDrop(dragData);
-        }
-    };
-
     return (
-        <div
-            className={`space-y-6 rounded-lg transition-colors ${isDropHovering ? 'bg-red-500/20' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-        >
-            {isDropHovering && (
-                <div className="py-4 text-center font-bold text-red-300">
-                    Drop to Unassign Motor
-                </div>
-            )}
+        <div className="space-y-2">
             {nodes.map((node) => {
-                const motorsToShow = node.motors;
                 const statusIndicatorClass =
                     node.presence === 'ready'
                         ? 'bg-emerald-400'
                         : node.presence === 'stale'
                           ? 'bg-amber-400'
                           : 'bg-red-500';
-                const staleSeconds = node.staleForMs / 1_000;
-                const presenceDescription = node.brokerDisconnected
-                    ? 'Broker disconnected'
-                    : node.presence === 'ready'
-                      ? 'Online'
-                      : node.presence === 'stale'
-                        ? `No heartbeat for ${staleSeconds.toFixed(1)}s (threshold ${(
-                              staleThresholdMs / 1_000
-                          ).toFixed(1)}s)`
-                        : node.nodeState === 'offline'
-                          ? 'Offline (LWT received)'
-                          : 'Offline';
+
+                const assignedCount = node.totalMotors - node.unassignedMotors;
+                const isSelected = selectedNodeMac === node.macAddress;
 
                 return (
                     <div
                         key={node.macAddress}
-                        className={`rounded-lg border border-gray-700 bg-gray-900/50 p-4 transition-all ${selectedNodeMac === node.macAddress ? 'shadow-lg ring-2 shadow-emerald-500/20 ring-emerald-400' : 'hover:border-gray-500'}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onNodeSelect(node.macAddress)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onNodeSelect(node.macAddress);
+                            }
+                        }}
+                        className={`cursor-pointer rounded-md border border-gray-700 bg-gray-900/60 px-2 py-1.5 transition-all hover:border-gray-600 ${isSelected ? 'shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]' : ''}`}
                     >
-                        <div className="flex items-start justify-between gap-3">
-                            <button
-                                type="button"
-                                onClick={() => onNodeSelect(node.macAddress)}
-                                aria-pressed={selectedNodeMac === node.macAddress}
-                                className="flex flex-1 items-start gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-                            >
+                        {/* Compact header */}
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
                                 <span
-                                    className={`mt-1 size-2.5 flex-shrink-0 rounded-full ${statusIndicatorClass}`}
-                                    title={`Status: ${node.presence}`}
-                                ></span>
-                                <div className="flex flex-col gap-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="font-mono text-lg break-all text-emerald-400">
-                                            {node.macLabel}
-                                        </h3>
-                                        {node.isNew && (
-                                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold tracking-wide text-emerald-200 uppercase">
-                                                New
-                                            </span>
-                                        )}
-                                        {node.hasUnassigned && (
-                                            <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-200">
-                                                {node.unassignedMotors} unassigned
-                                            </span>
-                                        )}
-                                    </div>
-                                    <span className="text-xs text-gray-300">
-                                        {presenceDescription}
-                                    </span>
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
-                                        {node.ip && <span>IP {node.ip}</span>}
-                                        <span>Last seen {formatRelativeTime(node.lastSeenAt)}</span>
-                                        <span>
-                                            First seen {formatRelativeTime(node.firstSeenAt)}
-                                        </span>
-                                    </div>
-                                </div>
-                            </button>
-                            <div className="flex flex-col items-end gap-2">
-                                <NodeCommandBar mac={node.macAddress} />
+                                    className={`size-2 flex-shrink-0 rounded-full ${statusIndicatorClass}`}
+                                    title={node.presence}
+                                />
+                                <span className="font-mono text-sm font-semibold text-gray-300">
+                                    {node.macLabel.slice(-5)}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                                <span>
+                                    {assignedCount}/{node.totalMotors}
+                                </span>
                                 <button
+                                    type="button"
                                     onClick={(event) => {
                                         event.stopPropagation();
                                         onClearNodeAssignments(node.macAddress);
                                     }}
-                                    className="rounded-full p-1.5 text-gray-500 transition-colors hover:bg-red-900/50 hover:text-red-400"
-                                    title="Clear all assignments for this node"
+                                    className="rounded p-0.5 text-gray-500 transition-colors hover:bg-red-900/50 hover:text-red-400"
+                                    title="Clear all assignments"
                                 >
                                     <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className="size-5"
+                                        className="size-3.5"
                                         viewBox="0 0 20 20"
                                         fill="currentColor"
                                     >
@@ -273,30 +161,20 @@ const DiscoveredNodes: React.FC<DiscoveredNodesProps> = ({
                                         />
                                     </svg>
                                 </button>
+                                <NodeCommandBar mac={node.macAddress} />
                             </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-300">
-                            <span className="rounded bg-gray-700/70 px-2 py-1">
-                                Motors {node.totalMotors}
-                            </span>
-                            <span className="rounded bg-gray-700/70 px-2 py-1">
-                                Moving {node.movingMotors}
-                            </span>
-                            <span className="rounded bg-gray-700/70 px-2 py-1">
-                                Homed {node.homedMotors}
-                            </span>
-                            <span className="rounded bg-gray-700/70 px-2 py-1">
-                                Assigned {node.totalMotors - node.unassignedMotors}
-                            </span>
-                        </div>
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            {motorsToShow.map((motor) => (
-                                <NodeMotorCard
+                        {/* Motor slots - multi-column grid */}
+                        <div className="grid auto-cols-fr grid-flow-col gap-1">
+                            {node.motors.map((motor) => (
+                                <MotorChip
                                     key={`${motor.nodeMac}-${motor.motorIndex}`}
                                     motor={motor}
                                     telemetry={node.motorTelemetry[motor.motorIndex]}
                                     disabled={isMotorAssigned(motor)}
                                     dataTestId={`node-${node.macAddress}-motor-${motor.motorIndex}`}
+                                    onNudge={onNudgeMotor}
+                                    onClick={() => onNodeSelect(motor.nodeMac)}
                                 />
                             ))}
                         </div>

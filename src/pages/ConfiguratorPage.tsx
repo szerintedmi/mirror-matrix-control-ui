@@ -6,7 +6,6 @@ import GridConfigurator from '../components/GridConfigurator';
 import { analyzeMirrorCell } from '../components/MirrorCell';
 import MirrorGrid from '../components/MirrorGrid';
 import TileInfoModal from '../components/TileInfoModal';
-import UnassignedMotorTray from '../components/UnassignedMotorTray';
 import { useStatusStore } from '../context/StatusContext';
 import { useMotorCommands } from '../hooks/useMotorCommands';
 import {
@@ -28,7 +27,7 @@ import type {
 } from '../types';
 import type { SnapshotPersistenceStatus } from '../types/persistence';
 
-type DiscoveryFilter = 'online' | 'all' | 'new' | 'offline' | 'unassigned';
+type DiscoveryFilter = 'online' | 'all' | 'offline' | 'unassigned';
 
 const gridViewOptions = [
     {
@@ -79,15 +78,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     setMirrorConfig,
     persistenceControls,
 }) => {
-    const {
-        drivers,
-        counts,
-        discoveryCount,
-        acknowledgeDriver,
-        schemaError,
-        brokerConnected,
-        staleThresholdMs,
-    } = useStatusStore();
+    const { drivers, counts, schemaError, brokerConnected } = useStatusStore();
 
     const { nudgeMotor, homeMotor } = useMotorCommands();
 
@@ -104,6 +95,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
     });
     const [gridViewMode, setGridViewMode] = useState<'mirror' | 'projection'>('mirror');
     const [tileInfoModalPosition, setTileInfoModalPosition] = useState<GridPosition | null>(null);
+    const [isNodesDropHovering, setIsNodesDropHovering] = useState(false);
 
     const assignmentMetrics = useMemo(() => {
         let assignedAxes = 0;
@@ -234,18 +226,9 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         [unassignMotor],
     );
 
-    const handleNodeSelect = useCallback(
-        (mac: string | null) => {
-            setSelectedNodeMac((current) => {
-                const next = current === mac ? null : mac;
-                if (mac && next === mac) {
-                    acknowledgeDriver(mac);
-                }
-                return next;
-            });
-        },
-        [acknowledgeDriver],
-    );
+    const handleNodeSelect = useCallback((mac: string | null) => {
+        setSelectedNodeMac((current) => (current === mac ? null : mac));
+    }, []);
 
     const confirmAction = (
         title: string,
@@ -319,7 +302,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 nodeState: driver.snapshot.nodeState,
                 motors,
                 motorTelemetry,
-                isNew: driver.isNew,
                 firstSeenAt: driver.firstSeenAt,
                 lastSeenAt: driver.lastSeenAt,
                 ip: driver.snapshot.ip,
@@ -338,8 +320,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
         switch (activeFilter) {
             case 'online':
                 return discoveredNodes.filter((node) => node.presence !== 'offline');
-            case 'new':
-                return discoveredNodes.filter((node) => node.isNew);
             case 'offline':
                 return discoveredNodes.filter((node) => node.presence === 'offline');
             case 'unassigned':
@@ -361,7 +341,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 label: onlineCount > 0 ? `Online (${onlineCount})` : 'Online',
             },
             { id: 'all' as const, label: 'All' },
-            { id: 'new' as const, label: discoveryCount > 0 ? `New (${discoveryCount})` : 'New' },
             {
                 id: 'offline' as const,
                 label: offlineCount > 0 ? `Offline (${offlineCount})` : 'Offline',
@@ -371,21 +350,7 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                 label: unassignedCount > 0 ? `Unassigned (${unassignedCount})` : 'Unassigned',
             },
         ];
-    }, [discoveredNodes, discoveryCount]);
-
-    const unassignedGroups = useMemo(
-        () =>
-            discoveredNodes
-                .map((node) => ({
-                    macAddress: node.macAddress,
-                    presence: node.presence,
-                    staleForMs: node.staleForMs,
-                    brokerDisconnected: node.brokerDisconnected,
-                    motors: node.motors.filter((motor) => !isMotorAssigned(motor)),
-                }))
-                .filter((group) => group.motors.length > 0),
-        [discoveredNodes, isMotorAssigned],
-    );
+    }, [discoveredNodes]);
 
     const driverStatusByMac = useMemo(() => {
         const map = new Map<string, DriverStatusSnapshot>();
@@ -640,51 +605,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                     </div>
                 </section>
 
-                <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-                        <p className="text-sm text-gray-400">Online Drivers</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-100">
-                            {counts.onlineDrivers}
-                            <span className="ml-1 text-sm font-normal text-gray-400">
-                                / {counts.totalDrivers}
-                            </span>
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-                        <p className="text-sm text-gray-400">Offline Drivers</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-100">
-                            {counts.offlineDrivers}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-                        <p className="text-sm text-gray-400">Moving Motors</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-100">
-                            {counts.movingMotors}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-                        <p className="text-sm text-gray-400">Homed Motors</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-100">
-                            {counts.homedMotors}
-                            <span className="ml-2 text-xs font-normal text-gray-400">
-                                Unhomed: {counts.unhomedMotors}
-                            </span>
-                        </p>
-                    </div>
-                    <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-                        <p className="text-sm text-gray-400">Needs Homing</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-100">
-                            {counts.needsHomeCriticalMotors + counts.needsHomeWarningMotors}
-                            <span className="ml-2 text-xs font-normal text-red-300">
-                                Critical: {counts.needsHomeCriticalMotors}
-                            </span>
-                            <span className="ml-2 text-xs font-normal text-amber-300">
-                                Warning: {counts.needsHomeWarningMotors}
-                            </span>
-                        </p>
-                    </div>
-                </section>
-
                 <div className="flex flex-grow flex-col gap-8 lg:flex-row">
                     <main className="flex flex-grow flex-col rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10 lg:w-2/3">
                         <GridConfigurator
@@ -697,13 +617,6 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                             unassignedAxes={unassignedAxesEstimate}
                             recommendedTileCapacity={recommendedTileCapacity}
                         />
-                        <div className="mt-3">
-                            <UnassignedMotorTray
-                                groups={unassignedGroups}
-                                onUnassignByDrop={handleUnassignByDrop}
-                                staleThresholdMs={staleThresholdMs}
-                            />
-                        </div>
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
                             <p>
                                 {
@@ -742,14 +655,24 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                         </div>
                     </main>
 
-                    <aside className="flex flex-col rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10 lg:w-1/3">
+                    <aside
+                        className={`flex flex-col rounded-lg bg-gray-800/50 p-4 shadow-lg ring-1 ring-white/10 transition-colors lg:w-1/3 ${isNodesDropHovering ? 'bg-red-500/20 ring-red-500/50' : ''}`}
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsNodesDropHovering(true);
+                        }}
+                        onDragLeave={() => setIsNodesDropHovering(false)}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            setIsNodesDropHovering(false);
+                            const dragData = e.dataTransfer.getData('application/json');
+                            if (dragData) {
+                                handleUnassignByDrop(dragData);
+                            }
+                        }}
+                    >
                         <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-                            <div>
-                                <h2 className="text-2xl font-semibold text-gray-100">Nodes</h2>
-                                <p className="text-xs text-gray-400">
-                                    Session discoveries: {discoveryCount}
-                                </p>
-                            </div>
+                            <h2 className="text-xl font-semibold text-gray-100">Nodes</h2>
                             <div className="flex flex-wrap gap-2">
                                 {filterOptions.map((option) => (
                                     <button
@@ -768,6 +691,11 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 ))}
                             </div>
                         </div>
+                        {isNodesDropHovering && (
+                            <div className="mb-2 text-center text-sm font-semibold text-red-200">
+                                Drop to unassign motor
+                            </div>
+                        )}
                         {schemaError && (
                             <div className="mb-4 rounded-md border border-red-500/70 bg-red-900/30 p-3 text-sm text-red-200">
                                 Failed to parse status payloads. Discovery paused until the payload
@@ -786,9 +714,13 @@ const ConfiguratorPage: React.FC<ConfiguratorPageProps> = ({
                                 isMotorAssigned={isMotorAssigned}
                                 selectedNodeMac={selectedNodeMacEffective}
                                 onNodeSelect={handleNodeSelect}
-                                onUnassignByDrop={handleUnassignByDrop}
                                 onClearNodeAssignments={handleClearNodeAssignments}
-                                staleThresholdMs={staleThresholdMs}
+                                onNudgeMotor={handleNudgeMotor}
+                                emptyMessage={
+                                    drivers.length === 0
+                                        ? 'Waiting for MQTT status snapshots…'
+                                        : 'No nodes match the current filter'
+                                }
                             />
                         </div>
                     </aside>

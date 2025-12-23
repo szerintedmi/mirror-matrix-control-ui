@@ -6,7 +6,6 @@ import type { GridPosition, Motor, MotorTelemetry } from '@/types';
 
 import type { MirrorCellAnalysis } from './MirrorCell';
 
-
 /** Render steps-since-home warning badge with value */
 const StepsWarningBadge: React.FC<{ telemetry?: MotorTelemetry }> = ({ telemetry }) => {
     if (!telemetry) return <span className="text-gray-500">--</span>;

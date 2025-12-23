@@ -112,33 +112,19 @@ const destroyContainer = ({ container, root }: ReturnType<typeof createContainer
 };
 
 const TestConsumer: React.FC = () => {
-    const { drivers, counts, discoveryCount, acknowledgeDriver, schemaError, staleThresholdMs } =
-        useStatusStore();
+    const { drivers, counts, schemaError, staleThresholdMs } = useStatusStore();
     const firstDriver = drivers[0];
     return (
         <div
             data-role="state"
             data-drivers={drivers.length}
             data-online={counts.onlineDrivers}
-            data-new={discoveryCount}
             data-error={schemaError ? 'error' : 'ok'}
             data-presence={firstDriver?.presence ?? ''}
             data-stale={firstDriver ? String(firstDriver.staleForMs) : '0'}
             data-broker-offline={firstDriver?.brokerDisconnected ? '1' : '0'}
             data-stale-threshold={String(staleThresholdMs)}
-        >
-            <button
-                type="button"
-                data-role="ack"
-                onClick={() => {
-                    if (drivers[0]) {
-                        acknowledgeDriver(drivers[0].mac);
-                    }
-                }}
-            >
-                Ack
-            </button>
-        </div>
+        />
     );
 };
 
@@ -156,7 +142,7 @@ const SchemeSwitcher: React.FC<{ scheme: ConnectionScheme }> = ({ scheme }) => {
 };
 
 describe('StatusProvider', () => {
-    it('tracks discovered drivers and supports acknowledgement', () => {
+    it('tracks discovered drivers', () => {
         const client = new StatusStubClient();
         const { container, root } = createContainer();
 
@@ -199,15 +185,7 @@ describe('StatusProvider', () => {
         const stateNode = container.querySelector('[data-role="state"]') as HTMLElement;
         expect(stateNode.dataset.drivers).toBe('1');
         expect(stateNode.dataset.online).toBe('1');
-        expect(stateNode.dataset.new).toBe('1');
         expect(stateNode.dataset.presence).toBe('ready');
-
-        const ackButton = container.querySelector('[data-role="ack"]') as HTMLButtonElement;
-        act(() => {
-            ackButton.click();
-        });
-
-        expect(stateNode.dataset.new).toBe('0');
 
         destroyContainer({ container, root });
     });

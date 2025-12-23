@@ -33,8 +33,6 @@ interface TileDriverRecord {
     snapshot: NormalizedStatusMessage;
     firstSeenAt: number;
     lastSeenAt: number;
-    isNew: boolean;
-    acknowledgedAt?: number;
     source: ConnectionScheme;
 }
 
@@ -61,9 +59,6 @@ export interface StatusCounts {
 export interface StatusContextValue {
     drivers: DriverView[];
     counts: StatusCounts;
-    discoveryCount: number;
-    acknowledgeDriver: (mac: string) => void;
-    acknowledgeAll: () => void;
     schemaError: StatusParseError | null;
     brokerConnected: boolean;
     connectionState: ConnectionState;
@@ -163,7 +158,6 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
                     snapshot: value,
                     firstSeenAt: now,
                     lastSeenAt: now,
-                    isNew: true,
                     source: activeSource,
                 });
                 return next;
@@ -178,55 +172,6 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
             unsubscribe();
         };
     }, [handleStatusMessage, subscribe]);
-
-    const acknowledgeDriver = useCallback(
-        (mac: string) => {
-            setRecords((prev) => {
-                let targetKey: string | null = null;
-                let targetRecord: TileDriverRecord | undefined;
-
-                for (const [key, record] of prev.entries()) {
-                    if (record.mac === mac && record.source === activeSource) {
-                        targetKey = key;
-                        targetRecord = record;
-                        break;
-                    }
-                }
-
-                if (!targetKey || !targetRecord || !targetRecord.isNew) {
-                    return prev;
-                }
-
-                const next = new Map(prev);
-                next.set(targetKey, {
-                    ...targetRecord,
-                    isNew: false,
-                    acknowledgedAt: Date.now(),
-                });
-                return next;
-            });
-        },
-        [activeSource],
-    );
-
-    const acknowledgeAll = useCallback(() => {
-        setRecords((prev) => {
-            let mutated = false;
-            const next = new Map(prev);
-            for (const [key, record] of next.entries()) {
-                if (record.source !== activeSource || !record.isNew) {
-                    continue;
-                }
-                mutated = true;
-                next.set(key, {
-                    ...record,
-                    isNew: false,
-                    acknowledgedAt: Date.now(),
-                });
-            }
-            return mutated ? next : prev;
-        });
-    }, [activeSource]);
 
     const drivers = useMemo<DriverView[]>(() => {
         const dedupedByTopic = new Map<string, TileDriverRecord>();
@@ -263,12 +208,7 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
                     brokerDisconnected: !brokerConnected,
                 };
             })
-            .sort((a, b) => {
-                if (a.isNew !== b.isNew) {
-                    return a.isNew ? -1 : 1;
-                }
-                return a.firstSeenAt - b.firstSeenAt;
-            });
+            .sort((a, b) => a.firstSeenAt - b.firstSeenAt);
     }, [activeSource, brokerConnected, heartbeat, records]);
 
     const counts = useMemo<StatusCounts>(() => {
@@ -324,11 +264,6 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
         };
     }, [drivers]);
 
-    const discoveryCount = useMemo(
-        () => drivers.filter((record) => record.isNew).length,
-        [drivers],
-    );
-
     const latestActivityAt = useMemo(() => {
         if (drivers.length === 0) {
             return null;
@@ -343,26 +278,13 @@ export const StatusProvider: React.FC<PropsWithChildren> = ({ children }) => {
         () => ({
             drivers,
             counts,
-            discoveryCount,
-            acknowledgeDriver,
-            acknowledgeAll,
             schemaError,
             brokerConnected,
             connectionState,
             latestActivityAt,
             staleThresholdMs: STALE_THRESHOLD_MS,
         }),
-        [
-            acknowledgeAll,
-            acknowledgeDriver,
-            brokerConnected,
-            connectionState,
-            counts,
-            discoveryCount,
-            drivers,
-            latestActivityAt,
-            schemaError,
-        ],
+        [brokerConnected, connectionState, counts, drivers, latestActivityAt, schemaError],
     );
 
     return <StatusContext.Provider value={value}>{children}</StatusContext.Provider>;
