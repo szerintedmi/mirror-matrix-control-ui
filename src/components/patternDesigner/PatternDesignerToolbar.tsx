@@ -33,6 +33,10 @@ export interface PatternDesignerToolbarProps {
     // Step size reference
     blobRadius: number;
 
+    // Spots capacity (optional - shown when calibration profile is selected)
+    placedSpots?: number;
+    availableSpots?: number;
+
     // Disabled state
     disabled?: boolean;
 }
@@ -51,10 +55,15 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
     onShowBoundsChange,
     canShowBounds,
     blobRadius,
+    placedSpots,
+    availableSpots,
     disabled = false,
 }) => {
     // Suppress unused variable warning - blobRadius is kept in props for future use
     void blobRadius;
+
+    const showSpots = typeof placedSpots === 'number' && typeof availableSpots === 'number';
+    const spotsOverCapacity = showSpots && placedSpots > availableSpots;
 
     const buttonBase =
         'rounded px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
@@ -99,27 +108,14 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                     Show Bounds
                 </button>
 
-                {/* Undo/Redo */}
-                <div className="ml-auto flex items-center gap-1">
-                    <button
-                        type="button"
-                        onClick={onUndo}
-                        disabled={!canUndo || disabled}
-                        className={`${buttonBase} ${buttonInactive}`}
-                        title="Undo (Cmd+Z)"
+                {/* Spots count */}
+                {showSpots && (
+                    <span
+                        className={`ml-auto text-xs tabular-nums ${spotsOverCapacity ? 'font-semibold text-red-300' : 'text-gray-400'}`}
                     >
-                        Undo
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onRedo}
-                        disabled={!canRedo || disabled}
-                        className={`${buttonBase} ${buttonInactive}`}
-                        title="Redo (Cmd+Shift+Z)"
-                    >
-                        Redo
-                    </button>
-                </div>
+                        {placedSpots} / {availableSpots} spots
+                    </span>
+                )}
             </div>
 
             {/* Row 2: Transform Controls (shared component) */}
@@ -128,6 +124,10 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                 onScale={onScale}
                 onRotate={onRotate}
                 disabled={disabled}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onUndo={onUndo}
+                onRedo={onRedo}
             />
         </div>
     );

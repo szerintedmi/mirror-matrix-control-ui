@@ -615,7 +615,6 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         selectedCalibrationProfile?.metrics.totalTiles ??
         0;
     const showSpotSummary = Boolean(selectedCalibrationProfile);
-    const spotsOverCapacity = showSpotSummary && placedSpotCount > availableSpotCount;
     const calibrationTileBounds = useMemo(() => {
         if (!selectedCalibrationProfile) {
             return [];
@@ -851,34 +850,24 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             <div className="flex min-h-0 min-w-[500px] flex-1 flex-col gap-4">
                 {/* Toolbar section - fixed height */}
                 <div className="flex-none rounded-md bg-gray-900/60 p-4">
-                    {showSpotSummary && (
-                        <div className="mb-4 flex items-center justify-between rounded-md border border-gray-800/60 bg-gray-950/40 px-4 py-2">
-                            <span className="text-sm text-gray-400">Pattern capacity</span>
-                            <span
-                                className={`text-sm font-semibold ${spotsOverCapacity ? 'text-red-300' : 'text-gray-300'}`}
-                            >
-                                Spots: {placedSpotCount} / {availableSpotCount}
-                            </span>
-                        </div>
-                    )}
-                    <div>
-                        <PatternDesignerToolbar
-                            editMode={editMode}
-                            onEditModeChange={updateEditMode}
-                            onShift={handleShift}
-                            onScale={handleScale}
-                            onRotate={handleRotate}
-                            canUndo={historyState.canUndo}
-                            canRedo={historyState.canRedo}
-                            onUndo={handleUndo}
-                            onRedo={handleRedo}
-                            showBounds={showBounds}
-                            onShowBoundsChange={handleShowBoundsChange}
-                            canShowBounds={showSpotSummary}
-                            blobRadius={calibratedBlobRadius}
-                            disabled={!selectedPattern}
-                        />
-                    </div>
+                    <PatternDesignerToolbar
+                        editMode={editMode}
+                        onEditModeChange={updateEditMode}
+                        onShift={handleShift}
+                        onScale={handleScale}
+                        onRotate={handleRotate}
+                        canUndo={historyState.canUndo}
+                        canRedo={historyState.canRedo}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                        showBounds={showBounds}
+                        onShowBoundsChange={handleShowBoundsChange}
+                        canShowBounds={showSpotSummary}
+                        blobRadius={calibratedBlobRadius}
+                        placedSpots={showSpotSummary ? placedSpotCount : undefined}
+                        availableSpots={showSpotSummary ? availableSpotCount : undefined}
+                        disabled={!selectedPattern}
+                    />
                 </div>
 
                 {/* Canvas - fills remaining height, constrained to viewport */}

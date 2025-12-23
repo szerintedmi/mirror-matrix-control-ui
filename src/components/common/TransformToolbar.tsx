@@ -11,6 +11,11 @@ export interface TransformToolbarProps {
     onRotate: (angleDeg: number) => void;
     /** Disable all controls */
     disabled?: boolean;
+    /** Undo/Redo controls (optional) */
+    canUndo?: boolean;
+    canRedo?: boolean;
+    onUndo?: () => void;
+    onRedo?: () => void;
 }
 
 const TransformToolbar: React.FC<TransformToolbarProps> = ({
@@ -18,6 +23,10 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
     onScale,
     onRotate,
     disabled = false,
+    canUndo = false,
+    canRedo = false,
+    onUndo,
+    onRedo,
 }) => {
     // Step sizes state - use 0.01 as default for fine control over normalized coordinates
     const [shiftStep, setShiftStep] = useState<number>(0.01);
@@ -329,6 +338,52 @@ const TransformToolbar: React.FC<TransformToolbarProps> = ({
                 />
                 <span className="text-gray-500">deg</span>
             </div>
+
+            {/* Undo/Redo Controls (optional) */}
+            {(onUndo || onRedo) && (
+                <>
+                    <div className="h-6 w-px bg-gray-600" />
+                    <div className="flex items-center gap-0.5">
+                        <button
+                            type="button"
+                            onClick={onUndo}
+                            disabled={disabled || !canUndo}
+                            className={`${buttonBase} ${buttonInactive}`}
+                            aria-label="Undo"
+                            title="Undo (Cmd+Z)"
+                        >
+                            <svg className="size-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path
+                                    fillRule="evenodd"
+                                    d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z"
+                                    clipRule="evenodd"
+                                />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onRedo}
+                            disabled={disabled || !canRedo}
+                            className={`${buttonBase} ${buttonInactive}`}
+                            aria-label="Redo"
+                            title="Redo (Cmd+Shift+Z)"
+                        >
+                            <svg
+                                className="size-3.5"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                                style={{ transform: 'scaleX(-1)' }}
+                            >
+                                <path
+                                    fillRule="evenodd"
+                                    d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z"
+                                    clipRule="evenodd"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
