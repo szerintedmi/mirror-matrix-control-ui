@@ -3,15 +3,12 @@ import React from 'react';
 import CalibrationSettingsPanel from '@/components/calibration/CalibrationSettingsPanel';
 import CalibrationStatusBar from '@/components/calibration/CalibrationStatusBar';
 import type { CalibrationController } from '@/hooks/useCalibrationController';
+import type { CalibrationSettingsController } from '@/hooks/useCalibrationSettingsController';
 import type { CalibrationStepState } from '@/services/calibration/types';
-import type { ArrayRotation, StagingPosition } from '@/types';
 
 interface CalibrationRunnerPanelProps {
     controller: CalibrationController;
-    arrayRotation: ArrayRotation;
-    onArrayRotationChange: (rotation: ArrayRotation) => void;
-    stagingPosition: StagingPosition;
-    onStagingPositionChange: (position: StagingPosition) => void;
+    settingsController: CalibrationSettingsController;
     isCalibrationActive: boolean;
     // Status bar props
     stepState: CalibrationStepState | null;
@@ -27,10 +24,7 @@ interface CalibrationRunnerPanelProps {
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     controller,
-    arrayRotation,
-    onArrayRotationChange,
-    stagingPosition,
-    onStagingPositionChange,
+    settingsController,
     isCalibrationActive,
     stepState,
     isAwaitingAdvance,
@@ -42,7 +36,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     onAbort,
     onAdvance,
 }) => {
-    const { runnerState, runnerSettings, updateSetting, mode, setMode } = controller;
+    const { runnerState, mode, setMode } = controller;
 
     return (
         <section className="rounded-lg border border-gray-800 bg-gray-950 p-4 shadow-lg">
@@ -52,23 +46,25 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
             <div className="space-y-4">
                 {/* Calibration Settings - collapsed by default */}
                 <CalibrationSettingsPanel
-                    arrayRotation={arrayRotation}
-                    onArrayRotationChange={onArrayRotationChange}
-                    stagingPosition={stagingPosition}
-                    onStagingPositionChange={onStagingPositionChange}
-                    firstTileInterimStepDelta={runnerSettings.firstTileInterimStepDelta}
-                    onFirstTileInterimStepDeltaChange={(v) =>
-                        updateSetting('firstTileInterimStepDelta', v)
+                    arrayRotation={settingsController.arrayRotation}
+                    onArrayRotationChange={settingsController.setArrayRotation}
+                    stagingPosition={settingsController.stagingPosition}
+                    onStagingPositionChange={settingsController.setStagingPosition}
+                    firstTileInterimStepDelta={settingsController.firstTileInterimStepDelta}
+                    onFirstTileInterimStepDeltaChange={
+                        settingsController.setFirstTileInterimStepDelta
                     }
-                    deltaSteps={runnerSettings.deltaSteps}
-                    onDeltaStepsChange={(v) => updateSetting('deltaSteps', v)}
-                    gridGapNormalized={runnerSettings.gridGapNormalized}
-                    onGridGapNormalizedChange={(v) => updateSetting('gridGapNormalized', v)}
-                    firstTileTolerance={runnerSettings.firstTileTolerance}
-                    onFirstTileToleranceChange={(v) => updateSetting('firstTileTolerance', v)}
-                    tileTolerance={runnerSettings.tileTolerance}
-                    onTileToleranceChange={(v) => updateSetting('tileTolerance', v)}
+                    deltaSteps={settingsController.deltaSteps}
+                    onDeltaStepsChange={settingsController.setDeltaSteps}
+                    gridGapNormalized={settingsController.gridGapNormalized}
+                    onGridGapNormalizedChange={settingsController.setGridGapNormalized}
+                    firstTileTolerance={settingsController.firstTileTolerance}
+                    onFirstTileToleranceChange={settingsController.setFirstTileTolerance}
+                    tileTolerance={settingsController.tileTolerance}
+                    onTileToleranceChange={settingsController.setTileTolerance}
                     disabled={isCalibrationActive}
+                    isDefaultSettings={settingsController.isDefaultSettings}
+                    onResetToDefaults={settingsController.resetToDefaults}
                 />
 
                 {/* Status bar with progress, mode toggle, and action buttons */}

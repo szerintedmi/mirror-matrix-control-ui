@@ -6,11 +6,12 @@ import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPa
 import DetectionProfileManager from '@/components/calibration/DetectionProfileManager';
 import DetectionSettingsPanel from '@/components/calibration/DetectionSettingsPanel';
 import TileStatusesPanel from '@/components/calibration/TileStatusesPanel';
-import { DEFAULT_STAGING_POSITION } from '@/constants/calibration';
+import { DEFAULT_CALIBRATION_RUNNER_SETTINGS } from '@/constants/calibration';
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { useStatusStore } from '@/context/StatusContext';
 import { useCalibrationController } from '@/hooks/useCalibrationController';
 import { useCalibrationProfilesController } from '@/hooks/useCalibrationProfilesController';
+import { useCalibrationSettingsController } from '@/hooks/useCalibrationSettingsController';
 import { useCalibrationStateSession } from '@/hooks/useCalibrationStateSession';
 import { useCameraPipeline, type TileBoundsOverlayEntry } from '@/hooks/useCameraPipeline';
 import { useDetectionSettingsController } from '@/hooks/useDetectionSettingsController';
@@ -24,13 +25,7 @@ import {
 } from '@/services/calibrationProfileStorage';
 import { DRAFT_PROFILE_ID, saveDraftProfile } from '@/services/draftProfileService';
 import { getGridStateFingerprint, type GridStateSnapshot } from '@/services/gridStorage';
-import type { Motor } from '@/types';
-import type {
-    ArrayRotation,
-    CalibrationCameraResolution,
-    MirrorConfig,
-    StagingPosition,
-} from '@/types';
+import type { CalibrationCameraResolution, MirrorConfig, Motor } from '@/types';
 
 interface CalibrationPageProps {
     gridSize: { rows: number; cols: number };
@@ -140,12 +135,9 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
     const [alignmentOverlayVisible, setAlignmentOverlayVisible] = useState(false);
     const [tileBoundsOverlayVisible, setTileBoundsOverlayVisible] = useState(false);
 
-    // Array rotation setting for calibration (physical orientation of mirror array)
-    const [arrayRotation, setArrayRotation] = useState<ArrayRotation>(0);
-
-    // Staging position setting for where tiles move during staging phase
-    const [stagingPosition, setStagingPosition] =
-        useState<StagingPosition>(DEFAULT_STAGING_POSITION);
+    // Calibration settings controller - auto-persists settings to localStorage
+    const calibrationSettingsController = useCalibrationSettingsController();
+    const { arrayRotation, stagingPosition } = calibrationSettingsController;
 
     const cameraPipeline = useCameraPipeline({
         detectionSettingsLoaded,
@@ -241,6 +233,25 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         return activeProfile ? profileToRunSummary(activeProfile) : null;
     });
 
+    // Create full runner settings by merging persisted UI settings with defaults
+    const runnerSettings = useMemo(
+        () => ({
+            ...DEFAULT_CALIBRATION_RUNNER_SETTINGS,
+            deltaSteps: calibrationSettingsController.deltaSteps,
+            gridGapNormalized: calibrationSettingsController.gridGapNormalized,
+            firstTileInterimStepDelta: calibrationSettingsController.firstTileInterimStepDelta,
+            firstTileTolerance: calibrationSettingsController.firstTileTolerance,
+            tileTolerance: calibrationSettingsController.tileTolerance,
+        }),
+        [
+            calibrationSettingsController.deltaSteps,
+            calibrationSettingsController.gridGapNormalized,
+            calibrationSettingsController.firstTileInterimStepDelta,
+            calibrationSettingsController.firstTileTolerance,
+            calibrationSettingsController.tileTolerance,
+        ],
+    );
+
     const calibrationController = useCalibrationController({
         gridSize,
         mirrorConfig,
@@ -250,6 +261,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         arrayRotation,
         stagingPosition,
         roi,
+        runnerSettings,
         initialSessionState,
         loadedProfileSummary,
         onExpectedPositionChange: handleExpectedPositionChange,
@@ -257,7 +269,6 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
 
     const {
         runnerState,
-        runnerSettings,
         tileEntries,
         stepState,
         isAwaitingAdvance,
@@ -565,7 +576,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 tileEntries={tileEntries}
                 drivers={drivers}
                 runnerSummary={runnerState.summary ?? null}
-                deltaSteps={runnerSettings.deltaSteps}
+                deltaSteps={calibrationSettingsController.deltaSteps}
                 outlierTileKeys={
                     runnerState.summary?.outlierAnalysis?.outlierTileKeys
                         ? new Set(runnerState.summary.outlierAnalysis.outlierTileKeys)
@@ -580,10 +591,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
             />
             <CalibrationRunnerPanel
                 controller={calibrationController}
-                arrayRotation={arrayRotation}
-                onArrayRotationChange={setArrayRotation}
-                stagingPosition={stagingPosition}
-                onStagingPositionChange={setStagingPosition}
+                settingsController={calibrationSettingsController}
                 isCalibrationActive={isCalibrationActive}
                 stepState={stepState}
                 isAwaitingAdvance={isAwaitingAdvance}

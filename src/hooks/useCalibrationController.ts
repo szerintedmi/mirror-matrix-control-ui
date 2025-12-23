@@ -5,11 +5,7 @@ import {
     showCommandErrorToast,
     showSimpleWarningToast,
 } from '@/components/common/StyledToast';
-import {
-    DEFAULT_CALIBRATION_RUNNER_SETTINGS,
-    type CalibrationRunnerSettings,
-} from '@/constants/calibration';
-import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
+import type { CalibrationRunnerSettings } from '@/constants/calibration';
 import type { MotorCommandApi } from '@/hooks/useMotorCommands';
 import { createAdapters } from '@/services/calibration/script/adapters';
 import type { DecisionOption } from '@/services/calibration/script/commands';
@@ -30,9 +26,6 @@ import {
     createBaselineRunnerState,
 } from '@/services/calibration/types';
 import type { ArrayRotation, MirrorConfig, NormalizedRoi, StagingPosition } from '@/types';
-
-const clampSetting = (value: number, min: number, max: number): number =>
-    Math.max(min, Math.min(max, value));
 
 const MAX_LOG_ENTRIES = 120;
 
@@ -58,6 +51,11 @@ interface UseCalibrationControllerParams {
      * ROI (Region of Interest) settings for expected blob position calculation.
      */
     roi: NormalizedRoi;
+    /**
+     * Current runner settings from external controller.
+     * These values are used directly when starting calibration.
+     */
+    runnerSettings: CalibrationRunnerSettings;
     /**
      * Optional initial state to restore from session storage.
      */
@@ -85,7 +83,6 @@ interface UseCalibrationControllerParams {
 export interface CalibrationController {
     // State
     runnerState: CalibrationRunnerState;
-    runnerSettings: CalibrationRunnerSettings;
     commandLog: CalibrationCommandLogEntry[];
     stepState: CalibrationStepState | null;
     /** Pending decision for retry/skip UI */
@@ -98,12 +95,6 @@ export interface CalibrationController {
     /** Whether a decision is pending from the user */
     isAwaitingDecision: boolean;
     detectionReady: boolean;
-
-    // Settings
-    updateSetting: <K extends keyof CalibrationRunnerSettings>(
-        key: K,
-        value: CalibrationRunnerSettings[K],
-    ) => void;
 
     // Mode control
     mode: CalibrationMode;
@@ -132,14 +123,12 @@ export const useCalibrationController = ({
     arrayRotation,
     stagingPosition,
     roi,
+    runnerSettings,
     initialSessionState,
     loadedProfileSummary,
     onExpectedPositionChange,
 }: UseCalibrationControllerParams): CalibrationController => {
     const [mode, setMode] = useState<CalibrationMode>('auto');
-    const [runnerSettings, setRunnerSettings] = useState<CalibrationRunnerSettings>(
-        DEFAULT_CALIBRATION_RUNNER_SETTINGS,
-    );
     const [runnerState, setRunnerState] = useState<CalibrationRunnerState>(() => {
         const baseState = createBaselineRunnerState(gridSize, mirrorConfig);
         // Restore from session state if available
@@ -161,26 +150,6 @@ export const useCalibrationController = ({
 
     // Create accumulating error toast for tile errors
     const errorToastRef = useRef(createAccumulatingErrorToast('Calibration'));
-
-    const updateSetting = useCallback(
-        <K extends keyof CalibrationRunnerSettings>(
-            key: K,
-            value: CalibrationRunnerSettings[K],
-        ) => {
-            setRunnerSettings((prev) => {
-                if (prev[key] === value) {
-                    return prev;
-                }
-                // Apply clamping for deltaSteps
-                if (key === 'deltaSteps') {
-                    const clamped = clampSetting(Number(value), 50, MOTOR_MAX_POSITION_STEPS);
-                    return { ...prev, [key]: clamped };
-                }
-                return { ...prev, [key]: value };
-            });
-        },
-        [],
-    );
 
     const resetState = useCallback(() => {
         setRunnerState(createBaselineRunnerState(gridSize, mirrorConfig));
@@ -480,7 +449,6 @@ export const useCalibrationController = ({
 
     return {
         runnerState,
-        runnerSettings,
         commandLog,
         stepState,
         pendingDecision,
@@ -489,7 +457,6 @@ export const useCalibrationController = ({
         isAwaitingAdvance,
         isAwaitingDecision,
         detectionReady,
-        updateSetting,
         mode,
         setMode,
         start,

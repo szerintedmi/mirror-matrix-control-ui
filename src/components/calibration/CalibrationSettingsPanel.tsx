@@ -27,6 +27,8 @@ interface CalibrationSettingsPanelProps {
     tileTolerance: number;
     onTileToleranceChange: (value: number) => void;
     disabled?: boolean;
+    isDefaultSettings?: boolean;
+    onResetToDefaults?: () => void;
 }
 
 const INTEGER_PATTERN = /^\d*$/;
@@ -50,6 +52,8 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
     tileTolerance,
     onTileToleranceChange,
     disabled = false,
+    isDefaultSettings = true,
+    onResetToDefaults,
 }) => {
     const firstTileInterimStepDeltaInput = useEditableInput({
         value: firstTileInterimStepDelta,
@@ -162,6 +166,22 @@ const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> = ({
                         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                 </svg>
+            }
+            headerActions={
+                !isDefaultSettings &&
+                onResetToDefaults && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onResetToDefaults();
+                        }}
+                        className="rounded px-2 py-0.5 text-xs text-amber-400 transition hover:bg-amber-500/20 hover:text-amber-300"
+                        title="Reset to default settings"
+                    >
+                        Reset
+                    </button>
+                )
             }
         >
             <div className="space-y-4">

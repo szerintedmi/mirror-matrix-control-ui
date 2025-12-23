@@ -5,6 +5,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import CalibrationRunnerPanel from '@/components/calibration/CalibrationRunnerPanel';
 import { DEFAULT_CALIBRATION_RUNNER_SETTINGS } from '@/constants/calibration';
 import type { CalibrationController } from '@/hooks/useCalibrationController';
+import type { CalibrationSettingsController } from '@/hooks/useCalibrationSettingsController';
 import type { PendingDecision } from '@/services/calibration/script/executor';
 import type {
     CalibrationRunnerState,
@@ -12,6 +13,7 @@ import type {
     TileCalibrationMetrics,
     CalibrationRunSummary,
 } from '@/services/calibration/types';
+import { DEFAULT_CALIBRATION_UI_SETTINGS } from '@/services/calibrationSettingsStorage';
 import type { Motor } from '@/types';
 
 const nudgeMotorMock = vi.fn().mockResolvedValue({ direction: 1 });
@@ -104,7 +106,6 @@ const createMockController = (
     overrides: Partial<CalibrationController> = {},
 ): CalibrationController => ({
     runnerState: state,
-    runnerSettings: DEFAULT_CALIBRATION_RUNNER_SETTINGS,
     commandLog: [],
     stepState: null,
     pendingDecision: null,
@@ -116,7 +117,6 @@ const createMockController = (
     isAwaitingAdvance: false,
     isAwaitingDecision: false,
     detectionReady: true,
-    updateSetting: noop,
     mode: 'auto',
     setMode: noop,
     start: noop,
@@ -130,6 +130,20 @@ const createMockController = (
     ...overrides,
 });
 
+const createMockSettingsController = (): CalibrationSettingsController => ({
+    ...DEFAULT_CALIBRATION_UI_SETTINGS,
+    currentSettings: DEFAULT_CALIBRATION_UI_SETTINGS,
+    setArrayRotation: noop,
+    setStagingPosition: noop,
+    setDeltaSteps: noop,
+    setGridGapNormalized: noop,
+    setFirstTileInterimStepDelta: noop,
+    setFirstTileTolerance: noop,
+    setTileTolerance: noop,
+    isDefaultSettings: true,
+    resetToDefaults: noop,
+});
+
 const renderPanel = async (
     options: {
         runnerState?: CalibrationRunnerState;
@@ -141,14 +155,12 @@ const renderPanel = async (
     document.body.appendChild(container);
     const state = options.runnerState ?? runnerState;
     const controller = createMockController(state, options.controllerOverrides);
+    const settingsController = createMockSettingsController();
     await act(async () => {
         const element = (
             <CalibrationRunnerPanel
                 controller={controller}
-                arrayRotation={0}
-                onArrayRotationChange={noop}
-                stagingPosition="nearest-corner"
-                onStagingPositionChange={noop}
+                settingsController={settingsController}
                 isCalibrationActive={options.isCalibrationActive ?? false}
                 stepState={null}
                 isAwaitingAdvance={false}
