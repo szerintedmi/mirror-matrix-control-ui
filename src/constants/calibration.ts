@@ -129,8 +129,8 @@ export const DEFAULT_ROBUST_TILE_SIZE_CONFIG: RobustTileSizeConfig = {
 export const DEFAULT_CALIBRATION_RUNNER_SETTINGS: CalibrationRunnerSettings = {
     deltaSteps: 1200,
     gridGapNormalized: 0.0,
-    sampleTimeoutMs: 1_500,
-    maxDetectionRetries: 5,
+    sampleTimeoutMs: 1_000,
+    maxDetectionRetries: 3,
     retryDelayMs: 150,
     firstTileTolerance: DEFAULT_FIRST_TILE_TOLERANCE,
     tileTolerance: DEFAULT_TILE_TOLERANCE,
