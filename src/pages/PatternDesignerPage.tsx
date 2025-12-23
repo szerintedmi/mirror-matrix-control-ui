@@ -597,11 +597,14 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 updateEditMode('placement');
             } else if (event.key === 'e' || event.key === 'E') {
                 updateEditMode('erase');
+            } else if (event.key === ' ') {
+                event.preventDefault();
+                updateEditMode(editMode === 'placement' ? 'erase' : 'placement');
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [updateEditMode, handleUndo, handleRedo]);
+    }, [editMode, updateEditMode, handleUndo, handleRedo]);
     const calibratedBlobRadius = useMemo(() => {
         const diameter = selectedCalibrationProfile?.calibrationSpace.blobStats?.maxDiameter;
         if (typeof diameter === 'number' && Number.isFinite(diameter) && diameter > 0) {

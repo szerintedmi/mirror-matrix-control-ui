@@ -75,7 +75,10 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
             {/* Row 1: Edit Mode + Show Bounds */}
             <div className="flex flex-wrap items-center gap-3 font-semibold text-gray-200">
                 <span className="tracking-wide text-gray-400 uppercase">Mode</span>
-                <div className="inline-flex rounded-md bg-gray-800/70 p-1">
+                <div
+                    className="inline-flex rounded-md bg-gray-800/70 p-1"
+                    title="Press Space to toggle modes"
+                >
                     {(['placement', 'erase'] as PatternEditMode[]).map((mode) => {
                         const isActive = editMode === mode;
                         const hotkey = mode === 'placement' ? 'P' : 'E';
@@ -87,6 +90,7 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                                 disabled={disabled}
                                 className={`${buttonBase} ${isActive ? buttonActive : buttonInactive}`}
                                 aria-pressed={isActive}
+                                title={`${EDIT_MODE_LABEL[mode]} mode (${hotkey}) • Space to toggle`}
                             >
                                 {EDIT_MODE_LABEL[mode]} ({hotkey})
                             </button>
