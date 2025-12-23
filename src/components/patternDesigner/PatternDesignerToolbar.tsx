@@ -37,6 +37,9 @@ export interface PatternDesignerToolbarProps {
     placedSpots?: number;
     availableSpots?: number;
 
+    // Hover validation hint (shown when hovering over invalid area)
+    hoverHint?: string | null;
+
     // Disabled state
     disabled?: boolean;
 }
@@ -57,6 +60,7 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
     blobRadius,
     placedSpots,
     availableSpots,
+    hoverHint,
     disabled = false,
 }) => {
     // Suppress unused variable warning - blobRadius is kept in props for future use
@@ -112,14 +116,17 @@ const PatternDesignerToolbar: React.FC<PatternDesignerToolbarProps> = ({
                     Show Bounds
                 </button>
 
-                {/* Spots count */}
-                {showSpots && (
-                    <span
-                        className={`ml-auto text-xs tabular-nums ${spotsOverCapacity ? 'font-semibold text-red-300' : 'text-gray-400'}`}
-                    >
-                        {placedSpots} / {availableSpots} spots
-                    </span>
-                )}
+                {/* Spots count and hover hint */}
+                <span className="ml-auto flex items-center gap-3">
+                    {hoverHint && <span className="text-xs text-rose-300">{hoverHint}</span>}
+                    {showSpots && (
+                        <span
+                            className={`text-xs tabular-nums ${spotsOverCapacity ? 'font-semibold text-red-300' : 'text-gray-400'}`}
+                        >
+                            {placedSpots} / {availableSpots} spots
+                        </span>
+                    )}
+                </span>
             </div>
 
             {/* Row 2: Transform Controls (shared component) */}

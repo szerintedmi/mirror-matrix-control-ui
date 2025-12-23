@@ -4,7 +4,11 @@ import { showCommandErrorToast, showSimpleErrorToast } from '@/components/common
 import Modal from '@/components/Modal';
 import PatternDesignerDebugPanel from '@/components/patternDesigner/PatternDesignerDebugPanel';
 import PatternDesignerToolbar from '@/components/patternDesigner/PatternDesignerToolbar';
-import type { DesignerCoordinate, PatternEditMode } from '@/components/patternDesigner/types';
+import type {
+    DesignerCoordinate,
+    HoverValidationStatus,
+    PatternEditMode,
+} from '@/components/patternDesigner/types';
 import PatternLibraryList from '@/components/PatternLibraryList';
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { usePatternContext } from '@/context/PatternContext';
@@ -41,6 +45,8 @@ interface PatternDesignerCanvasProps {
     editMode: PatternEditMode;
     hoveredPointId: string | null;
     hoverPoint: DesignerCoordinate | null;
+    hoverInvalid: boolean;
+    hoverInvalidReason: 'outside_bounds' | 'over_capacity' | 'area_occupied' | null;
     onChange: (nextPattern: Pattern) => void;
     onHoverChange?: (point: DesignerCoordinate | null) => void;
     onHoverPointChange?: (pointId: string | null) => void;
@@ -53,6 +59,7 @@ interface PatternDesignerCanvasProps {
         yMin: number;
         yMax: number;
     }>;
+    highlightedTileIds: Set<string>;
     invalidPointIds: Set<string>;
     maxOverlapCount: number;
     viewBox: string;
@@ -87,12 +94,15 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     editMode,
     hoveredPointId,
     hoverPoint,
+    hoverInvalid,
+    hoverInvalidReason,
     onChange,
     onHoverChange,
     onHoverPointChange,
     blobRadius,
     showBounds,
     tileBounds,
+    highlightedTileIds,
     invalidPointIds,
     maxOverlapCount,
     viewBox,
@@ -396,22 +406,40 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                             />
                         );
                     })}
-                    {editMode === 'placement' && hoverPoint && (
-                        <rect
-                            x={centeredToView(hoverPoint.x) - centeredDeltaToView(blobRadius)}
-                            y={centeredToView(hoverPoint.y) - centeredDeltaToView(blobRadius)}
-                            width={centeredDeltaToView(blobRadius) * 2}
-                            height={centeredDeltaToView(blobRadius) * 2}
-                            fill="#22d3ee"
-                            fillOpacity={0.3}
-                            stroke="#22d3ee"
-                            strokeWidth={0.002 * viewBoxScale}
-                            strokeDasharray={`${0.01 * viewBoxScale} ${0.01 * viewBoxScale}`}
-                            pointerEvents="none"
-                        />
-                    )}
+                    {editMode === 'placement' &&
+                        hoverPoint &&
+                        (() => {
+                            // Color based on validity: cyan=valid, amber=area occupied, red=other errors
+                            const draftColor = !hoverInvalid
+                                ? '#22d3ee'
+                                : hoverInvalidReason === 'area_occupied'
+                                  ? '#fbbf24'
+                                  : '#ef4444';
+                            return (
+                                <rect
+                                    x={
+                                        centeredToView(hoverPoint.x) -
+                                        centeredDeltaToView(blobRadius)
+                                    }
+                                    y={
+                                        centeredToView(hoverPoint.y) -
+                                        centeredDeltaToView(blobRadius)
+                                    }
+                                    width={centeredDeltaToView(blobRadius) * 2}
+                                    height={centeredDeltaToView(blobRadius) * 2}
+                                    fill={draftColor}
+                                    fillOpacity={0.3}
+                                    stroke={draftColor}
+                                    strokeWidth={0.002 * viewBoxScale}
+                                    strokeDasharray={`${0.01 * viewBoxScale} ${0.01 * viewBoxScale}`}
+                                    pointerEvents="none"
+                                />
+                            );
+                        })()}
+                    {/* Tile bounds - shown when showBounds is enabled */}
                     {showBounds &&
                         tileBounds.map((bound) => {
+                            const isHighlighted = highlightedTileIds.has(bound.id);
                             const xMin = centeredToView(bound.xMin);
                             const xMax = centeredToView(bound.xMax);
                             const yMin = centeredToView(bound.yMin);
@@ -425,13 +453,42 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                     y={yMin}
                                     width={width}
                                     height={height}
-                                    fill="none"
-                                    stroke="rgba(250, 204, 21, 0.45)"
-                                    strokeWidth={0.0008 * viewBoxScale}
+                                    fill={isHighlighted ? 'rgba(251, 191, 36, 0.08)' : 'none'}
+                                    stroke={
+                                        isHighlighted
+                                            ? 'rgba(251, 191, 36, 0.5)'
+                                            : 'rgba(250, 204, 21, 0.45)'
+                                    }
+                                    strokeWidth={(isHighlighted ? 0.0012 : 0.0008) * viewBoxScale}
                                     pointerEvents="none"
                                 />
                             );
                         })}
+                    {/* Highlighted tiles overlay - always shown when tiles are blocking placement */}
+                    {!showBounds &&
+                        tileBounds
+                            .filter((bound) => highlightedTileIds.has(bound.id))
+                            .map((bound) => {
+                                const xMin = centeredToView(bound.xMin);
+                                const xMax = centeredToView(bound.xMax);
+                                const yMin = centeredToView(bound.yMin);
+                                const yMax = centeredToView(bound.yMax);
+                                const width = Math.max(0, xMax - xMin);
+                                const height = Math.max(0, yMax - yMin);
+                                return (
+                                    <rect
+                                        key={`highlight-${bound.id}`}
+                                        x={xMin}
+                                        y={yMin}
+                                        width={width}
+                                        height={height}
+                                        fill="rgba(251, 191, 36, 0.08)"
+                                        stroke="rgba(251, 191, 36, 0.5)"
+                                        strokeWidth={0.0012 * viewBoxScale}
+                                        pointerEvents="none"
+                                    />
+                                );
+                            })}
                 </svg>
             </div>
         </div>
@@ -671,7 +728,11 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     // Compute full validation using planner (bounds + capacity + step range)
     const selectedPatternValidation = useMemo(() => {
         if (!selectedPattern || !selectedCalibrationProfile) {
-            return { invalidPointIds: new Set<string>(), errors: [] };
+            return {
+                invalidPointIds: new Set<string>(),
+                errors: [],
+                assignedTileIds: new Set<string>(),
+            };
         }
 
         const plan = planProfilePlayback({
@@ -689,10 +750,93 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             }
         }
 
-        return { invalidPointIds: invalidIds, errors: plan.errors };
+        // Track which tiles are assigned to pattern points
+        const assignedTileIds = new Set<string>();
+        for (const tile of plan.tiles) {
+            if (tile.patternPointId) {
+                assignedTileIds.add(tile.mirrorId);
+            }
+        }
+
+        return { invalidPointIds: invalidIds, errors: plan.errors, assignedTileIds };
     }, [selectedPattern, selectedCalibrationProfile, gridSize, mirrorConfig]);
 
     const invalidPointIds = selectedPatternValidation.invalidPointIds;
+    const assignedTileIds = selectedPatternValidation.assignedTileIds;
+
+    // Compute whether the current hover position would result in a valid placement
+    const hoverValidation = useMemo((): HoverValidationStatus => {
+        // Only validate when in placement mode with active hover and calibration profile
+        if (editMode !== 'placement' || !hoverPoint || !selectedCalibrationProfile) {
+            return { valid: true };
+        }
+
+        // Find all tiles whose bounds contain the hover point
+        const tilesContainingHover = calibrationTileBounds.filter(
+            (bounds) =>
+                hoverPoint.x >= bounds.xMin &&
+                hoverPoint.x <= bounds.xMax &&
+                hoverPoint.y >= bounds.yMin &&
+                hoverPoint.y <= bounds.yMax,
+        );
+
+        // Check: Is hover point within any tile bounds?
+        if (tilesContainingHover.length === 0) {
+            return { valid: false, reason: 'outside_bounds' };
+        }
+
+        // Check: Would adding this point exceed available tile capacity?
+        const currentPointCount = selectedPattern?.points.length ?? 0;
+        if (currentPointCount + 1 > availableSpotCount) {
+            return { valid: false, reason: 'over_capacity' };
+        }
+
+        // Check: Are all tiles that could serve this area already occupied?
+        const occupiedTilesInArea = tilesContainingHover.filter((tile) =>
+            assignedTileIds.has(tile.id),
+        );
+        const hasAvailableTile = tilesContainingHover.length > occupiedTilesInArea.length;
+
+        if (!hasAvailableTile) {
+            return {
+                valid: false,
+                reason: 'area_occupied',
+                occupiedTileIds: occupiedTilesInArea.map((tile) => tile.id),
+            };
+        }
+
+        return { valid: true };
+    }, [
+        editMode,
+        hoverPoint,
+        selectedCalibrationProfile,
+        calibrationTileBounds,
+        selectedPattern?.points.length,
+        availableSpotCount,
+        assignedTileIds,
+    ]);
+
+    const hoverHintMessage = useMemo((): string | null => {
+        if (hoverValidation.valid) return null;
+        switch (hoverValidation.reason) {
+            case 'outside_bounds':
+                return 'Outside tile bounds';
+            case 'over_capacity':
+                return 'No available tiles';
+            case 'area_occupied':
+                return 'Area already occupied';
+            default:
+                return null;
+        }
+    }, [hoverValidation]);
+
+    // Get tile IDs to highlight when hovering over an occupied area
+    const highlightedTileIds = useMemo((): Set<string> => {
+        if (hoverValidation.valid || hoverValidation.reason !== 'area_occupied') {
+            return new Set();
+        }
+        return new Set(hoverValidation.occupiedTileIds);
+    }, [hoverValidation]);
 
     const maxOverlapCount = useMemo(() => {
         if (!selectedPattern) return 0;
@@ -743,10 +887,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 : 0;
             const viewportAvailable = window.innerHeight - mainRect.top - parentPaddingBottom;
             const mainAvailable = Math.min(mainRect.height, viewportAvailable);
-            const availableHeight = Math.max(
-                0,
-                mainAvailable - toolbarHeight - gap,
-            );
+            const availableHeight = Math.max(0, mainAvailable - toolbarHeight - gap);
             const safeAspect = viewBoxAspectRatio > 0 ? viewBoxAspectRatio : 1;
             const nextWidth = Math.min(mainRect.width, availableHeight * safeAspect);
             const nextHeight = safeAspect > 0 ? nextWidth / safeAspect : 0;
@@ -970,10 +1111,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 className="flex min-h-0 min-w-[500px] flex-1 flex-col gap-2 overflow-hidden"
             >
                 {/* Toolbar section - fixed height */}
-                <div
-                    ref={toolbarRef}
-                    className="flex-none rounded-md bg-gray-900/60 px-4 py-2"
-                >
+                <div ref={toolbarRef} className="flex-none rounded-md bg-gray-900/60 px-4 py-2">
                     <PatternDesignerToolbar
                         editMode={editMode}
                         onEditModeChange={updateEditMode}
@@ -990,6 +1128,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                         blobRadius={calibratedBlobRadius}
                         placedSpots={showSpotSummary ? placedSpotCount : undefined}
                         availableSpots={showSpotSummary ? availableSpotCount : undefined}
+                        hoverHint={hoverHintMessage}
                         disabled={!selectedPattern}
                     />
                 </div>
@@ -1006,14 +1145,21 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                                 editMode={editMode}
                                 hoveredPointId={hoveredPatternPointId}
                                 hoverPoint={hoverPoint}
+                                hoverInvalid={!hoverValidation.valid}
+                                hoverInvalidReason={
+                                    hoverValidation.valid ? null : hoverValidation.reason
+                                }
                                 onChange={handlePatternChange}
                                 onHoverChange={setHoverPoint}
                                 onHoverPointChange={setHoveredPatternPointId}
                                 blobRadius={calibratedBlobRadius}
                                 showBounds={
-                                    showBounds && showSpotSummary && calibrationTileBounds.length > 0
+                                    showBounds &&
+                                    showSpotSummary &&
+                                    calibrationTileBounds.length > 0
                                 }
                                 tileBounds={calibrationTileBounds}
+                                highlightedTileIds={highlightedTileIds}
                                 invalidPointIds={invalidPointIds}
                                 maxOverlapCount={maxOverlapCount}
                                 viewBox={autoZoomViewBox}
