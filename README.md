@@ -2,6 +2,8 @@
 
 React single-page workspace for arranging the kinetic mirror grid, authoring light patterns, and driving [ESP32 mirror nodes](https://github.com/szerintedmi/kinetic-mirror-matrix-esp32) over MQTT. The app focuses on the configurator, pattern editor, simulation preview, and library workflows needed for the MVP.
 
+[![Watch the video](https://img.youtube.com/vi/aJeB7yPpRAY/hqdefault.jpg)](https://www.youtube.com/embed/aJeB7yPpRAY)
+
 ## Prerequisites
 
 - Node.js `>=22.21.0 <23`
