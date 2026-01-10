@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 import { showCommandErrorToast } from '@/components/common/StyledToast';
 import { useLogStore } from '@/context/LogContext';
@@ -61,6 +61,10 @@ export interface AnimationPlaybackAPI {
     progress: number;
     /** Whether currently playing */
     isPlaying: boolean;
+    /** Whether loop mode is enabled */
+    loopEnabled: boolean;
+    /** Set loop mode */
+    setLoopEnabled: (enabled: boolean) => void;
 }
 
 // ============================================================================
@@ -74,9 +78,17 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
     const [playbackState, setPlaybackState] = useState<AnimationPlaybackState>('idle');
     const [currentSegment, setCurrentSegment] = useState<number | null>(null);
     const [totalSegments, setTotalSegments] = useState<number | null>(null);
+    const [loopEnabled, setLoopEnabled] = useState(false);
 
     // Ref for cancellation
     const stopRequestedRef = useRef(false);
+    // Ref for loop state (to access current value in async loop without stale closure)
+    const loopEnabledRef = useRef(false);
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        loopEnabledRef.current = loopEnabled;
+    }, [loopEnabled]);
 
     /**
      * Execute motor moves for given axis moves.
@@ -314,30 +326,133 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
             );
 
             try {
-                // Sequential mode with offset: use staggered starts
-                if (plan.mode === 'sequential' && plan.mirrorOrder && plan.mirrorOrder.length > 0) {
-                    const result = await playSequentialAnimation(plan);
+                let iterationCount = 0;
 
-                    if (stopRequestedRef.current) {
-                        logInfo('Animation', 'Stopped by user');
-                        setPlaybackState('stopped');
+                // Loop execution while loop mode is enabled
+                do {
+                    iterationCount++;
+
+                    // Reset segment for new iteration (except first)
+                    if (iterationCount > 1) {
+                        setCurrentSegment(0);
+                        logInfo(
+                            'Animation',
+                            `Looping "${animation.name}" (iteration ${iterationCount})`,
+                        );
+                    }
+
+                    // Sequential mode with offset: use staggered starts
+                    if (
+                        plan.mode === 'sequential' &&
+                        plan.mirrorOrder &&
+                        plan.mirrorOrder.length > 0
+                    ) {
+                        const result = await playSequentialAnimation(plan);
+
+                        if (stopRequestedRef.current) {
+                            logInfo('Animation', 'Stopped by user');
+                            setPlaybackState('stopped');
+                            setCurrentSegment(null);
+                            setTotalSegments(null);
+                            return {
+                                success: false,
+                                message: 'Animation stopped by user.',
+                                finalState: 'stopped',
+                            };
+                        }
+
+                        if (!result.success && result.failures.length > 0) {
+                            showCommandErrorToast({
+                                title: 'Animation playback',
+                                totalCount: plan.mirrorOrder.length * plan.segments.length,
+                                errors: result.failures,
+                            });
+                        }
+
+                        // Check if we should loop
+                        if (loopEnabledRef.current && !stopRequestedRef.current) {
+                            continue; // Start next iteration
+                        }
+
+                        logInfo('Animation', `Completed "${animation.name}"`);
+                        setPlaybackState('completed');
                         setCurrentSegment(null);
                         setTotalSegments(null);
+
                         return {
-                            success: false,
-                            message: 'Animation stopped by user.',
-                            finalState: 'stopped',
+                            success: true,
+                            message: `Animation "${animation.name}" completed.`,
+                            segmentsCompleted: plan.segments.length,
+                            totalSegments: plan.segments.length,
+                            finalState: 'completed',
                         };
                     }
 
-                    if (!result.success && result.failures.length > 0) {
-                        showCommandErrorToast({
-                            title: 'Animation playback',
-                            totalCount: plan.mirrorOrder.length * plan.segments.length,
-                            errors: result.failures,
-                        });
+                    // Independent mode: segment-by-segment execution
+                    for (let i = 0; i < plan.segments.length; i++) {
+                        // Check for stop request
+                        if (stopRequestedRef.current) {
+                            logInfo(
+                                'Animation',
+                                `Stopped at segment ${i + 1}/${plan.segments.length}`,
+                            );
+                            setPlaybackState('stopped');
+                            setCurrentSegment(null);
+                            setTotalSegments(null);
+                            return {
+                                success: false,
+                                message: 'Animation stopped by user.',
+                                segmentsCompleted: i,
+                                totalSegments: plan.segments.length,
+                                finalState: 'stopped',
+                            };
+                        }
+
+                        setCurrentSegment(i);
+                        const segment = plan.segments[i];
+
+                        // Execute segment
+                        const result = await executeSegment(segment);
+
+                        if (!result.success) {
+                            logError(
+                                'Animation',
+                                `Segment ${i + 1} failed: ${result.failureCount} motor commands failed`,
+                            );
+                            showCommandErrorToast({
+                                title: `Animation segment ${i + 1}`,
+                                totalCount: segment.axisMoves.length,
+                                errors: result.failures,
+                            });
+                            // Continue anyway - partial execution is better than stopping
+                        }
+
+                        // Wait for segment to complete (unless it's the last one)
+                        if (i < plan.segments.length - 1) {
+                            const completed = await waitForSegmentCompletion(segment.durationMs);
+                            if (!completed) {
+                                // Stopped during wait
+                                logInfo('Animation', `Stopped during segment ${i + 1}`);
+                                setPlaybackState('stopped');
+                                setCurrentSegment(null);
+                                setTotalSegments(null);
+                                return {
+                                    success: false,
+                                    message: 'Animation stopped by user.',
+                                    segmentsCompleted: i + 1,
+                                    totalSegments: plan.segments.length,
+                                    finalState: 'stopped',
+                                };
+                            }
+                        }
                     }
 
+                    // Check if we should loop (for independent mode)
+                    if (loopEnabledRef.current && !stopRequestedRef.current) {
+                        continue; // Start next iteration
+                    }
+
+                    // Success - no looping or loop disabled
                     logInfo('Animation', `Completed "${animation.name}"`);
                     setPlaybackState('completed');
                     setCurrentSegment(null);
@@ -350,65 +465,9 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
                         totalSegments: plan.segments.length,
                         finalState: 'completed',
                     };
-                }
+                } while (loopEnabledRef.current && !stopRequestedRef.current);
 
-                // Independent mode: segment-by-segment execution
-                for (let i = 0; i < plan.segments.length; i++) {
-                    // Check for stop request
-                    if (stopRequestedRef.current) {
-                        logInfo('Animation', `Stopped at segment ${i + 1}/${plan.segments.length}`);
-                        setPlaybackState('stopped');
-                        setCurrentSegment(null);
-                        setTotalSegments(null);
-                        return {
-                            success: false,
-                            message: 'Animation stopped by user.',
-                            segmentsCompleted: i,
-                            totalSegments: plan.segments.length,
-                            finalState: 'stopped',
-                        };
-                    }
-
-                    setCurrentSegment(i);
-                    const segment = plan.segments[i];
-
-                    // Execute segment
-                    const result = await executeSegment(segment);
-
-                    if (!result.success) {
-                        logError(
-                            'Animation',
-                            `Segment ${i + 1} failed: ${result.failureCount} motor commands failed`,
-                        );
-                        showCommandErrorToast({
-                            title: `Animation segment ${i + 1}`,
-                            totalCount: segment.axisMoves.length,
-                            errors: result.failures,
-                        });
-                        // Continue anyway - partial execution is better than stopping
-                    }
-
-                    // Wait for segment to complete (unless it's the last one)
-                    if (i < plan.segments.length - 1) {
-                        const completed = await waitForSegmentCompletion(segment.durationMs);
-                        if (!completed) {
-                            // Stopped during wait
-                            logInfo('Animation', `Stopped during segment ${i + 1}`);
-                            setPlaybackState('stopped');
-                            setCurrentSegment(null);
-                            setTotalSegments(null);
-                            return {
-                                success: false,
-                                message: 'Animation stopped by user.',
-                                segmentsCompleted: i + 1,
-                                totalSegments: plan.segments.length,
-                                finalState: 'stopped',
-                            };
-                        }
-                    }
-                }
-
-                // Success
+                // Loop was disabled mid-playback
                 logInfo('Animation', `Completed "${animation.name}"`);
                 setPlaybackState('completed');
                 setCurrentSegment(null);
@@ -474,5 +533,7 @@ export function useAnimationPlayback(config: AnimationPlaybackConfig): Animation
         totalSegments,
         progress,
         isPlaying,
+        loopEnabled,
+        setLoopEnabled,
     };
 }

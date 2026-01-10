@@ -103,6 +103,8 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
         totalSegments,
         progress,
         isPlaying,
+        loopEnabled,
+        setLoopEnabled,
     } = useAnimationPlayback({ gridSize, mirrorConfig });
 
     // Local state
@@ -658,6 +660,8 @@ const AnimationPage: React.FC<AnimationPageProps> = ({
                                 hasCalibration={Boolean(selectedCalibrationProfile)}
                                 canPlay={canPlay}
                                 resultMessage={playbackResultMessage}
+                                loopEnabled={loopEnabled}
+                                onLoopEnabledChange={setLoopEnabled}
                             />
 
                             <AnimationTimeline

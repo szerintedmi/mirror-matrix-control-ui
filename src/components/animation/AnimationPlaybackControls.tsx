@@ -14,6 +14,10 @@ interface AnimationPlaybackControlsProps {
     canPlay: boolean;
     /** Optional message to display (error or success) */
     resultMessage?: string | null;
+    /** Whether loop mode is enabled */
+    loopEnabled: boolean;
+    /** Callback to toggle loop mode */
+    onLoopEnabledChange: (enabled: boolean) => void;
 }
 
 const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
@@ -27,6 +31,8 @@ const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
     hasCalibration,
     canPlay,
     resultMessage,
+    loopEnabled,
+    onLoopEnabledChange,
 }) => {
     const isPlaying = playbackState === 'playing';
     const isCompleted = playbackState === 'completed';
@@ -111,6 +117,17 @@ const AnimationPlaybackControls: React.FC<AnimationPlaybackControlsProps> = ({
                     </button>
                 )}
             </div>
+
+            {/* Loop Toggle */}
+            <label className="inline-flex cursor-pointer items-center gap-2">
+                <input
+                    type="checkbox"
+                    checked={loopEnabled}
+                    onChange={(e) => onLoopEnabledChange(e.target.checked)}
+                    className="size-4 rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-gray-900"
+                />
+                <span className="text-sm text-gray-300">Loop continuously</span>
+            </label>
 
             {/* Warnings */}
             {!hasCalibration && hasAnimation && (
