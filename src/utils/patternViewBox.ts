@@ -37,10 +37,16 @@ const DEFAULT_VIEWBOX = '0 0 1 1';
 /** Minimum viewBox dimension to prevent extreme zoom */
 const MIN_VIEWBOX_SIZE = 0.05;
 
+/** Minimum extent in centered space when no calibration tile bounds exist */
+const MIN_CENTERED_EXTENT = 0.5;
+
 /**
  * Computes the combined bounding box for auto-zoom.
  * Takes the union of pattern points bbox and calibration tile bounds bbox.
  * Returns bounds in centered space [-1, 1].
+ *
+ * When no tile bounds exist, uses a minimum extent (±0.5) to prevent
+ * over-zooming on just pattern points.
  *
  * @param points - Pattern points in centered space
  * @param tileBounds - Calibration tile bounds in centered space
@@ -62,6 +68,15 @@ export function computeAutoZoomBounds(
     let xMax = -Infinity;
     let yMin = Infinity;
     let yMax = -Infinity;
+
+    // When no tile bounds, start with a minimum extent centered at origin
+    // This prevents over-zooming on just pattern points
+    if (tileBounds.length === 0) {
+        xMin = -MIN_CENTERED_EXTENT;
+        xMax = MIN_CENTERED_EXTENT;
+        yMin = -MIN_CENTERED_EXTENT;
+        yMax = MIN_CENTERED_EXTENT;
+    }
 
     for (const point of points) {
         xMin = Math.min(xMin, point.x - blobRadius);

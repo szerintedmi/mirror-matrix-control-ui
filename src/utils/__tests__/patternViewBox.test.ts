@@ -16,20 +16,31 @@ describe('patternViewBox', () => {
             expect(result).toBeNull();
         });
 
-        it('should compute bounds from points only', () => {
+        it('should use minimum extent when computing bounds from points only', () => {
             const points = [
                 { x: 0, y: 0 },
-                { x: 0.5, y: 0.5 },
+                { x: 0.2, y: 0.2 },
             ];
             const result = computeAutoZoomBounds(points, [], 0.04, 0);
 
             expect(result).not.toBeNull();
-            // x: 0 - 0.04 = -0.04 to 0.5 + 0.04 = 0.54
-            expect(result!.xMin).toBeCloseTo(-0.04);
-            expect(result!.xMax).toBeCloseTo(0.54);
-            // y: 0 - 0.04 = -0.04 to 0.5 + 0.04 = 0.54
-            expect(result!.yMin).toBeCloseTo(-0.04);
-            expect(result!.yMax).toBeCloseTo(0.54);
+            // Should use minimum extent of ±0.5, not tight bounds around points
+            expect(result!.xMin).toBeCloseTo(-0.5);
+            expect(result!.xMax).toBeCloseTo(0.5);
+            expect(result!.yMin).toBeCloseTo(-0.5);
+            expect(result!.yMax).toBeCloseTo(0.5);
+        });
+
+        it('should expand beyond minimum extent for points outside it', () => {
+            const points = [{ x: 0.8, y: 0.8 }]; // Outside ±0.5
+            const result = computeAutoZoomBounds(points, [], 0.04, 0);
+
+            expect(result).not.toBeNull();
+            // Should expand to include the distant point
+            expect(result!.xMin).toBeCloseTo(-0.5);
+            expect(result!.xMax).toBeCloseTo(0.84); // 0.8 + 0.04
+            expect(result!.yMin).toBeCloseTo(-0.5);
+            expect(result!.yMax).toBeCloseTo(0.84);
         });
 
         it('should compute bounds from tile bounds only', () => {
@@ -73,7 +84,7 @@ describe('patternViewBox', () => {
             expect(width).toBeGreaterThan(1.08);
         });
 
-        it('should handle negative coordinates', () => {
+        it('should handle negative coordinates with minimum extent', () => {
             const points = [
                 { x: -0.8, y: -0.8 },
                 { x: -0.2, y: -0.2 },
@@ -81,8 +92,10 @@ describe('patternViewBox', () => {
             const result = computeAutoZoomBounds(points, [], 0.04, 0);
 
             expect(result).not.toBeNull();
+            // -0.8 - 0.04 = -0.84 extends beyond -0.5
             expect(result!.xMin).toBeCloseTo(-0.84);
-            expect(result!.xMax).toBeCloseTo(-0.16);
+            // -0.2 + 0.04 = -0.16 is within minimum extent, so uses 0.5
+            expect(result!.xMax).toBeCloseTo(0.5);
         });
     });
 
