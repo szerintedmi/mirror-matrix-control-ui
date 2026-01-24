@@ -125,6 +125,7 @@ const createMockController = (
     abort: noop,
     reset: noop,
     advance: noop,
+    runToEnd: noop,
     submitDecision: noop,
     startSingleTileRecalibration: noop,
     ...overrides,
@@ -171,6 +172,7 @@ const renderPanel = async (
                 onResume={noop}
                 onAbort={noop}
                 onAdvance={noop}
+                onRunToEnd={noop}
             />
         );
         const root = createRoot(container);

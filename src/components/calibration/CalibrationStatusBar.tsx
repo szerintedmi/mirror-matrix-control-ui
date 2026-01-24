@@ -25,6 +25,8 @@ interface CalibrationStatusBarProps {
     onResume: () => void;
     onAbort: () => void;
     onAdvance: () => void;
+    /** Switch to auto mode and finish all remaining steps */
+    onRunToEnd: () => void;
     /** Submit a decision for retry/skip/abort */
     onSubmitDecision: (decision: DecisionOption) => void;
 }
@@ -80,6 +82,7 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
     onResume,
     onAbort,
     onAdvance,
+    onRunToEnd,
     onSubmitDecision,
 }) => {
     const { progress, activeTile, phase } = runnerState;
@@ -284,18 +287,33 @@ const CalibrationStatusBar: React.FC<CalibrationStatusBarProps> = ({
                         </button>
                     )}
                     {isActive && mode === 'step' && (
-                        <button
-                            type="button"
-                            className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${
-                                isAwaitingAdvance
-                                    ? 'animate-pulse bg-sky-500 text-white shadow-lg shadow-sky-500/30 hover:bg-sky-400'
-                                    : 'bg-gray-700 text-gray-400'
-                            }`}
-                            disabled={!isAwaitingAdvance}
-                            onClick={onAdvance}
-                        >
-                            {nextStepHint ? `Next: ${nextStepHint}` : 'Next'}
-                        </button>
+                        <>
+                            <button
+                                type="button"
+                                className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${
+                                    isAwaitingAdvance
+                                        ? 'animate-pulse bg-sky-500 text-white shadow-lg shadow-sky-500/30 hover:bg-sky-400'
+                                        : 'bg-gray-700 text-gray-400'
+                                }`}
+                                disabled={!isAwaitingAdvance}
+                                onClick={onAdvance}
+                            >
+                                {nextStepHint ? `Next: ${nextStepHint}` : 'Next'}
+                            </button>
+                            <button
+                                type="button"
+                                className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                                    isAwaitingAdvance
+                                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                                        : 'bg-gray-700 text-gray-400'
+                                }`}
+                                disabled={!isAwaitingAdvance}
+                                onClick={onRunToEnd}
+                                title="Finish all remaining steps automatically"
+                            >
+                                Run to End
+                            </button>
+                        </>
                     )}
                     {isActive && mode === 'auto' && (
                         <>

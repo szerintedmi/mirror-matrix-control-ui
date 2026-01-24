@@ -108,6 +108,8 @@ export interface CalibrationController {
     reset: () => void;
     /** Advance to next step (step mode only) */
     advance: () => void;
+    /** Switch to auto mode and finish all remaining steps automatically */
+    runToEnd: () => void;
     /** Submit a decision for retry/skip/abort */
     submitDecision: (decision: DecisionOption) => void;
     /** Start single-tile recalibration (requires existing profile) */
@@ -288,6 +290,12 @@ export const useCalibrationController = ({
         executorRef.current?.advance();
     }, []);
 
+    const runToEnd = useCallback(() => {
+        executorRef.current?.runToEnd();
+        // Update local mode state to reflect the switch to auto
+        setMode('auto');
+    }, []);
+
     const submitDecision = useCallback((decision: DecisionOption) => {
         executorRef.current?.submitDecision(decision);
     }, []);
@@ -465,6 +473,7 @@ export const useCalibrationController = ({
         abort,
         reset,
         advance,
+        runToEnd,
         submitDecision,
         startSingleTileRecalibration,
     };

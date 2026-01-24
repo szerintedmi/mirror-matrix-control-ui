@@ -20,6 +20,7 @@ interface CalibrationRunnerPanelProps {
     onResume: () => void;
     onAbort: () => void;
     onAdvance: () => void;
+    onRunToEnd: () => void;
 }
 
 const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
@@ -35,6 +36,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
     onResume,
     onAbort,
     onAdvance,
+    onRunToEnd,
 }) => {
     const { runnerState, mode, setMode } = controller;
 
@@ -83,6 +85,7 @@ const CalibrationRunnerPanel: React.FC<CalibrationRunnerPanelProps> = ({
                     onResume={onResume}
                     onAbort={onAbort}
                     onAdvance={onAdvance}
+                    onRunToEnd={onRunToEnd}
                     onSubmitDecision={controller.submitDecision}
                 />
             </div>

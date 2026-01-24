@@ -277,6 +277,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
         pause: pauseCalibration,
         resume: resumeCalibration,
         advance: advanceCalibration,
+        runToEnd: runToEndCalibration,
         abort: abortCalibration,
         startSingleTileRecalibration,
         commandLog,
@@ -602,6 +603,7 @@ const CalibrationPage: React.FC<CalibrationPageProps> = ({ gridSize, mirrorConfi
                 onResume={resumeCalibration}
                 onAbort={abortCalibration}
                 onAdvance={advanceCalibration}
+                onRunToEnd={runToEndCalibration}
             />
             <div className="flex flex-col gap-6 lg:flex-row">
                 <div className="flex flex-col gap-4 lg:w-[300px] lg:flex-shrink-0">

@@ -284,6 +284,24 @@ export class CalibrationExecutor {
     }
 
     /**
+     * Switch from step mode to auto mode and continue execution.
+     * Finishes all remaining steps automatically without further user interaction
+     * (except for error decisions which still require user input).
+     */
+    runToEnd(): void {
+        // Only meaningful in step mode
+        if (this.config.mode !== 'step') {
+            return;
+        }
+
+        // Switch to auto mode - subsequent checkpoints will not wait
+        this.config.mode = 'auto';
+
+        // If we're currently waiting at a checkpoint, advance through it
+        this.advance();
+    }
+
+    /**
      * Get the current pending decision, if any.
      */
     getPendingDecision(): PendingDecision | null {
