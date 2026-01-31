@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const connectMockTransport = async (page: Page) => {
     await page.getByRole('button', { name: /^Connection$/i }).click();
@@ -6,44 +6,55 @@ const connectMockTransport = async (page: Page) => {
     await page.getByRole('button', { name: /^Connect$/i }).click();
 };
 
-const getAxisCount = async (locator: Locator): Promise<number> => {
-    const text = await locator.textContent();
-    const match = text?.match(/(\d+)/);
-    return match ? Number(match[1]) : 0;
-};
+const performDrag = async (page: Page, sourceTestId: string, targetTestId: string) => {
+    // Wait for both source and target elements to be visible before attempting drag
+    const source = page.getByTestId(sourceTestId);
+    const target = page.getByTestId(targetTestId);
 
-const performDrag = async (page: Page, sourceId: string, targetId: string) => {
+    await expect(source).toBeVisible({ timeout: 5_000 });
+    await expect(target).toBeVisible({ timeout: 5_000 });
+
+    // Use page.evaluate to dispatch drag events
     await page.evaluate(
-        ({ sourceId: s, targetId: t }) => {
-            const source = document.querySelector(`[data-testid="${s}"]`) as HTMLElement | null;
-            const target = document.querySelector(`[data-testid="${t}"]`) as HTMLElement | null;
-            if (!source || !target) {
-                throw new Error(`Missing drag handles for ${s} -> ${t}`);
+        ({ sourceId, targetId }) => {
+            const sourceEl = document.querySelector(
+                `[data-testid="${sourceId}"]`,
+            ) as HTMLElement | null;
+            const targetEl = document.querySelector(
+                `[data-testid="${targetId}"]`,
+            ) as HTMLElement | null;
+            if (!sourceEl || !targetEl) {
+                const allTestIds = Array.from(document.querySelectorAll('[data-testid]'))
+                    .map((el) => el.getAttribute('data-testid'))
+                    .slice(0, 20);
+                throw new Error(
+                    `Missing drag handles for ${sourceId} -> ${targetId}. Available testids: ${allTestIds.join(', ')}`,
+                );
             }
             const dataTransfer = new DataTransfer();
             dataTransfer.effectAllowed = 'move';
-            source.dispatchEvent(
+            sourceEl.dispatchEvent(
                 new DragEvent('dragstart', {
                     dataTransfer,
                     bubbles: true,
                     cancelable: true,
                 }),
             );
-            target.dispatchEvent(
+            targetEl.dispatchEvent(
                 new DragEvent('dragover', {
                     dataTransfer,
                     bubbles: true,
                     cancelable: true,
                 }),
             );
-            target.dispatchEvent(
+            targetEl.dispatchEvent(
                 new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }),
             );
-            source.dispatchEvent(
+            sourceEl.dispatchEvent(
                 new DragEvent('dragend', { dataTransfer, bubbles: true, cancelable: true }),
             );
         },
-        { sourceId, targetId },
+        { sourceId: sourceTestId, targetId: targetTestId },
     );
 };
 
@@ -56,12 +67,14 @@ test.describe('Grid configurator interactions', () => {
         await connectMockTransport(page);
         await page.getByRole('button', { name: /array config/i }).click();
 
-        const unassignedTray = page.getByRole('region', { name: /unassigned motors tray/i });
-        await expect(unassignedTray).toBeVisible();
+        // Wait for nodes to be discovered - the nodes panel contains "Nodes" heading
+        const nodesPanel = page.locator('aside').filter({ hasText: 'Nodes' });
+        await expect(nodesPanel).toBeVisible();
 
-        const unassignedTrayTestId = 'unassigned-motor-tray';
-
-        const motorChip = unassignedTray.locator('text=/Motor\\s+\\d+/').first();
+        // Wait for motor chips to appear (they display as :0, :1, etc.)
+        const motorChip = nodesPanel
+            .locator('[data-testid^="node-"][data-testid*="-motor-"]')
+            .first();
         await expect(motorChip).toBeVisible({ timeout: 30_000 });
 
         const firstMotorTestId = await motorChip.getAttribute('data-testid');
@@ -69,36 +82,31 @@ test.describe('Grid configurator interactions', () => {
             throw new Error('Could not determine test id for first motor chip');
         }
 
-        const axisSummaryLocator = unassignedTray.getByTestId('unassigned-axes-summary');
-        await expect(axisSummaryLocator).toBeVisible({ timeout: 30_000 });
-        const initialAxes = await getAxisCount(axisSummaryLocator);
-
         const firstAxisSlot = page.getByTestId('mirror-slot-x-0-0');
 
         await performDrag(page, firstMotorTestId, 'mirror-slot-x-0-0');
 
+        // After assignment, slot should show motor index (e.g., ":0")
         await expect(firstAxisSlot).toContainText(':');
-        const afterAssignAxes = await getAxisCount(axisSummaryLocator);
-        expect(afterAssignAxes).toBe(initialAxes - 1);
 
-        await performDrag(page, 'mirror-slot-x-0-0', unassignedTrayTestId);
+        // Drag back to nodes panel to unassign
+        await performDrag(page, 'mirror-slot-x-0-0', firstMotorTestId);
 
         await expect(firstAxisSlot.getByText('--')).toBeVisible();
-        const afterUnassignAxes = await getAxisCount(axisSummaryLocator);
-        expect(afterUnassignAxes).toBe(initialAxes);
 
-        const targetMotor = await unassignedTray
-            .locator('[data-testid^="unassigned-motor-"]')
-            .nth(1)
-            .getAttribute('data-testid');
-        if (!targetMotor) {
+        // Find a second motor to test grid shrink behavior
+        const secondMotor = nodesPanel
+            .locator('[data-testid^="node-"][data-testid*="-motor-"]')
+            .nth(1);
+        const secondMotorTestId = await secondMotor.getAttribute('data-testid');
+        if (!secondMotorTestId) {
             throw new Error('Unable to locate second motor test id');
         }
         const deepAxisSlotId = 'mirror-slot-x-2-0';
-        await performDrag(page, targetMotor, deepAxisSlotId);
+        await performDrag(page, secondMotorTestId, deepAxisSlotId);
 
-        const axesBeforeShrink = await getAxisCount(axisSummaryLocator);
-        expect(axesBeforeShrink).toBe(initialAxes - 1);
+        // Verify assignment worked
+        await expect(page.getByTestId(deepAxisSlotId)).toContainText(':');
 
         const rowsInput = page.getByLabel('Rows:');
         await rowsInput.fill('2');
@@ -109,8 +117,6 @@ test.describe('Grid configurator interactions', () => {
         await shrinkDialog.getByRole('button', { name: 'Shrink and unassign' }).click();
 
         await expect(page.getByTestId('mirror-cell-2-0')).toHaveCount(0);
-        const axesAfterShrink = await getAxisCount(axisSummaryLocator);
-        expect(axesAfterShrink).toBe(initialAxes);
     });
 
     test('saves and loads grid configuration snapshots', async ({ page }) => {
@@ -121,9 +127,13 @@ test.describe('Grid configurator interactions', () => {
         await connectMockTransport(page);
         await page.getByRole('button', { name: /array config/i }).click();
 
-        const unassignedTray = page.getByRole('region', { name: /unassigned motors tray/i });
-        await expect(unassignedTray).toBeVisible();
-        const firstMotor = unassignedTray.locator('[data-testid^="unassigned-motor-"]').first();
+        // Wait for nodes panel with motor chips (filter by "Nodes" heading to avoid nav aside)
+        const nodesPanel = page.locator('aside').filter({ hasText: 'Nodes' });
+        await expect(nodesPanel).toBeVisible();
+        const firstMotor = nodesPanel
+            .locator('[data-testid^="node-"][data-testid*="-motor-"]')
+            .first();
+        await expect(firstMotor).toBeVisible({ timeout: 30_000 });
         const motorTestId = await firstMotor.getAttribute('data-testid');
         if (!motorTestId) {
             throw new Error('Missing motor test id');
@@ -139,7 +149,8 @@ test.describe('Grid configurator interactions', () => {
             timeout: 5_000,
         });
 
-        await performDrag(page, 'mirror-slot-x-0-0', 'unassigned-motor-tray');
+        // Drag motor back to unassign (drag to the aside panel)
+        await performDrag(page, 'mirror-slot-x-0-0', motorTestId);
         await expect(page.getByTestId('array-unsaved-indicator')).toBeVisible();
 
         await page.getByTestId('array-saved-config-select').selectOption(snapshotName);

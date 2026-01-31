@@ -155,6 +155,7 @@ interface DraggableMotorRowProps {
     onMotorDrop: (pos: GridPosition, axis: Axis, dragDataString: string) => void;
     variant?: MotorSlotVariant;
     onNudge?: () => void;
+    testId?: string;
 }
 
 const DraggableMotorRow: React.FC<DraggableMotorRowProps> = ({
@@ -165,6 +166,7 @@ const DraggableMotorRow: React.FC<DraggableMotorRowProps> = ({
     onMotorDrop,
     variant = 'default',
     onNudge,
+    testId,
 }) => {
     const [isHovering, setIsHovering] = useState(false);
 
@@ -222,6 +224,7 @@ const DraggableMotorRow: React.FC<DraggableMotorRowProps> = ({
 
     return (
         <div
+            data-testid={testId}
             draggable={!!motor}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
@@ -436,6 +439,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                     onMotorDrop={onMotorDrop}
                     variant={analysis.variants.x}
                     onNudge={assignment.x && onNudgeMotor && telemetryX ? handleNudgeX : undefined}
+                    testId={`mirror-slot-x-${position.row}-${position.col}`}
                 />
                 <DraggableMotorRow
                     axis="y"
@@ -445,6 +449,7 @@ const MirrorCell: React.FC<MirrorCellProps> = ({
                     onMotorDrop={onMotorDrop}
                     variant={analysis.variants.y}
                     onNudge={assignment.y && onNudgeMotor && telemetryY ? handleNudgeY : undefined}
+                    testId={`mirror-slot-y-${position.row}-${position.col}`}
                 />
             </div>
         </div>

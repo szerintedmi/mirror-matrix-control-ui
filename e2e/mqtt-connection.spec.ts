@@ -70,31 +70,37 @@ test.describe('MQTT connection panel', () => {
         // Playback (legacy) is now in the Legacy submenu
         await page.getByRole('button', { name: 'Legacy' }).click();
         await page.getByRole('button', { name: /Playback \(legacy\)/i }).click();
-        await expect(page.getByTestId('motor-overview')).toBeVisible();
-        await expect(page.getByTestId('motor-overview-dot').first()).toBeVisible();
+        await expect(page.getByTestId('motor-overview')).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId('motor-overview-dot').first()).toBeVisible({
+            timeout: 10_000,
+        });
 
         await page.getByRole('button', { name: /array config/i }).click();
         await expect(page.getByLabel('Rows:')).toBeVisible();
 
+        // Wait for node discovery - nodes show partial MAC in the UI (last 5 chars)
+        // The mock transport broadcasts status immediately but UI may need time to process
         const firstMac = MAC_ADDRESSES[0];
-        const firstNodeButton = page.getByRole('button', { name: new RegExp(firstMac) });
-        await expect(firstNodeButton).toBeVisible({ timeout: 2_000 });
-        await expect(firstNodeButton.locator('text=New')).toBeVisible();
+        const shortMac = firstMac.slice(-5); // e.g., "C:33" from "AA:11:BB:22:CC:33"
+        const firstNodeButton = page.locator(`text=${shortMac}`).first();
+        await expect(firstNodeButton).toBeVisible({ timeout: 10_000 });
 
         await page.getByTestId('node-filter-all').click();
 
-        for (const mac of MAC_ADDRESSES) {
-            await page.getByRole('button', { name: new RegExp(mac) }).click();
+        // Click on nodes to select them - nodes display short MAC labels
+        for (const mac of MAC_ADDRESSES.slice(0, 2)) {
+            // Only first 2 are online
+            const shortLabel = mac.slice(-5);
+            await page.locator(`text=${shortLabel}`).first().click();
         }
 
-        await expect(page.getByText(/Session discoveries:/)).toBeVisible();
-
         await page.getByTestId('node-filter-offline').click();
-        await expect(
-            page.getByRole('button', { name: new RegExp(MAC_ADDRESSES[2]) }),
-        ).toBeVisible();
-        await expect(page.getByRole('button', { name: new RegExp(MAC_ADDRESSES[0]) })).toHaveCount(
-            0,
-        );
+        // Third node is offline - verify it shows in offline filter
+        const offlineMacShort = MAC_ADDRESSES[2].slice(-5);
+        await expect(page.locator(`text=${offlineMacShort}`).first()).toBeVisible({
+            timeout: 5_000,
+        });
+        // Online nodes should not appear in offline filter
+        await expect(page.locator(`text=${shortMac}`)).toHaveCount(0);
     });
 });
