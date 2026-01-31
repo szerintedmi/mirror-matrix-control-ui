@@ -4,6 +4,8 @@ React single-page workspace for arranging the kinetic mirror grid, authoring lig
 
 [![Watch the video](https://img.youtube.com/vi/aJeB7yPpRAY/hqdefault.jpg)](https://www.youtube.com/embed/aJeB7yPpRAY)
 
+[![Calibration video](https://img.youtube.com/vi/SuEO6KvOwiQ/hqdefault.jpg)](https://www.youtube.com/embed/SuEO6KvOwiQ)
+
 ## Prerequisites
 
 - Node.js `>=22.21.0 <23`
