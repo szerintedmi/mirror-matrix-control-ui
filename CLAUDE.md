@@ -28,7 +28,8 @@ We keep a running list of "gotchas" in [AGENT_GOTCHAS.md](AGENT_GOTCHAS.md). Thi
 
 Rules:
 
-- When you hit a gotcha (something fails, you find the fix), append a new bullet to the file with the date, a short description of the issue, and the resolution.
+- When you hit a gotcha (something fails, you find the fix), append a new bullet to the file with the existing timestamp prefix, then add the model name in square brackets on the same line, followed by a short description of the issue and the resolution.
+- Use this entry format: `- YYYY-MM-DD [MODEL_NAME] - issue; resolution.`
 - When you are stuck, in doubt, or about to repeat a similar workflow, consult the file before retrying.
 
 
