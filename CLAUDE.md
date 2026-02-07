@@ -22,6 +22,16 @@ bun run test:e2e:ui   # Playwright UI mode for debugging
 
 First-time E2E setup: `bunx playwright install --with-deps`
 
+## Agent Gotchas
+
+We keep a running list of "gotchas" in [AGENT_GOTCHAS.md](AGENT_GOTCHAS.md). This is a self-maintained memory to avoid repeating mistakes.
+
+Rules:
+
+- When you hit a gotcha (something fails, you find the fix), append a new bullet to the file with the date, a short description of the issue, and the resolution.
+- When you are stuck, in doubt, or about to repeat a similar workflow, consult the file before retrying.
+
+
 ## Directory Map
 
 ```
