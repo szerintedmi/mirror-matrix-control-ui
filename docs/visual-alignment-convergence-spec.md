@@ -4,10 +4,16 @@
 
 After calibration, all tiles can be commanded to aim at a common point, but motor inaccuracies cause reflections to cluster together without perfectly overlapping. This feature iteratively converges each tile's reflection to a common point using live camera feedback and existing MOVE commands — no firmware changes required.
 
+To avoid an unreadable all-at-once overlap, V1 uses a staged workflow:
+
+1. Move every tile to a non-overlapping staging position.
+2. Move one reference tile to calibrated center and lock it.
+3. Bring each remaining tile in one-by-one and align it against the current reference cluster.
+
 V1 prioritizes deterministic behavior and fast iteration:
 
 - Sequential per-tile processing in row-major order.
-- Largest-contour-only shape analysis.
+- One active candidate tile at a time (reference + candidate, then accumulated cluster).
 - Constant per-axis nudge step size (user-configurable).
 - Rich UI tuning controls so operators can experiment without code changes.
 
@@ -35,17 +41,17 @@ Add `'alignment'` to the `Page` union in `App.tsx`:
 
 ```ts
 export type Page =
-    | 'legacy-patterns'
-    | 'legacy-patterns-editor'
-    | 'patterns'
-    | 'legacy-playback'
-    | 'playback'
-    | 'animation'
-    | 'calibration'
-    | 'configurator'
-    | 'simulation'
-    | 'connection'
-    | 'alignment';  // new
+  | 'legacy-patterns'
+  | 'legacy-patterns-editor'
+  | 'patterns'
+  | 'legacy-playback'
+  | 'playback'
+  | 'animation'
+  | 'calibration'
+  | 'configurator'
+  | 'simulation'
+  | 'connection'
+  | 'alignment'; // new
 ```
 
 Add a navigation item to `NAVIGATION_ITEMS` in `src/constants/navigation.ts` (placed after Calibration):
@@ -71,7 +77,7 @@ The Alignment page has three sections:
 Reuses `CalibrationPreview` with the same camera pipeline (`useCameraPipeline`). Displays the live feed with overlays showing:
 
 - The ROI rectangle
-- Detected contour outline of the merged reflection cluster
+- Detected contour outline of the active cluster (reference cluster + optional active tile)
 - Centroid marker
 - Principal axis direction indicator
 - Shape metrics readout (area, eccentricity)
@@ -91,12 +97,12 @@ Reuses `CalibrationPreview` with the same camera pipeline (`useCameraPipeline`).
   - Outlier strategy (default: MAD-filter)
   - Outlier threshold (strategy-specific)
 - **Convergence controls:**
-  - **"Move to Center"** button — computes and sends MOVE commands to aim all tiles at `(0,0)`.
-  - **"Start Convergence"** button — begins the per-tile sequential convergence algorithm. If initial positioning has not run yet in this session, it automatically runs "Move to Center" first.
+  - **"Move to Staging"** button — computes and sends MOVE commands to place all eligible tiles at deterministic, non-overlapping staging targets.
+  - **"Start Convergence"** button — begins staged convergence. If staging has not run yet in this session, it auto-runs "Move to Staging" first.
   - **"Stop"** button — requests halt; the controller stops after the current in-flight motor command completes. UI label remains "Stop".
   - **Step size** — initial nudge size in motor steps (default: 2 steps).
   - **Max iterations per axis** — iteration limit per tile per axis (default: 20).
-  - **Area threshold** — minimum area delta percentage to consider a nudge as having an effect (default: 1%).
+  - **Area threshold** — minimum area-delta percentage (against the pre-insert baseline) to consider a nudge as having an effect (default: 1%).
   - **Improvement strategy** (advanced, experiment-friendly):
     - `any` (default): area OR eccentricity improvement qualifies
     - `weighted`: weighted score with tunable area/eccentricity weights
@@ -123,49 +129,49 @@ Reuses `CalibrationPreview` with the same camera pipeline (`useCameraPipeline`).
 
 ## Existing Code Reuse
 
-| What | Location | Usage |
-|------|----------|-------|
-| Calibration profile loading | `CalibrationContext` via `useCalibrationContext()` | Access `selectedProfile`, `savedProfiles`, `selectProfile()` |
-| Profile persistence | `src/services/calibrationProfileStorage.ts` | Already loaded by CalibrationContext |
-| Motor commands | `useMotorCommands()` → `moveMotor({ mac, motorId, positionSteps })` | Send MOVE commands, returns `Promise<CommandCompletionResult>` |
-| Grid→motor mapping | `src/types.ts` `MirrorAssignment` + grid config | Look up `{ x: Motor, y: Motor }` per tile |
-| Target step computation | Extract shared helper from `src/services/profilePlaybackPlanner.ts` (`computeAxisTarget`) into a reusable module | Compute motor steps to aim a tile at a normalized coordinate without duplicating logic |
-| Space conversion | `src/services/spaceConversion.ts` `patternToCentered()`, `getSpaceParams()` | Convert `(0,0)` pattern point to centered space for the profile's rotation/aspect |
-| Camera pipeline | `useCameraPipeline()` hook | Full camera stream, preprocessing, ROI, OpenCV worker interface |
-| Camera preview UI | `CalibrationPreview` component | Video feed with overlay canvases |
-| ROI system | `NormalizedRoi` type, `useRoiOverlayInteractions` | ROI editing (drag, resize, reset) |
-| Detection settings storage | `src/services/detectionSettingsStorage.ts` | Camera device ID, resolution, preprocessing params |
-| Calibration data types | `TileCalibrationResults`, `CalibrationProfile` | Per-tile calibration data: `adjustedHome`, `stepToDisplacement`, `axes` |
+| What                        | Location                                                                                                         | Usage                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Calibration profile loading | `CalibrationContext` via `useCalibrationContext()`                                                               | Access `selectedProfile`, `savedProfiles`, `selectProfile()`                           |
+| Profile persistence         | `src/services/calibrationProfileStorage.ts`                                                                      | Already loaded by CalibrationContext                                                   |
+| Motor commands              | `useMotorCommands()` → `moveMotor({ mac, motorId, positionSteps })`                                              | Send MOVE commands, returns `Promise<CommandCompletionResult>`                         |
+| Grid→motor mapping          | `src/types.ts` `MirrorAssignment` + grid config                                                                  | Look up `{ x: Motor, y: Motor }` per tile                                              |
+| Target step computation     | Extract shared helper from `src/services/profilePlaybackPlanner.ts` (`computeAxisTarget`) into a reusable module | Compute motor steps to aim a tile at a normalized coordinate without duplicating logic |
+| Space conversion            | `src/services/spaceConversion.ts` `patternToCentered()`, `getSpaceParams()`                                      | Convert `(0,0)` pattern point to centered space for the profile's rotation/aspect      |
+| Camera pipeline             | `useCameraPipeline()` hook                                                                                       | Full camera stream, preprocessing, ROI, OpenCV worker interface                        |
+| Camera preview UI           | `CalibrationPreview` component                                                                                   | Video feed with overlay canvases                                                       |
+| ROI system                  | `NormalizedRoi` type, `useRoiOverlayInteractions`                                                                | ROI editing (drag, resize, reset)                                                      |
+| Detection settings storage  | `src/services/detectionSettingsStorage.ts`                                                                       | Camera device ID, resolution, preprocessing params                                     |
+| Calibration data types      | `TileCalibrationResults`, `CalibrationProfile`                                                                   | Per-tile calibration data: `adjustedHome`, `stepToDisplacement`, `axes`                |
 
 ---
 
-## Initial Positioning: Move All Tiles to Center
+## Initial Positioning: Stage All Tiles
 
-Before convergence, all calibrated tiles are commanded to aim at the camera center.
+Before convergence, all calibrated tiles are moved to non-overlapping staging targets so the camera never starts from a fully merged cluster.
 
 `Start Convergence` must auto-run this phase if it has not been completed in the current alignment session.
 
-### Target computation
+### Staging target computation
 
-For each tile in the calibration profile:
+For each usable tile in deterministic row-major order:
 
-1. Build a `PatternPoint` with `x: 0, y: 0` (camera center in pattern space).
-2. Call `computeAxisTarget()` for each axis with the tile's calibration data:
-   - `normalizedTarget = patternToCentered({ x: 0, y: 0 }, spaceParams)[axis]`
-   - But since `(0,0)` maps to `(0,0)` after rotation and aspect scaling, the target in centered space is always `(0, 0)`.
+1. Assign a deterministic staging coordinate in centered space (e.g. ring or coarse grid around `(0,0)`), large enough to keep spots separated.
+2. Build a centered target point for that tile: `stagingTarget[row,col] = { x, y }`.
+3. Call `computeAxisTarget()` for each axis with the tile's calibration data and this staging target:
+   - `normalizedTarget = stagingTarget[axis]`
    - `homeCoord = axis === 'x' ? adjustedHome.x : adjustedHome.y`
    - `homeSteps = axis === 'x' ? adjustedHome.stepsX : adjustedHome.stepsY`
-   - `delta = 0 - homeCoord` (displacement from adjusted home position)
+   - `delta = normalizedTarget - homeCoord`
    - `deltaSteps = delta / stepToDisplacement[axis]`
    - `targetSteps = Math.round(homeSteps + deltaSteps)`
-3. Send `moveMotor({ mac: motor.nodeMac, motorId: motor.motorIndex, positionSteps: targetSteps })` for both X and Y motors.
-4. Wait for all `CommandCompletionResult` promises to resolve.
+4. Send `moveMotor({ mac, motorId, positionSteps: targetSteps })` for both X and Y motors.
+5. Wait for all `CommandCompletionResult` promises to resolve and apply settling delay.
 
 ### Error handling
 
 - Skip tiles with `status !== 'completed'` or missing calibration data (`adjustedHome`, `stepToDisplacement`).
 - If `computeAxisTarget` returns an error (`'missing_motor'`, `'missing_axis_calibration'`, `'target_out_of_bounds'`, `'steps_out_of_range'`), skip that axis and log the error.
-- Surface per-tile move errors in the progress panel.
+- Surface per-tile staging/move errors in the progress panel.
 
 ---
 
@@ -181,19 +187,19 @@ Add a new message type to the OpenCV worker protocol:
 
 ```ts
 interface AnalyzeShapeParams {
-    type: 'ANALYZE_SHAPE';
-    requestId: number;
-    frame: ImageBitmap;       // preprocessed frame (brightness/contrast/CLAHE applied)
-    width: number;
-    height: number;
-    roi: NormalizedRoi;
-    adaptiveThreshold: {
-        method: 'GAUSSIAN' | 'MEAN'; // default: 'GAUSSIAN'
-        thresholdType: 'BINARY' | 'BINARY_INV'; // default: 'BINARY'
-        blockSize: number;    // must be odd, default: 51
-        C: number;            // constant subtracted from mean, default: 10
-    };
-    minContourArea: number;   // minimum area to consider, default: 100 px²
+  type: 'ANALYZE_SHAPE';
+  requestId: number;
+  frame: ImageBitmap; // preprocessed frame (brightness/contrast/CLAHE applied)
+  width: number;
+  height: number;
+  roi: NormalizedRoi;
+  adaptiveThreshold: {
+    method: 'GAUSSIAN' | 'MEAN'; // default: 'GAUSSIAN'
+    thresholdType: 'BINARY' | 'BINARY_INV'; // default: 'BINARY'
+    blockSize: number; // must be odd, default: 51
+    C: number; // constant subtracted from mean, default: 10
+  };
+  minContourArea: number; // minimum area to consider, default: 100 px²
 }
 ```
 
@@ -201,26 +207,28 @@ interface AnalyzeShapeParams {
 
 ```ts
 interface ShapeAnalysisResult {
-    type: 'SHAPE_RESULT';
-    requestId: number;
-    coordinateSpace: 'frame-px'; // all returned coordinates are in full-frame processed pixels
-    frameSize: { width: number; height: number };
-    roiRect: { x: number; y: number; width: number; height: number } | null; // ROI in frame-px
-    detected: boolean;
-    contour: {                // only present if detected === true
-        area: number;         // m00 — pixel area of the largest contour
-        centroid: {           // (m10/m00, m01/m00) in frame-px
-            x: number;
-            y: number;
-        };
-        eigenvalue1: number;  // larger eigenvalue from second-order central moments
-        eigenvalue2: number;  // smaller eigenvalue
-        eccentricity: number; // eigenvalue1 / eigenvalue2 (1.0 = circular)
-        principalAngle: number; // radians, direction of elongation
-        boundingRect: { x: number; y: number; width: number; height: number };
-    } | null;
-    // Debug/visualization data
-    contourPoints?: Array<{ x: number; y: number }>; // frame-px, for overlay rendering
+  type: 'SHAPE_RESULT';
+  requestId: number;
+  coordinateSpace: 'frame-px'; // all returned coordinates are in full-frame processed pixels
+  frameSize: { width: number; height: number };
+  roiRect: { x: number; y: number; width: number; height: number } | null; // ROI in frame-px
+  detected: boolean;
+  contour: {
+    // only present if detected === true
+    area: number; // m00 — pixel area of the largest contour
+    centroid: {
+      // (m10/m00, m01/m00) in frame-px
+      x: number;
+      y: number;
+    };
+    eigenvalue1: number; // larger eigenvalue from second-order central moments
+    eigenvalue2: number; // smaller eigenvalue
+    eccentricity: number; // eigenvalue1 / eigenvalue2 (1.0 = circular)
+    principalAngle: number; // radians, direction of elongation
+    boundingRect: { x: number; y: number; width: number; height: number };
+  } | null;
+  // Debug/visualization data
+  contourPoints?: Array<{ x: number; y: number }>; // frame-px, for overlay rendering
 }
 ```
 
@@ -275,6 +283,7 @@ const M = cv.moments(largestContour)
 ```
 
 Extract:
+
 - `area = M.m00`
 - `centroidX = M.m10 / M.m00`
 - `centroidY = M.m01 / M.m00`
@@ -308,51 +317,60 @@ This mirrors the existing `processFrame()` method pattern — assigns a request 
 
 ### Overview
 
-The algorithm operates in four phases. The user may trigger Phase 1 explicitly with "Move to Center", but "Start Convergence" auto-runs Phase 1 first if needed. Phase 4 runs automatically at the end.
+The algorithm operates in four phases. The user may trigger Phase 1 explicitly with "Move to Staging", but "Start Convergence" auto-runs Phase 1 first if needed. Phase 4 runs automatically at the end.
 
-### Phase 1: Initial positioning
+### Phase 1: Stage all tiles
 
 1. Load the selected calibration profile.
 2. Validate profile compatibility with current grid using partial/subset matching (full exact match not required).
 3. Build convergence tile list in deterministic row-major order (`row asc`, then `col asc`), including only tiles with usable assignment+calibration.
-4. For each tile with `status === 'completed'` and valid calibration data:
-   - Compute target motor positions to aim at `(0, 0)` (see "Initial Positioning" section above).
-   - Send MOVE commands for both X and Y motors.
+4. Move every usable tile to its deterministic staging target (see "Initial Positioning: Stage All Tiles").
 5. Wait for all motors to report arrival.
-6. Allow a settling delay (e.g. 500ms) for physical vibration to damp.
+6. Allow a settling delay (e.g. 500ms).
 
-### Phase 2: Baseline measurement
+### Phase 2: Reference setup
 
-1. Capture shape analysis from the camera (call `analyzeShape()`).
-2. Stabilize: take N consecutive readings (e.g. 3) and average the metrics to reduce noise.
-3. Record baseline metrics:
-   - `baselineArea` — initial cluster area
-   - `baselineEccentricity` — initial eigenvalue ratio
-   - `baselinePrincipalAngle` — initial elongation direction
-4. Display baseline metrics in the UI.
+1. Select the first usable tile in row-major order as the **reference tile**.
+2. Move only this reference tile from staging to calibrated center `(0,0)`.
+3. Capture stable reference metrics from camera (call `analyzeShape()` N times and average):
+   - `referenceArea`
+   - `referenceEccentricity`
+   - `referencePrincipalAngle`
+4. Keep the reference tile fixed for the rest of the run.
 
-### Phase 3: Per-tile convergence (sequential)
+### Phase 3: Incremental per-tile convergence (sequential)
 
-Process one tile at a time in row-major order. For each tile, process X axis then Y axis.
+Process remaining tiles one at a time in row-major order. For each candidate tile:
+
+1. Measure a stable **pre-insert baseline** while candidate remains in staging.
+2. Move candidate tile from staging to nominal center `(0,0)`.
+3. Converge candidate tile axes (`x` then `y`) while all previously aligned tiles remain fixed.
+4. Persist corrections and continue with next candidate.
 
 ```
-for each tile in calibratedTiles:
+referenceTile = first tile (already centered)
+alignedTiles = [referenceTile]
+
+for each candidateTile in remainingTiles(rowMajor):
+    preInsertBaseline = measureShape() // cluster without candidate
+    move candidateTile to nominal center
     for each axis in [x, y]:
-        convergeAxis(tile, axis)
+        convergeAxis(candidateTile, axis, preInsertBaseline)
+    alignedTiles.push(candidateTile)
 ```
 
-#### `convergeAxis(tile, axis)` algorithm
+#### `convergeAxis(tile, axis, preInsertBaseline)` algorithm
 
 ```
 stepSize = initialStepSize  (e.g. 2 steps)
 direction = +1
 iteration = 0
-bestMetrics = measureShape()  // current area + eccentricity
+bestMetrics = measureShape() // after candidate inserted
+bestDelta = delta(bestMetrics, preInsertBaseline)
 
 while iteration < maxIterations:
     iteration++
 
-    // Trial nudge: move this tile's motor by stepSize in current direction
     currentPosition = tile.currentSteps[axis]
     trialPosition = currentPosition + (direction * stepSize)
 
@@ -365,52 +383,57 @@ while iteration < maxIterations:
     settlingDelay(200ms)
 
     trialMetrics = measureShape()
+    trialDelta = delta(trialMetrics, preInsertBaseline)
 
-    if improved(trialMetrics, bestMetrics):
-        // Good direction — accept the move and continue
+    if improved(trialDelta, bestDelta):
         bestMetrics = trialMetrics
+        bestDelta = trialDelta
         tile.currentSteps[axis] = trialPosition
         tile.correction[axis] += direction * stepSize
 
-        // Check convergence
-        if converged(trialMetrics):
-            break  // this axis is done
+        if converged(trialDelta):
+            break
     else:
-        // Bad direction — undo the move
-        moveMotor(tile.motor[axis], currentPosition)
+        moveMotor(tile.motor[axis], currentPosition) // undo trial
         waitForArrival()
         settlingDelay(200ms)
 
         if iteration == 1:
-            // First iteration wrong — flip direction and retry
             direction = -direction
         else:
-            // Was improving but now overshot — done with this axis
             break
 ```
 
-#### `improved(trial, best)` criteria (strategy-driven)
+#### `delta(current, baseline)` definition
+
+- `areaDeltaPct = abs(current.area - baseline.area) / max(1, baseline.area)`
+- `eccDelta = abs(current.eccentricity - baseline.eccentricity)`
+
+Lower deltas are better; perfect overlap of candidate into existing cluster trends toward minimal deltas.
+
+#### `improved(trialDelta, bestDelta)` criteria (strategy-driven)
 
 Default strategy (`any`):
 
-- `trial.area < best.area * (1 - areaThreshold)` — cluster got smaller (reflections merging)
-- `trial.eccentricity < best.eccentricity * 0.98` — cluster became more circular
+- `trial.areaDeltaPct < best.areaDeltaPct * (1 - areaThreshold)` OR
+- `trial.eccDelta < best.eccDelta * 0.98`
 
 Alternative strategy (`weighted`, advanced):
 
-- `score = areaWeight * normalizedArea + eccentricityWeight * normalizedEccentricity`
+- `score = areaWeight * areaDeltaPct + eccentricityWeight * eccDelta`
 - Improvement if `trialScore < bestScore * (1 - scoreThreshold)`
 
-#### `converged(metrics)` criteria
+#### `converged(delta)` criteria
 
 Convergence is reached when **all** of the following hold:
 
-- `metrics.eccentricity < 1.05` — cluster is nearly circular
+- `areaDeltaPct <= areaThreshold`
+- `eccDelta <= eccentricityThreshold` (default target equivalent to near-circular behavior, e.g. `~0.05`)
 - Area is stable (last 3 readings within 2% of each other)
 
 Notes:
 
-- V1 does **not** gate on centroid target error. Centroid is displayed and logged for observability.
+- V1 still prioritizes deterministic axis-wise nudging and does **not** require centroid target locking.
 
 #### `measureShape()` — stable measurement
 
@@ -429,8 +452,8 @@ After all tiles have been processed:
    - Tile key, X steps correction, Y steps correction
    - Individual axis status and tile aggregate status
 3. Compute summary:
-   - Area reduction: `(baselineArea - finalArea) / baselineArea * 100%`
-   - Eccentricity improvement: `baselineEccentricity → finalEccentricity`
+   - Area delta vs reference baseline and run-start baseline
+   - Eccentricity trend across incremental insertions
    - Number of tiles converged vs total
 4. Display results in the progress panel.
 5. Persist run summary/history and offer JSON export.
@@ -462,48 +485,55 @@ Orchestrates the alignment workflow. Internal state:
 
 ```ts
 interface AlignmentState {
-    phase: 'idle' | 'positioning' | 'measuring-baseline' | 'converging' | 'paused' | 'complete';
-    baselineMetrics: ShapeMetrics | null;
-    currentMetrics: ShapeMetrics | null;
-    tileStates: Record<string, TileAlignmentState>;
-    activeTile: string | null;    // key of the tile currently being converged
-    activeAxis: Axis | null;
-    positioningComplete: boolean;
-    settingsLocked: boolean;
-    error: string | null;
+  phase: 'idle' | 'positioning' | 'measuring-baseline' | 'converging' | 'paused' | 'complete';
+  baselineMetrics: ShapeMetrics | null;
+  currentMetrics: ShapeMetrics | null;
+  tileStates: Record<string, TileAlignmentState>;
+  activeTile: string | null; // key of the tile currently being converged
+  activeAxis: Axis | null;
+  positioningComplete: boolean;
+  settingsLocked: boolean;
+  error: string | null;
 }
 
 interface TileAlignmentState {
-    key: string;
-    row: number;
-    col: number;
-    status: 'pending' | 'in-progress' | 'converged' | 'partial' | 'max-iterations' | 'skipped' | 'error';
-    initialSteps: { x: number; y: number };
-    currentSteps: { x: number; y: number };
-    correction: { x: number; y: number };
-    iterations: { x: number; y: number };
-    axes: {
-        x: AxisAlignmentState;
-        y: AxisAlignmentState;
-    };
-    finalEccentricity: number | null;
-    error: string | null;
+  key: string;
+  row: number;
+  col: number;
+  status:
+    | 'pending'
+    | 'in-progress'
+    | 'converged'
+    | 'partial'
+    | 'max-iterations'
+    | 'skipped'
+    | 'error';
+  initialSteps: { x: number; y: number };
+  currentSteps: { x: number; y: number };
+  correction: { x: number; y: number };
+  iterations: { x: number; y: number };
+  axes: {
+    x: AxisAlignmentState;
+    y: AxisAlignmentState;
+  };
+  finalEccentricity: number | null;
+  error: string | null;
 }
 
 interface AxisAlignmentState {
-    axis: Axis;
-    motor: { nodeMac: string; motorId: number } | null;
-    status: 'pending' | 'in-progress' | 'converged' | 'max-iterations' | 'skipped' | 'error';
-    correctionSteps: number;
-    iterations: number;
-    error: string | null;
+  axis: Axis;
+  motor: { nodeMac: string; motorId: number } | null;
+  status: 'pending' | 'in-progress' | 'converged' | 'max-iterations' | 'skipped' | 'error';
+  correctionSteps: number;
+  iterations: number;
+  error: string | null;
 }
 
 interface ShapeMetrics {
-    area: number;
-    eccentricity: number;
-    principalAngle: number;
-    centroid: { x: number; y: number };
+  area: number;
+  eccentricity: number;
+  principalAngle: number;
+  centroid: { x: number; y: number };
 }
 ```
 
@@ -544,16 +574,16 @@ All overlay geometry uses `frame-px` coordinates from `ShapeAnalysisResult` and 
 
 ## Error Handling
 
-| Scenario | Handling |
-|----------|----------|
-| No calibration profile selected | Disable "Move to Center" and "Start Convergence" buttons. Show prompt to select a profile. |
-| Tile missing calibration data | Skip tile, mark as `'skipped'` in progress panel. |
-| Motor command timeout | Retry once. If second attempt fails, mark tile as `'error'`, log details, continue to next tile. |
-| Trial move exceeds calibrated axis range | Mark axis `'error'` with `steps_out_of_range`, continue with remaining axis/tile processing policy. |
-| No contour detected (camera blocked, ROI wrong) | Pause convergence and present actions: **Retry**, **Skip tile**, **Abort run**. |
-| Shape analysis returns wildly different readings | Increase settling delay, retry measurement. If still unstable after 5 attempts, pause and warn user. |
-| Camera disconnected | Pause convergence and present actions: **Retry when camera is back**, **Skip tile**, **Abort run**. |
-| User clicks "Stop" | Stop after the in-flight motor command completes. Leave all motors at their current positions. Tile states reflect partial progress. |
+| Scenario                                         | Handling                                                                                                                             |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| No calibration profile selected                  | Disable "Move to Staging" and "Start Convergence" buttons. Show prompt to select a profile.                                          |
+| Tile missing calibration data                    | Skip tile, mark as `'skipped'` in progress panel.                                                                                    |
+| Motor command timeout                            | Retry once. If second attempt fails, mark tile as `'error'`, log details, continue to next tile.                                     |
+| Trial move exceeds calibrated axis range         | Mark axis `'error'` with `steps_out_of_range`, continue with remaining axis/tile processing policy.                                  |
+| No contour detected (camera blocked, ROI wrong)  | Pause convergence and present actions: **Retry**, **Skip tile**, **Abort run**.                                                      |
+| Shape analysis returns wildly different readings | Increase settling delay, retry measurement. If still unstable after 5 attempts, pause and warn user.                                 |
+| Camera disconnected                              | Pause convergence and present actions: **Retry when camera is back**, **Skip tile**, **Abort run**.                                  |
+| User clicks "Stop"                               | Stop after the in-flight motor command completes. Leave all motors at their current positions. Tile states reflect partial progress. |
 
 ---
 
@@ -561,26 +591,26 @@ All overlay geometry uses `frame-px` coordinates from `ShapeAnalysisResult` and 
 
 ### New files
 
-| File | Purpose |
-|------|---------|
-| `src/pages/AlignmentPage.tsx` | Top-level alignment page |
-| `src/hooks/useAlignmentController.ts` | Convergence algorithm orchestration |
-| `src/services/alignmentRunStorage.ts` | Persist/export alignment run summaries |
-| `src/services/alignmentAxisTarget.ts` | Shared extracted axis-target computation helper |
-| `src/components/alignment/AlignmentControlPanel.tsx` | Convergence settings and controls |
-| `src/components/alignment/AlignmentProgressPanel.tsx` | Per-tile status table and summary |
-| `src/components/alignment/AlignmentShapeOverlay.tsx` | Contour/metrics overlay rendering |
+| File                                                  | Purpose                                         |
+| ----------------------------------------------------- | ----------------------------------------------- |
+| `src/pages/AlignmentPage.tsx`                         | Top-level alignment page                        |
+| `src/hooks/useAlignmentController.ts`                 | Convergence algorithm orchestration             |
+| `src/services/alignmentRunStorage.ts`                 | Persist/export alignment run summaries          |
+| `src/services/alignmentAxisTarget.ts`                 | Shared extracted axis-target computation helper |
+| `src/components/alignment/AlignmentControlPanel.tsx`  | Convergence settings and controls               |
+| `src/components/alignment/AlignmentProgressPanel.tsx` | Per-tile status table and summary               |
+| `src/components/alignment/AlignmentShapeOverlay.tsx`  | Contour/metrics overlay rendering               |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `src/App.tsx` | Add `'alignment'` to `Page` union, render `AlignmentPage`, wire into context providers |
-| `src/constants/navigation.ts` | Add alignment nav item, add `'alignment'` to `NavigationIconKey` |
-| `src/services/opencvWorkerClient.ts` | Add `analyzeShape()` method, `AnalyzeShapeParams` / `ShapeAnalysisResult` types |
-| `src/services/profilePlaybackPlanner.ts` | Extract `computeAxisTarget()` logic into shared helper used by playback + alignment |
-| `public/opencv-classic-worker.js` | Add `ANALYZE_SHAPE` message handler with adaptive threshold + moments pipeline |
-| `src/components/NavigationRail.tsx` | Add icon for alignment page (if icon mapping needs updating) |
+| File                                     | Change                                                                                 |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| `src/App.tsx`                            | Add `'alignment'` to `Page` union, render `AlignmentPage`, wire into context providers |
+| `src/constants/navigation.ts`            | Add alignment nav item, add `'alignment'` to `NavigationIconKey`                       |
+| `src/services/opencvWorkerClient.ts`     | Add `analyzeShape()` method, `AnalyzeShapeParams` / `ShapeAnalysisResult` types        |
+| `src/services/profilePlaybackPlanner.ts` | Extract `computeAxisTarget()` logic into shared helper used by playback + alignment    |
+| `public/opencv-classic-worker.js`        | Add `ANALYZE_SHAPE` message handler with adaptive threshold + moments pipeline         |
+| `src/components/NavigationRail.tsx`      | Add icon for alignment page (if icon mapping needs updating)                           |
 
 ---
 
