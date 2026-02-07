@@ -38,6 +38,57 @@ export interface ProcessFrameResult {
     frame: ImageBitmap;
 }
 
+export type AdaptiveThresholdMethod = 'GAUSSIAN' | 'MEAN';
+export type AdaptiveThresholdType = 'BINARY' | 'BINARY_INV';
+
+export interface ShapeFilteringOptions {
+    enableSmoothing: boolean;
+    enableMorphology: boolean;
+    rejectBorderContours: boolean;
+    rejectLargeContours: boolean;
+    maxContourAreaRatio: number;
+    enableBackgroundSuppression: boolean;
+    backgroundBlurKernelSize: number;
+    backgroundGain: number;
+    enableContourMerging: boolean;
+    contourMergeMaxContours: number;
+    contourMergeDistancePx: number;
+    contourMergeMinAreaRatio: number;
+}
+
+export interface AnalyzeShapeParams {
+    width: number;
+    height: number;
+    frame: ImageBitmap;
+    roi: NormalizedRoi;
+    adaptiveThreshold: {
+        method: AdaptiveThresholdMethod;
+        thresholdType: AdaptiveThresholdType;
+        blockSize: number;
+        C: number;
+    };
+    minContourArea: number;
+    filtering?: Partial<ShapeFilteringOptions>;
+}
+
+export interface ShapeAnalysisResult {
+    requestId: number;
+    coordinateSpace: 'frame-px';
+    frameSize: { width: number; height: number };
+    roiRect: { x: number; y: number; width: number; height: number } | null;
+    detected: boolean;
+    contour: {
+        area: number;
+        centroid: { x: number; y: number };
+        eigenvalue1: number;
+        eigenvalue2: number;
+        eccentricity: number;
+        principalAngle: number;
+        boundingRect: { x: number; y: number; width: number; height: number };
+    } | null;
+    contourPoints?: Array<{ x: number; y: number }>;
+}
+
 export interface DetectedBlob {
     x: number;
     y: number;
@@ -79,15 +130,36 @@ interface FrameResultMessage extends ProcessFrameResult {
     type: 'FRAME_RESULT';
 }
 
+interface ShapeResultMessage extends ShapeAnalysisResult {
+    type: 'SHAPE_RESULT';
+}
+
 interface ErrorMessage {
     type: 'ERROR';
     requestId?: number;
     message: string;
 }
 
-type WorkerMessage = StatusMessage | ReadyMessage | FrameResultMessage | ErrorMessage;
+type WorkerMessage =
+    | StatusMessage
+    | ReadyMessage
+    | FrameResultMessage
+    | ShapeResultMessage
+    | ErrorMessage;
 
 type StatusListener = (status: OpenCvWorkerStatus, payload?: OpenCvReadyMessage | string) => void;
+
+type PendingRequest =
+    | {
+          kind: 'frame';
+          resolve: (result: ProcessFrameResult) => void;
+          reject: (reason: unknown) => void;
+      }
+    | {
+          kind: 'shape';
+          resolve: (result: ShapeAnalysisResult) => void;
+          reject: (reason: unknown) => void;
+      };
 
 export class OpenCvWorkerClient {
     private worker: Worker;
@@ -98,13 +170,7 @@ export class OpenCvWorkerClient {
 
     private requestId = 0;
 
-    private pending = new Map<
-        number,
-        {
-            resolve: (result: ProcessFrameResult) => void;
-            reject: (reason: unknown) => void;
-        }
-    >();
+    private pending = new Map<number, PendingRequest>();
 
     private readyResolver: ((payload: OpenCvReadyMessage) => void) | null = null;
 
@@ -160,7 +226,19 @@ export class OpenCvWorkerClient {
         const payload = { type: 'PROCESS_FRAME', requestId, ...params } as const;
         this.worker.postMessage(payload, [params.frame]);
         return new Promise<ProcessFrameResult>((resolve, reject) => {
-            this.pending.set(requestId, { resolve, reject });
+            this.pending.set(requestId, { kind: 'frame', resolve, reject });
+        });
+    }
+
+    analyzeShape(params: AnalyzeShapeParams): Promise<ShapeAnalysisResult> {
+        if (this.status !== 'ready') {
+            return Promise.reject(new Error('OpenCV worker is not ready'));
+        }
+        const requestId = ++this.requestId;
+        const payload = { type: 'ANALYZE_SHAPE', requestId, ...params } as const;
+        this.worker.postMessage(payload, [params.frame]);
+        return new Promise<ShapeAnalysisResult>((resolve, reject) => {
+            this.pending.set(requestId, { kind: 'shape', resolve, reject });
         });
     }
 
@@ -203,7 +281,10 @@ export class OpenCvWorkerClient {
                 }
                 break;
             case 'FRAME_RESULT':
-                this.resolveRequest(message.requestId, message);
+                this.resolveFrameRequest(message.requestId, message);
+                break;
+            case 'SHAPE_RESULT':
+                this.resolveShapeRequest(message.requestId, message);
                 break;
             case 'ERROR':
                 if (typeof message.requestId === 'number' && this.pending.has(message.requestId)) {
@@ -235,10 +316,30 @@ export class OpenCvWorkerClient {
         }
     };
 
-    private resolveRequest(requestId: number, message: FrameResultMessage) {
+    private resolveFrameRequest(requestId: number, message: FrameResultMessage) {
         const pending = this.pending.get(requestId);
         if (!pending) {
             message.frame.close();
+            return;
+        }
+        if (pending.kind !== 'frame') {
+            this.pending.delete(requestId);
+            message.frame.close();
+            pending.reject(new Error('Worker request kind mismatch (expected frame result)'));
+            return;
+        }
+        this.pending.delete(requestId);
+        pending.resolve(message);
+    }
+
+    private resolveShapeRequest(requestId: number, message: ShapeResultMessage) {
+        const pending = this.pending.get(requestId);
+        if (!pending) {
+            return;
+        }
+        if (pending.kind !== 'shape') {
+            this.pending.delete(requestId);
+            pending.reject(new Error('Worker request kind mismatch (expected shape result)'));
             return;
         }
         this.pending.delete(requestId);

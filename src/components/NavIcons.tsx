@@ -144,3 +144,22 @@ export const AnimationIcon: React.FC = () => (
         <path d="M18 16v2" strokeLinecap="round" />
     </svg>
 );
+
+export const AlignmentIcon: React.FC = () => (
+    <svg
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="size-5"
+    >
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
+        <path d="M12 2.5v3" strokeLinecap="round" />
+        <path d="M12 18.5v3" strokeLinecap="round" />
+        <path d="M2.5 12h3" strokeLinecap="round" />
+        <path d="M18.5 12h3" strokeLinecap="round" />
+    </svg>
+);

@@ -33,6 +33,8 @@ interface CalibrationPreviewProps {
     tileBoundsOverlayEnabled: boolean;
     tileBoundsOverlayAvailable: boolean;
     onToggleTileBoundsOverlay: () => void;
+    customProcessedOverlayCanvasRef?: React.MutableRefObject<HTMLCanvasElement | null>;
+    customProcessedOverlayVisible?: boolean;
 }
 
 const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
@@ -58,6 +60,8 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     tileBoundsOverlayEnabled,
     tileBoundsOverlayAvailable,
     onToggleTileBoundsOverlay,
+    customProcessedOverlayCanvasRef,
+    customProcessedOverlayVisible = false,
 }) => {
     const { width: videoWidth, height: videoHeight } = videoDimensions;
     const rotationRad = (rotationDegrees * Math.PI) / 180;
@@ -167,6 +171,14 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
             detectionOverlayCanvasRef.current = node;
         },
         [detectionOverlayCanvasRef],
+    );
+    const bindCustomOverlayRef = useCallback(
+        (node: HTMLCanvasElement | null) => {
+            if (customProcessedOverlayCanvasRef) {
+                customProcessedOverlayCanvasRef.current = node;
+            }
+        },
+        [customProcessedOverlayCanvasRef],
     );
     const bindRoiCanvasRef = useCallback(
         (node: HTMLCanvasElement | null) => {
@@ -331,6 +343,18 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                                 processedFeedReady && showFullFrame ? 'opacity-100' : 'opacity-0'
                             }`}
                         />
+                        {customProcessedOverlayCanvasRef && (
+                            <canvas
+                                ref={bindCustomOverlayRef}
+                                className={`pointer-events-none absolute inset-0 size-full object-contain transition-opacity ${
+                                    customProcessedOverlayVisible &&
+                                    processedFeedReady &&
+                                    showFullFrame
+                                        ? 'opacity-100'
+                                        : 'opacity-0'
+                                }`}
+                            />
+                        )}
                     </div>
 
                     {/* ROI Canvas and Overlay are OUTSIDE the rotated wrapper, so they are Screen Aligned */}
