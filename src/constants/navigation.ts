@@ -11,7 +11,6 @@ export const PAGE_TITLES: Record<Page, string> = {
     playback: 'Playback',
     animation: 'Animation',
     calibration: 'Calibration',
-    alignment: 'Alignment',
     configurator: 'Array Config',
     simulation: 'Simulation',
     connection: 'Connection',
@@ -34,7 +33,6 @@ export type NavigationIconKey =
     | 'playback'
     | 'animation'
     | 'calibration'
-    | 'alignment'
     | 'patterns'
     | 'simulation'
     | 'configurator'
@@ -64,11 +62,6 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
         page: 'calibration',
         label: 'Calibration',
         iconKey: 'calibration',
-    },
-    {
-        page: 'alignment',
-        label: 'Alignment',
-        iconKey: 'alignment',
     },
     {
         page: 'configurator',

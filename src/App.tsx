@@ -8,7 +8,6 @@ import MobileNavigationDrawer from './components/MobileNavigationDrawer';
 import Modal from './components/Modal';
 import {
     AnimationIcon,
-    AlignmentIcon,
     ArrayConfigIcon,
     CalibrationIcon,
     ConnectionIcon,
@@ -35,7 +34,6 @@ import { MqttProvider } from './context/MqttContext';
 import { PatternProvider } from './context/PatternContext';
 import { StatusProvider } from './context/StatusContext';
 import { useGridPersistence } from './hooks/useGridPersistence';
-import AlignmentPage from './pages/AlignmentPage';
 import AnimationPage from './pages/AnimationPage';
 import CalibrationPage from './pages/CalibrationPage';
 import ConfiguratorPage from './pages/ConfiguratorPage';
@@ -63,7 +61,6 @@ export type Page =
     | 'playback'
     | 'animation'
     | 'calibration'
-    | 'alignment'
     | 'configurator'
     | 'simulation'
     | 'connection';
@@ -81,7 +78,6 @@ const NAVIGATION_ICONS: Record<NavigationIconKey, React.ReactNode> = {
     playback: <PlaybackIcon />,
     animation: <AnimationIcon />,
     calibration: <CalibrationIcon />,
-    alignment: <AlignmentIcon />,
     patterns: <PatternsIcon />,
     simulation: <SimulationIcon />,
     configurator: <ArrayConfigIcon />,
@@ -247,8 +243,6 @@ const App: React.FC = () => {
                 );
             case 'calibration':
                 return <CalibrationPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
-            case 'alignment':
-                return <AlignmentPage gridSize={gridSize} mirrorConfig={mirrorConfig} />;
             case 'legacy-patterns-editor':
                 return (
                     <PatternEditorPage

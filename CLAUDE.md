@@ -32,6 +32,7 @@ Rules:
 - Use this entry format: `- YYYY-MM-DD [MODEL_NAME] - issue; resolution.`
 - When you are stuck, in doubt, or about to repeat a similar workflow, consult the file before retrying.
 
+
 ## Directory Map
 
 ```
