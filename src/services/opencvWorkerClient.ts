@@ -64,6 +64,54 @@ export interface BlobDetectorParams {
     blobColor: number;
 }
 
+// --- Shape analysis types ---
+
+export interface AnalyzeShapeParams {
+    frame: ImageBitmap;
+    width: number;
+    height: number;
+    roi: NormalizedRoi;
+    brightness: number;
+    contrast: number;
+    claheClipLimit: number;
+    claheTileGridSize: number;
+    adaptiveThreshold: {
+        method: 'GAUSSIAN' | 'MEAN';
+        thresholdType: 'BINARY' | 'BINARY_INV';
+        blockSize: number;
+        C: number;
+    };
+    minContourArea: number;
+}
+
+export interface ShapeAnalysisResult {
+    type: 'SHAPE_RESULT';
+    requestId: number;
+    coordinateSpace: 'frame-px';
+    frameSize: { width: number; height: number };
+    roiRect: { x: number; y: number; width: number; height: number } | null;
+    detected: boolean;
+    contour: {
+        area: number;
+        centroid: { x: number; y: number };
+        eigenvalue1: number;
+        eigenvalue2: number;
+        eccentricity: number;
+        principalAngle: number;
+        boundingRect: { x: number; y: number; width: number; height: number };
+    } | null;
+    contourPoints?: Array<{ x: number; y: number }>;
+}
+
+export interface ShapeMetrics {
+    area: number;
+    eccentricity: number;
+    principalAngle: number;
+    centroid: { x: number; y: number };
+}
+
+// --- Worker message types ---
+
 interface StatusMessage extends OpenCvReadyMessage {
     type: 'STATUS';
     status: OpenCvWorkerStatus;
@@ -79,13 +127,22 @@ interface FrameResultMessage extends ProcessFrameResult {
     type: 'FRAME_RESULT';
 }
 
+interface ShapeResultMessage extends ShapeAnalysisResult {
+    type: 'SHAPE_RESULT';
+}
+
 interface ErrorMessage {
     type: 'ERROR';
     requestId?: number;
     message: string;
 }
 
-type WorkerMessage = StatusMessage | ReadyMessage | FrameResultMessage | ErrorMessage;
+type WorkerMessage =
+    | StatusMessage
+    | ReadyMessage
+    | FrameResultMessage
+    | ShapeResultMessage
+    | ErrorMessage;
 
 type StatusListener = (status: OpenCvWorkerStatus, payload?: OpenCvReadyMessage | string) => void;
 
@@ -102,6 +159,14 @@ export class OpenCvWorkerClient {
         number,
         {
             resolve: (result: ProcessFrameResult) => void;
+            reject: (reason: unknown) => void;
+        }
+    >();
+
+    private shapePending = new Map<
+        number,
+        {
+            resolve: (result: ShapeAnalysisResult) => void;
             reject: (reason: unknown) => void;
         }
     >();
@@ -164,6 +229,18 @@ export class OpenCvWorkerClient {
         });
     }
 
+    analyzeShape(params: Omit<AnalyzeShapeParams, 'type'>): Promise<ShapeAnalysisResult> {
+        if (this.status !== 'ready') {
+            return Promise.reject(new Error('OpenCV worker is not ready'));
+        }
+        const requestId = ++this.requestId;
+        const payload = { type: 'ANALYZE_SHAPE' as const, requestId, ...params };
+        this.worker.postMessage(payload, [params.frame]);
+        return new Promise<ShapeAnalysisResult>((resolve, reject) => {
+            this.shapePending.set(requestId, { resolve, reject });
+        });
+    }
+
     dispose(): void {
         this.worker.removeEventListener('message', this.handleMessage);
         this.worker.removeEventListener('error', this.handleWorkerError);
@@ -171,6 +248,8 @@ export class OpenCvWorkerClient {
         this.updateStatus('idle');
         this.pending.forEach(({ reject }) => reject(new Error('Worker disposed')));
         this.pending.clear();
+        this.shapePending.forEach(({ reject }) => reject(new Error('Worker disposed')));
+        this.shapePending.clear();
         if (this.readyReject) {
             this.readyReject(new Error('Worker disposed'));
             this.readyReject = null;
@@ -203,14 +282,25 @@ export class OpenCvWorkerClient {
                 }
                 break;
             case 'FRAME_RESULT':
-                this.resolveRequest(message.requestId, message);
+                this.resolveFrameRequest(message.requestId, message);
+                break;
+            case 'SHAPE_RESULT':
+                this.resolveShapeRequest(message.requestId, message);
                 break;
             case 'ERROR':
-                if (typeof message.requestId === 'number' && this.pending.has(message.requestId)) {
-                    const pending = this.pending.get(message.requestId);
-                    if (pending) {
-                        this.pending.delete(message.requestId);
-                        pending.reject(new Error(message.message));
+                if (typeof message.requestId === 'number') {
+                    if (this.pending.has(message.requestId)) {
+                        const pending = this.pending.get(message.requestId);
+                        if (pending) {
+                            this.pending.delete(message.requestId);
+                            pending.reject(new Error(message.message));
+                        }
+                    } else if (this.shapePending.has(message.requestId)) {
+                        const pending = this.shapePending.get(message.requestId);
+                        if (pending) {
+                            this.shapePending.delete(message.requestId);
+                            pending.reject(new Error(message.message));
+                        }
                     }
                 } else {
                     this.updateStatus('error', message.message);
@@ -229,19 +319,30 @@ export class OpenCvWorkerClient {
         this.updateStatus('error', event.message);
         this.pending.forEach(({ reject }) => reject(event));
         this.pending.clear();
+        this.shapePending.forEach(({ reject }) => reject(event));
+        this.shapePending.clear();
         if (this.readyReject) {
             this.readyReject(event.error ?? new Error(event.message));
             this.readyReject = null;
         }
     };
 
-    private resolveRequest(requestId: number, message: FrameResultMessage) {
+    private resolveFrameRequest(requestId: number, message: FrameResultMessage) {
         const pending = this.pending.get(requestId);
         if (!pending) {
             message.frame.close();
             return;
         }
         this.pending.delete(requestId);
+        pending.resolve(message);
+    }
+
+    private resolveShapeRequest(requestId: number, message: ShapeResultMessage) {
+        const pending = this.shapePending.get(requestId);
+        if (!pending) {
+            return;
+        }
+        this.shapePending.delete(requestId);
         pending.resolve(message);
     }
 

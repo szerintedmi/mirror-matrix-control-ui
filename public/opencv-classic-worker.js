@@ -469,9 +469,192 @@ const handleProcessFrame = async (payload) => {
     cleanupMats(matsToDelete);
 };
 
+const handleAnalyzeShape = async (payload) => {
+    const {
+        frame,
+        width,
+        height,
+        brightness = 0,
+        contrast = 1,
+        claheClipLimit = 2,
+        claheTileGridSize = 8,
+        roi,
+        requestId,
+        adaptiveThreshold = {},
+        minContourArea = 100,
+    } = payload;
+
+    const ctx2d = ensureCanvasContext(width, height);
+    if (!ctx2d) {
+        if (frame && typeof frame.close === 'function') {
+            frame.close();
+        }
+        throw new Error('Unable to create OffscreenCanvas context');
+    }
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.drawImage(frame, 0, 0, width, height);
+    if (frame && typeof frame.close === 'function') {
+        frame.close();
+    }
+
+    const imageData = ctx2d.getImageData(0, 0, width, height);
+    const src = cvModule.matFromImageData(imageData);
+    const gray = new cvModule.Mat();
+    cvModule.cvtColor(src, gray, cvModule.COLOR_RGBA2GRAY);
+
+    // Brightness/contrast adjustment
+    const adjusted = new cvModule.Mat();
+    const alpha = Number.isFinite(contrast) ? contrast : 1;
+    const beta = Number.isFinite(brightness) ? brightness * 255 : 0;
+    cvModule.convertScaleAbs(gray, adjusted, alpha, beta);
+
+    // CLAHE
+    const claheResult = new cvModule.Mat();
+    const clipLimit = Math.max(0.1, claheClipLimit || 2);
+    const grid = Math.max(1, Math.floor(claheTileGridSize || 8));
+    const clahe = new cvModule.CLAHE(clipLimit, new cvModule.Size(grid, grid));
+    clahe.apply(adjusted, claheResult);
+    clahe.delete();
+
+    const processingWidth = claheResult.cols;
+    const processingHeight = claheResult.rows;
+
+    // ROI crop
+    let roiRect = null;
+    let workingMat = claheResult;
+    if (roi && roi.enabled) {
+        const rect = buildRect(roi, processingWidth, processingHeight);
+        roiRect = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        workingMat = claheResult.roi(rect);
+    }
+
+    // Adaptive threshold
+    const binary = new cvModule.Mat();
+    const method =
+        adaptiveThreshold.method === 'MEAN'
+            ? cvModule.ADAPTIVE_THRESH_MEAN_C
+            : cvModule.ADAPTIVE_THRESH_GAUSSIAN_C;
+    const threshType =
+        adaptiveThreshold.thresholdType === 'BINARY_INV'
+            ? cvModule.THRESH_BINARY_INV
+            : cvModule.THRESH_BINARY;
+    let blockSize = adaptiveThreshold.blockSize || 51;
+    if (blockSize % 2 === 0) {
+        blockSize += 1;
+    }
+    blockSize = Math.max(3, blockSize);
+    const C = adaptiveThreshold.C ?? 10;
+
+    cvModule.adaptiveThreshold(workingMat, binary, 255, method, threshType, blockSize, C);
+
+    // Find contours
+    const contours = new cvModule.MatVector();
+    const hierarchy = new cvModule.Mat();
+    cvModule.findContours(
+        binary,
+        contours,
+        hierarchy,
+        cvModule.RETR_EXTERNAL,
+        cvModule.CHAIN_APPROX_SIMPLE,
+    );
+
+    // Select largest contour by area (above minContourArea)
+    let largestIdx = -1;
+    let largestArea = 0;
+    for (let i = 0; i < contours.size(); i += 1) {
+        const contour = contours.get(i);
+        const area = cvModule.contourArea(contour);
+        if (area >= minContourArea && area > largestArea) {
+            largestArea = area;
+            largestIdx = i;
+        }
+    }
+
+    let resultPayload;
+    if (largestIdx === -1) {
+        resultPayload = {
+            type: 'SHAPE_RESULT',
+            requestId,
+            coordinateSpace: 'frame-px',
+            frameSize: { width: processingWidth, height: processingHeight },
+            roiRect,
+            detected: false,
+            contour: null,
+        };
+    } else {
+        const largestContour = contours.get(largestIdx);
+        const M = cvModule.moments(largestContour);
+        const area = M.m00;
+        const centroidX = area > 0 ? M.m10 / M.m00 : 0;
+        const centroidY = area > 0 ? M.m01 / M.m00 : 0;
+        const mu20 = M.mu20;
+        const mu02 = M.mu02;
+        const mu11 = M.mu11;
+
+        const discriminant = Math.sqrt(4 * mu11 * mu11 + (mu20 - mu02) * (mu20 - mu02));
+        const eigenvalue1 = 0.5 * (mu20 + mu02) + 0.5 * discriminant;
+        const eigenvalue2 = 0.5 * (mu20 + mu02) - 0.5 * discriminant;
+        const eccentricity = eigenvalue2 > 0 ? eigenvalue1 / eigenvalue2 : 1;
+        const principalAngle = 0.5 * Math.atan2(2 * mu11, mu20 - mu02);
+
+        const bRect = cvModule.boundingRect(largestContour);
+
+        // ROI offset for frame-px coordinates
+        const offsetX = roiRect ? roiRect.x : 0;
+        const offsetY = roiRect ? roiRect.y : 0;
+
+        // Extract contour points
+        const contourData = largestContour.data32S;
+        const contourPoints = [];
+        for (let j = 0; j < contourData.length; j += 2) {
+            contourPoints.push({
+                x: contourData[j] + offsetX,
+                y: contourData[j + 1] + offsetY,
+            });
+        }
+
+        resultPayload = {
+            type: 'SHAPE_RESULT',
+            requestId,
+            coordinateSpace: 'frame-px',
+            frameSize: { width: processingWidth, height: processingHeight },
+            roiRect,
+            detected: true,
+            contour: {
+                area,
+                centroid: {
+                    x: centroidX + offsetX,
+                    y: centroidY + offsetY,
+                },
+                eigenvalue1,
+                eigenvalue2,
+                eccentricity,
+                principalAngle,
+                boundingRect: {
+                    x: bRect.x + offsetX,
+                    y: bRect.y + offsetY,
+                    width: bRect.width,
+                    height: bRect.height,
+                },
+            },
+            contourPoints,
+        };
+    }
+
+    // Cleanup
+    const matsToDelete = [binary, hierarchy, src, gray, adjusted, claheResult];
+    if (workingMat !== claheResult) {
+        workingMat.delete();
+    }
+    contours.delete();
+    cleanupMats(matsToDelete);
+
+    workerCtx.postMessage(resultPayload);
+};
+
 workerCtx.addEventListener('message', (event) => {
     const data = event.data || {};
-    if (data.type !== 'PROCESS_FRAME') {
+    if (data.type !== 'PROCESS_FRAME' && data.type !== 'ANALYZE_SHAPE') {
         return;
     }
     if (!state.cvReady) {
@@ -485,7 +668,8 @@ workerCtx.addEventListener('message', (event) => {
         }
         return;
     }
-    handleProcessFrame(data).catch((error) => {
+    const handler = data.type === 'ANALYZE_SHAPE' ? handleAnalyzeShape : handleProcessFrame;
+    handler(data).catch((error) => {
         workerCtx.postMessage({
             type: 'ERROR',
             requestId: data.requestId,

@@ -33,6 +33,7 @@ interface CalibrationPreviewProps {
     tileBoundsOverlayEnabled: boolean;
     tileBoundsOverlayAvailable: boolean;
     onToggleTileBoundsOverlay: () => void;
+    children?: React.ReactNode;
 }
 
 const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
@@ -58,6 +59,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     tileBoundsOverlayEnabled,
     tileBoundsOverlayAvailable,
     onToggleTileBoundsOverlay,
+    children,
 }) => {
     const { width: videoWidth, height: videoHeight } = videoDimensions;
     const rotationRad = (rotationDegrees * Math.PI) / 180;
@@ -346,6 +348,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                             showFullFrame ? 'opacity-0' : 'opacity-100'
                         }`}
                     />
+                    {children}
                     {showFullFrame &&
                         roi.enabled &&
                         (() => {
