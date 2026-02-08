@@ -21,7 +21,7 @@ import { useMqtt, type ConnectionScheme } from './MqttContext';
 
 import type { ConnectionState } from '../services/mqttClient';
 
-const STALE_THRESHOLD_MS = 2_000;
+const STALE_THRESHOLD_MS = 8_000;
 const HEARTBEAT_TICK_MS = 500;
 
 const createRecordKey = (source: ConnectionScheme, topicMac: string): string =>

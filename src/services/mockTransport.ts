@@ -107,7 +107,7 @@ export class MockMqttTransport {
         this.disconnect();
         this.handler = handler;
         this.broadcastStatus();
-        this.interval = setInterval(() => this.broadcastStatus(), 1_500);
+        this.interval = setInterval(() => this.broadcastStatus(), 5_000);
     }
 
     public disconnect(): void {
