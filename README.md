@@ -8,7 +8,7 @@ React single-page workspace for arranging the kinetic mirror grid, authoring lig
 
 ## Prerequisites
 
-- Node.js `>=22.21.0 <23`
+- Node.js `>=24.13.0`
 - [Bun](https://bun.sh/)
 
 ## Setup
