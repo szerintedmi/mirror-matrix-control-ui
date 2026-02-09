@@ -46,7 +46,7 @@ describe('MockMqttTransport messaging', () => {
 
     it('emits status payloads on connect', () => {
         expect(messages).toHaveLength(0);
-        vi.advanceTimersByTime(1_500);
+        vi.advanceTimersByTime(5_000);
         expect(messages.some((entry) => entry.topic.includes('/status'))).toBe(true);
     });
 

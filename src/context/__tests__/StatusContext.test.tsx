@@ -235,11 +235,11 @@ describe('StatusProvider', () => {
         expect(stateNode.dataset.presence).toBe('ready');
 
         act(() => {
-            vi.advanceTimersByTime(2_100);
+            vi.advanceTimersByTime(8_500);
         });
 
         expect(stateNode.dataset.presence).toBe('stale');
-        expect(Number(stateNode.dataset.stale)).toBeGreaterThanOrEqual(2_000);
+        expect(Number(stateNode.dataset.stale)).toBeGreaterThanOrEqual(8_000);
 
         act(() => {
             client.disconnect();
