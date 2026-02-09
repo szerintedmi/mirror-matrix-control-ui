@@ -133,7 +133,11 @@ const AlignmentPage: React.FC<AlignmentPageProps> = ({ gridSize, mirrorConfig })
                     onToggleTileBoundsOverlay={() => {}}
                 >
                     {alignment.state.lastShapeResult && (
-                        <AlignmentShapeOverlay shapeResult={alignment.state.lastShapeResult} />
+                        <AlignmentShapeOverlay
+                            shapeResult={alignment.state.lastShapeResult}
+                            roiViewEnabled={camera.roiViewEnabled}
+                            roi={detection.roi}
+                        />
                     )}
                 </CalibrationPreview>
             </div>
