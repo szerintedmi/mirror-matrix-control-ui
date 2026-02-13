@@ -2,7 +2,9 @@ agent_notes
 .history
 .worktrees
 .corepack
-.yarn
+.yarn/*
+!.yarn/releases
+!.yarn/releases/*
 
 .tmp/
 
