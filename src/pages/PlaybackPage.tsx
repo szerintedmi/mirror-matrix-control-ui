@@ -8,6 +8,7 @@ import PlaybackSequenceManager, {
 import { useCalibrationContext } from '@/context/CalibrationContext';
 import { usePatternContext } from '@/context/PatternContext';
 import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
+import { categorizePatternErrors } from '@/services/patternValidationStatus';
 import {
     planProfilePlayback,
     type ProfilePlaybackPlanResult,
@@ -83,52 +84,7 @@ const PlaybackPage: React.FC<PlaybackPageProps> = ({ gridSize, mirrorConfig, onN
                 pattern,
             });
 
-            const relevantErrors = plan.errors.filter(
-                (error) => error.code !== 'missing_profile' && error.code !== 'missing_pattern',
-            );
-
-            if (relevantErrors.length === 0) {
-                map.set(pattern.id, { isValid: true });
-                return;
-            }
-
-            // Categorize errors for user-friendly messages
-            const outOfBoundsErrors = relevantErrors.filter(
-                (e) => e.code === 'no_valid_tile_for_point' || e.code === 'target_out_of_bounds',
-            );
-            const capacityErrors = relevantErrors.filter(
-                (e) =>
-                    e.code === 'insufficient_calibrated_tiles' ||
-                    e.code === 'pattern_exceeds_mirrors',
-            );
-            const prioritizedErrors =
-                outOfBoundsErrors.length > 0 ? outOfBoundsErrors : relevantErrors;
-
-            let message: string;
-            if (outOfBoundsErrors.length > 0) {
-                message = `Point(s) outside bounds (${outOfBoundsErrors.length})`;
-            } else if (capacityErrors.length > 0) {
-                message = 'More points than tiles';
-            } else {
-                message = prioritizedErrors[0].message;
-            }
-
-            const detailsList = prioritizedErrors.slice(0, 3).map((error) => {
-                const pointLabel = error.patternPointId ? `Point ${error.patternPointId}` : 'Point';
-                const axisLabel = error.axis ? ` ${error.axis.toUpperCase()}` : '';
-                const tileLabel = error.mirrorId ? ` @ ${error.mirrorId}` : '';
-                return `${pointLabel}${axisLabel}${tileLabel}: ${error.message}`;
-            });
-
-            const remainingCount = prioritizedErrors.length > 3 ? prioritizedErrors.length - 3 : 0;
-            const details =
-                detailsList.join(' • ') + (remainingCount > 0 ? ` • +${remainingCount} more` : '');
-
-            map.set(pattern.id, {
-                isValid: false,
-                message,
-                details,
-            });
+            map.set(pattern.id, categorizePatternErrors(plan.errors));
         });
 
         return map;

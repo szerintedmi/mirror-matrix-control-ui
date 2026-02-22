@@ -14,6 +14,7 @@ import { useCalibrationContext } from '@/context/CalibrationContext';
 import { usePatternContext } from '@/context/PatternContext';
 import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import { loadGridState } from '@/services/gridStorage';
+import { categorizePatternErrors } from '@/services/patternValidationStatus';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import { centeredBoundsToPattern, getSpaceParams } from '@/services/spaceConversion';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
@@ -975,42 +976,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 pattern,
             });
 
-            const relevantErrors = plan.errors.filter(
-                (error) => error.code !== 'missing_profile' && error.code !== 'missing_pattern',
-            );
-
-            if (relevantErrors.length === 0) {
-                map.set(pattern.id, { isValid: true });
-                return;
-            }
-
-            // Categorize errors for user-friendly messages
-            const outOfBoundsErrors = relevantErrors.filter(
-                (e) => e.code === 'no_valid_tile_for_point' || e.code === 'target_out_of_bounds',
-            );
-            const capacityErrors = relevantErrors.filter(
-                (e) =>
-                    e.code === 'insufficient_calibrated_tiles' ||
-                    e.code === 'pattern_exceeds_mirrors',
-            );
-
-            let message: string;
-            if (outOfBoundsErrors.length > 0) {
-                message = `Point(s) outside bounds (${outOfBoundsErrors.length})`;
-            } else if (capacityErrors.length > 0) {
-                message = 'More points than tiles';
-            } else {
-                message = relevantErrors[0].message;
-            }
-
-            map.set(pattern.id, {
-                isValid: false,
-                message,
-                details: relevantErrors
-                    .slice(0, 3)
-                    .map((e) => e.message)
-                    .join(' • '),
-            });
+            map.set(pattern.id, categorizePatternErrors(plan.errors));
         });
 
         return map;
