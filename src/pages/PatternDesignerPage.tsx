@@ -765,44 +765,69 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
     const assignedTileIds = selectedPatternValidation.assignedTileIds;
 
     // Compute whether the current hover position would result in a valid placement
+    // by running a trial plan with the hover point appended to the current pattern.
     const hoverValidation = useMemo((): HoverValidationStatus => {
-        // Only validate when in placement mode with active hover and calibration profile
         if (editMode !== 'placement' || !hoverPoint || !selectedCalibrationProfile) {
             return { valid: true };
         }
 
-        // Find all tiles whose bounds contain the hover point
-        const tilesContainingHover = calibrationTileBounds.filter(
+        // Quick bounds check first to avoid planner overhead for obvious rejections
+        const inAnyBounds = calibrationTileBounds.some(
             (bounds) =>
                 hoverPoint.x >= bounds.xMin &&
                 hoverPoint.x <= bounds.xMax &&
                 hoverPoint.y >= bounds.yMin &&
                 hoverPoint.y <= bounds.yMax,
         );
-
-        // Check: Is hover point within any tile bounds?
-        if (tilesContainingHover.length === 0) {
+        if (!inAnyBounds) {
             return { valid: false, reason: 'outside_bounds' };
         }
 
-        // Check: Would adding this point exceed available tile capacity?
-        const currentPointCount = selectedPattern?.points.length ?? 0;
-        if (currentPointCount + 1 > availableSpotCount) {
+        // Run a trial plan with the hover point appended
+        const trialPointId = '__hover_trial__';
+        const trialPattern: Pattern = {
+            id: 'trial',
+            name: 'trial',
+            createdAt: '',
+            updatedAt: '',
+            points: [
+                ...(selectedPattern?.points ?? []),
+                { id: trialPointId, x: hoverPoint.x, y: hoverPoint.y },
+            ],
+        };
+
+        const trialPlan = planProfilePlayback({
+            gridSize,
+            mirrorConfig,
+            profile: selectedCalibrationProfile,
+            pattern: trialPattern,
+        });
+
+        // Check if the trial point was assigned successfully
+        const trialPointHasError = trialPlan.errors.some((e) => e.patternPointId === trialPointId);
+
+        if (trialPointHasError) {
+            // Determine reason: find tiles whose bounds contain the hover point
+            // and check if they're all occupied in the current plan
+            const tilesContainingHover = calibrationTileBounds.filter(
+                (bounds) =>
+                    hoverPoint.x >= bounds.xMin &&
+                    hoverPoint.x <= bounds.xMax &&
+                    hoverPoint.y >= bounds.yMin &&
+                    hoverPoint.y <= bounds.yMax,
+            );
+            const occupiedTilesInArea = tilesContainingHover.filter((tile) =>
+                assignedTileIds.has(tile.id),
+            );
+
+            if (occupiedTilesInArea.length === tilesContainingHover.length) {
+                return {
+                    valid: false,
+                    reason: 'area_occupied',
+                    occupiedTileIds: occupiedTilesInArea.map((tile) => tile.id),
+                };
+            }
             return { valid: false, reason: 'over_capacity' };
-        }
-
-        // Check: Are all tiles that could serve this area already occupied?
-        const occupiedTilesInArea = tilesContainingHover.filter((tile) =>
-            assignedTileIds.has(tile.id),
-        );
-        const hasAvailableTile = tilesContainingHover.length > occupiedTilesInArea.length;
-
-        if (!hasAvailableTile) {
-            return {
-                valid: false,
-                reason: 'area_occupied',
-                occupiedTileIds: occupiedTilesInArea.map((tile) => tile.id),
-            };
         }
 
         return { valid: true };
@@ -811,8 +836,9 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         hoverPoint,
         selectedCalibrationProfile,
         calibrationTileBounds,
-        selectedPattern?.points.length,
-        availableSpotCount,
+        selectedPattern,
+        gridSize,
+        mirrorConfig,
         assignedTileIds,
     ]);
 

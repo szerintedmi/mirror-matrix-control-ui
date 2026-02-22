@@ -376,4 +376,55 @@ describe('profilePlaybackPlanner', () => {
         const assignedTiles = result.tiles.filter((t) => t.patternPointId !== null);
         expect(assignedTiles).toHaveLength(2);
     });
+
+    it('assigns all points when greedy nearest-tile would fail (bipartite matching)', () => {
+        // 3x1 grid. Tile bounds deliberately set up so a greedy matcher
+        // that assigns the closest tile first would block a later point.
+        const threeColGrid = { rows: 1, cols: 3 };
+        const profile = createProfile(1, 3);
+
+        // Tile 0-0 ideal (-1, 0): bounds cover left half only
+        profile.tiles['0-0'].combinedBounds = {
+            x: { min: -1, max: 0 },
+            y: { min: -1, max: 1 },
+        };
+        // Tile 0-1 ideal (0, 0): bounds cover left half (overlaps with 0-0)
+        profile.tiles['0-1'].combinedBounds = {
+            x: { min: -1, max: 0 },
+            y: { min: -1, max: 1 },
+        };
+        // Tile 0-2 ideal (1, 0): bounds cover full range
+        profile.tiles['0-2'].combinedBounds = {
+            x: { min: -1, max: 1 },
+            y: { min: -1, max: 1 },
+        };
+
+        // Three points all in the left half:
+        // P0 at (-0.9, 0) - closest to 0-0, also fits 0-1 and 0-2
+        // P1 at (-0.5, 0) - closest to 0-0, also fits 0-1 and 0-2
+        // P2 at (-0.1, 0) - closest to 0-1, also fits 0-0 and 0-2
+        //
+        // A greedy approach sorted by distance could assign:
+        //   P0 -> 0-0 (closest), P2 -> 0-1 (closest), P1 -> 0-2
+        // But if the greedy processes P1 first (closest to 0-0, dist=0.5):
+        //   P1 -> 0-0, P0 -> 0-1 (only remaining in bounds), P2 -> stuck
+        //
+        // Bipartite matching finds: all three points can be matched.
+        const pattern = createPattern([
+            { x: -0.9, y: 0 },
+            { x: -0.5, y: 0 },
+            { x: -0.1, y: 0 },
+        ]);
+
+        const result = planProfilePlayback({
+            gridSize: threeColGrid,
+            mirrorConfig: buildMirrorConfig(1, 3),
+            profile,
+            pattern,
+        });
+
+        const assignedTiles = result.tiles.filter((t) => t.patternPointId !== null);
+        expect(assignedTiles).toHaveLength(3);
+        expect(result.errors).toHaveLength(0);
+    });
 });
