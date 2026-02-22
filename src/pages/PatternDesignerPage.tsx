@@ -14,7 +14,7 @@ import { useCalibrationContext } from '@/context/CalibrationContext';
 import { usePatternContext } from '@/context/PatternContext';
 import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import { loadGridState } from '@/services/gridStorage';
-import { categorizePatternErrors } from '@/services/patternValidationStatus';
+import { buildPointErrorMap, categorizePatternErrors } from '@/services/patternValidationStatus';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import { centeredBoundsToPattern, getSpaceParams } from '@/services/spaceConversion';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
@@ -62,6 +62,7 @@ interface PatternDesignerCanvasProps {
     }>;
     highlightedTileIds: Set<string>;
     invalidPointIds: Set<string>;
+    pointErrors: Map<string, string>;
     maxOverlapCount: number;
     viewBox: string;
 }
@@ -105,6 +106,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     tileBounds,
     highlightedTileIds,
     invalidPointIds,
+    pointErrors,
     maxOverlapCount,
     viewBox,
 }) => {
@@ -404,7 +406,11 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                     handleMouseDownPoint(point.id);
                                 }}
                                 onClick={(event) => handlePointClick(event, point.id)}
-                            />
+                            >
+                                {isInvalid && pointErrors.get(point.id) && (
+                                    <title>{pointErrors.get(point.id)}</title>
+                                )}
+                            </rect>
                         );
                     })}
                     {editMode === 'placement' &&
@@ -733,6 +739,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 invalidPointIds: new Set<string>(),
                 errors: [],
                 assignedTileIds: new Set<string>(),
+                pointErrors: new Map<string, string>(),
             };
         }
 
@@ -759,11 +766,14 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             }
         }
 
-        return { invalidPointIds: invalidIds, errors: plan.errors, assignedTileIds };
+        const pointErrors = buildPointErrorMap(plan.errors);
+
+        return { invalidPointIds: invalidIds, errors: plan.errors, assignedTileIds, pointErrors };
     }, [selectedPattern, selectedCalibrationProfile, gridSize, mirrorConfig]);
 
     const invalidPointIds = selectedPatternValidation.invalidPointIds;
     const assignedTileIds = selectedPatternValidation.assignedTileIds;
+    const pointErrors = selectedPatternValidation.pointErrors;
 
     // Compute whether the current hover position would result in a valid placement
     // by running a trial plan with the hover point appended to the current pattern.
@@ -1153,6 +1163,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                                 tileBounds={calibrationTileBounds}
                                 highlightedTileIds={highlightedTileIds}
                                 invalidPointIds={invalidPointIds}
+                                pointErrors={pointErrors}
                                 maxOverlapCount={maxOverlapCount}
                                 viewBox={autoZoomViewBox}
                             />

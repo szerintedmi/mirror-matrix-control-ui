@@ -10,11 +10,15 @@ const IGNORED_CODES = new Set(['missing_profile', 'missing_pattern']);
 
 const OUT_OF_BOUNDS_CODES = new Set(['no_valid_tile_for_point', 'target_out_of_bounds']);
 
+const OCCUPIED_CODES = new Set(['no_remaining_tile_for_point']);
+
 const CAPACITY_CODES = new Set(['insufficient_calibrated_tiles', 'pattern_exceeds_mirrors']);
 
 /**
  * Categorize planner errors into a user-friendly validation status.
  * Used by both the pattern list and playback page to ensure consistent messaging.
+ *
+ * Priority: out-of-bounds > tiles occupied > capacity > other
  */
 export function categorizePatternErrors(
     errors: ProfilePlaybackValidationError[],
@@ -26,14 +30,26 @@ export function categorizePatternErrors(
     }
 
     const outOfBoundsErrors = relevantErrors.filter((e) => OUT_OF_BOUNDS_CODES.has(e.code));
+    const occupiedErrors = relevantErrors.filter((e) => OCCUPIED_CODES.has(e.code));
     const capacityErrors = relevantErrors.filter((e) => CAPACITY_CODES.has(e.code));
 
-    // Prioritize out-of-bounds (more specific/actionable) over capacity
-    const prioritizedErrors = outOfBoundsErrors.length > 0 ? outOfBoundsErrors : relevantErrors;
+    // Prioritize the most specific/actionable errors for details
+    let prioritizedErrors: ProfilePlaybackValidationError[];
+    if (outOfBoundsErrors.length > 0) {
+        prioritizedErrors = outOfBoundsErrors;
+    } else if (occupiedErrors.length > 0) {
+        prioritizedErrors = occupiedErrors;
+    } else {
+        prioritizedErrors = relevantErrors;
+    }
 
     let message: string;
     if (outOfBoundsErrors.length > 0) {
-        message = `Point(s) outside bounds (${outOfBoundsErrors.length})`;
+        const n = outOfBoundsErrors.length;
+        message = n === 1 ? '1 point out of bounds' : `${n} points out of bounds`;
+    } else if (occupiedErrors.length > 0) {
+        const n = occupiedErrors.length;
+        message = n === 1 ? '1 spot conflicts' : `${n} spots conflict`;
     } else if (capacityErrors.length > 0) {
         message = 'More points than tiles';
     } else {
@@ -52,4 +68,30 @@ export function categorizePatternErrors(
         detailsList.join(' • ') + (remainingCount > 0 ? ` • +${remainingCount} more` : '');
 
     return { isValid: false, message, details };
+}
+
+/**
+ * Build a map from point ID to a short error reason string.
+ * Used to provide per-point tooltips in the pattern editor canvas.
+ */
+export function buildPointErrorMap(errors: ProfilePlaybackValidationError[]): Map<string, string> {
+    const map = new Map<string, string>();
+
+    for (const error of errors) {
+        if (!error.patternPointId || map.has(error.patternPointId)) continue;
+
+        let reason: string;
+        if (OUT_OF_BOUNDS_CODES.has(error.code)) {
+            reason = 'Outside tile bounds';
+        } else if (OCCUPIED_CODES.has(error.code)) {
+            reason = 'Tile already assigned';
+        } else if (CAPACITY_CODES.has(error.code)) {
+            reason = 'Not enough tiles';
+        } else {
+            reason = error.message;
+        }
+        map.set(error.patternPointId, reason);
+    }
+
+    return map;
 }

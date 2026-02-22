@@ -145,7 +145,7 @@ const PatternLibraryList: React.FC<PatternLibraryListProps> = ({
                                 </div>
                                 {isInvalid && (
                                     <span
-                                        className="mt-1 text-xs text-amber-400"
+                                        className="mt-1 truncate text-xs text-amber-400"
                                         title={validation?.details ?? validation?.message}
                                     >
                                         {validation.message}

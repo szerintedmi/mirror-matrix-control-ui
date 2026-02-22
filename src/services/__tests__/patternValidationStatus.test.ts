@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { categorizePatternErrors } from '../patternValidationStatus';
+import { buildPointErrorMap, categorizePatternErrors } from '../patternValidationStatus';
 
 import type { ProfilePlaybackValidationError } from '../profilePlaybackPlanner';
 
@@ -39,32 +39,48 @@ describe('categorizePatternErrors', () => {
         ];
         const result = categorizePatternErrors(errors);
         expect(result.isValid).toBe(false);
-        expect(result.message).toBe('Point(s) outside bounds (2)');
+        expect(result.message).toBe('2 points out of bounds');
     });
 
-    it('reports capacity errors when no out-of-bounds', () => {
+    it('reports occupied tile errors distinctly from capacity', () => {
         const errors = [
-            makeError('insufficient_calibrated_tiles', 'No remaining tile for point "p1"', {
+            makeError('no_remaining_tile_for_point', 'All compatible tiles already assigned', {
                 patternPointId: 'p1',
             }),
         ];
+        const result = categorizePatternErrors(errors);
+        expect(result.isValid).toBe(false);
+        expect(result.message).toBe('1 spot conflicts');
+    });
+
+    it('reports capacity errors when no out-of-bounds or occupied', () => {
+        const errors = [makeError('insufficient_calibrated_tiles', 'Not enough calibrated tiles')];
         const result = categorizePatternErrors(errors);
         expect(result.isValid).toBe(false);
         expect(result.message).toBe('More points than tiles');
     });
 
-    it('prioritizes out-of-bounds over capacity when both present', () => {
+    it('prioritizes out-of-bounds over occupied and capacity', () => {
         const errors = [
+            makeError('no_remaining_tile_for_point', 'Tiles taken', { patternPointId: 'p1' }),
             makeError('insufficient_calibrated_tiles', 'Not enough tiles'),
-            makeError('no_valid_tile_for_point', 'Point "p1" outside bounds', {
-                patternPointId: 'p1',
+            makeError('no_valid_tile_for_point', 'Point "p2" outside bounds', {
+                patternPointId: 'p2',
             }),
         ];
         const result = categorizePatternErrors(errors);
         expect(result.isValid).toBe(false);
-        expect(result.message).toBe('Point(s) outside bounds (1)');
-        // Details should be from the prioritized (out-of-bounds) errors
-        expect(result.details).toContain('Point p1');
+        expect(result.message).toBe('1 point out of bounds');
+        expect(result.details).toContain('Point p2');
+    });
+
+    it('prioritizes occupied over capacity', () => {
+        const errors = [
+            makeError('insufficient_calibrated_tiles', 'Not enough tiles'),
+            makeError('no_remaining_tile_for_point', 'Tiles taken', { patternPointId: 'p1' }),
+        ];
+        const result = categorizePatternErrors(errors);
+        expect(result.message).toBe('1 spot conflicts');
     });
 
     it('formats details with point/axis/tile labels', () => {
@@ -97,5 +113,55 @@ describe('categorizePatternErrors', () => {
         ];
         const result = categorizePatternErrors(errors);
         expect(result.message).toBe('Tile 0-0 is not calibrated');
+    });
+});
+
+describe('buildPointErrorMap', () => {
+    it('returns empty map for no errors', () => {
+        expect(buildPointErrorMap([]).size).toBe(0);
+    });
+
+    it('maps out-of-bounds point to friendly reason', () => {
+        const errors = [
+            makeError('no_valid_tile_for_point', 'technical message', {
+                patternPointId: 'p1',
+            }),
+        ];
+        const map = buildPointErrorMap(errors);
+        expect(map.get('p1')).toBe('Outside tile bounds');
+    });
+
+    it('maps occupied tile error to friendly reason', () => {
+        const errors = [
+            makeError('no_remaining_tile_for_point', 'technical message', {
+                patternPointId: 'p1',
+            }),
+        ];
+        const map = buildPointErrorMap(errors);
+        expect(map.get('p1')).toBe('Tile already assigned');
+    });
+
+    it('maps capacity error to friendly reason', () => {
+        const errors = [
+            makeError('insufficient_calibrated_tiles', 'technical message', {
+                patternPointId: 'p1',
+            }),
+        ];
+        const map = buildPointErrorMap(errors);
+        expect(map.get('p1')).toBe('Not enough tiles');
+    });
+
+    it('keeps first error per point', () => {
+        const errors = [
+            makeError('no_valid_tile_for_point', 'first', { patternPointId: 'p1' }),
+            makeError('no_remaining_tile_for_point', 'second', { patternPointId: 'p1' }),
+        ];
+        const map = buildPointErrorMap(errors);
+        expect(map.get('p1')).toBe('Outside tile bounds');
+    });
+
+    it('skips errors without patternPointId', () => {
+        const errors = [makeError('insufficient_calibrated_tiles', 'global error')];
+        expect(buildPointErrorMap(errors).size).toBe(0);
     });
 });

@@ -33,6 +33,7 @@ export type ProfilePlaybackErrorCode =
     | 'pattern_exceeds_mirrors'
     | 'insufficient_calibrated_tiles'
     | 'no_valid_tile_for_point'
+    | 'no_remaining_tile_for_point'
     | 'tile_not_calibrated'
     | 'missing_motor'
     | 'missing_axis_calibration'
@@ -408,7 +409,7 @@ export const planProfilePlayback = ({
             // Point had valid tiles but they were all taken by other points
             globalErrors.push(
                 createError(
-                    'insufficient_calibrated_tiles',
+                    'no_remaining_tile_for_point',
                     `No remaining tile for point "${p.id}" - all compatible tiles already assigned.`,
                     { patternPointId: p.id },
                 ),
