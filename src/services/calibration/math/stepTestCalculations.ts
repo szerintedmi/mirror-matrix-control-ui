@@ -6,10 +6,15 @@
  */
 
 import { MOTOR_MAX_POSITION_STEPS } from '@/constants/control';
-import type { ArrayRotation, BlobMeasurement } from '@/types';
+import type { ArrayRotation, BlobMeasurement, StagingPosition } from '@/types';
 import { getStepTestJogDirection } from '@/utils/arrayRotation';
 
-import { clampSteps } from './stagingCalculations';
+import {
+    clampSteps,
+    computeNearestCornerTarget,
+    type GridSize,
+    type TilePosition,
+} from './stagingCalculations';
 
 // =============================================================================
 // TYPES
@@ -56,6 +61,41 @@ export function getAxisStepDelta(
     }
     const jogDirection = getStepTestJogDirection(axis, arrayRotation);
     return clampSteps(deltaSteps * jogDirection);
+}
+
+/**
+ * Compute an adaptive step delta that jogs away from the tile's staging corner.
+ *
+ * With nearest-corner staging, tiles park at the corner matching their grid quadrant.
+ * If the default jog direction would move the blob towards that same corner, flip it
+ * so the step test blob doesn't overlap with parked tiles.
+ *
+ * For other staging modes or when the default direction already goes away from
+ * the staging corner, returns the standard delta unchanged.
+ */
+export function getAdaptiveStepDelta(
+    axis: Axis,
+    deltaSteps: number,
+    arrayRotation: ArrayRotation,
+    tile: TilePosition,
+    gridSize: GridSize,
+    stagingPosition: StagingPosition,
+): number | null {
+    const baseDelta = getAxisStepDelta(axis, deltaSteps, arrayRotation);
+    if (baseDelta === null || stagingPosition !== 'nearest-corner') {
+        return baseDelta;
+    }
+
+    // Determine where this tile's quadrant parks
+    const cornerTarget = computeNearestCornerTarget(tile, gridSize, arrayRotation);
+    const stagingValue = axis === 'x' ? cornerTarget.x : cornerTarget.y;
+
+    // If the jog goes in the same direction as the staging corner, flip it
+    if (Math.sign(baseDelta) === Math.sign(stagingValue) && stagingValue !== 0) {
+        return clampSteps(-baseDelta);
+    }
+
+    return baseDelta;
 }
 
 // =============================================================================

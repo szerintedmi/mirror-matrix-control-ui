@@ -16,6 +16,7 @@ import { centeredToView } from '@/utils/coordinates';
 import { computeExpectedBlobPosition, type TileMeasurement } from '../math/expectedPosition';
 import {
     getAxisStepDelta,
+    getAdaptiveStepDelta,
     computeAxisStepTestResult,
     combineStepTestResults,
     computeAlignmentTargetSteps,
@@ -422,7 +423,16 @@ function* runAxisStepTest(
     }
 
     // --- FULL STEP TEST ---
-    const fullDelta = getAxisStepDelta(axis, deltaSteps, config.arrayRotation);
+    // Use adaptive delta that jogs away from the tile's staging corner
+    // to avoid overlapping with parked tiles in nearest-corner mode.
+    const fullDelta = getAdaptiveStepDelta(
+        axis,
+        deltaSteps,
+        config.arrayRotation,
+        { row: tile.row, col: tile.col },
+        config.gridSize,
+        config.stagingPosition,
+    );
     if (fullDelta !== null) {
         yield log(`${axisLabel} full step test (${fullDelta} steps)`, tileAddress, 'step-test');
 
