@@ -122,6 +122,25 @@ export const CalibrationIcon: React.FC = () => (
     </svg>
 );
 
+export const AlignmentIcon: React.FC = () => (
+    <svg
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="size-5"
+    >
+        <circle cx="12" cy="12" r="8" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v4" strokeLinecap="round" />
+        <path d="M12 18v4" strokeLinecap="round" />
+        <path d="M2 12h4" strokeLinecap="round" />
+        <path d="M18 12h4" strokeLinecap="round" />
+    </svg>
+);
+
 export const AnimationIcon: React.FC = () => (
     <svg
         aria-hidden="true"

@@ -80,40 +80,42 @@ const projectDelta = (
     projection: OverlayProjection,
     axis?: 'x' | 'y',
 ): number => {
-    const { canvasSize, letterbox } = projection;
+    const { canvasSize, letterbox, cropRect } = projection;
 
     // Convert centered delta to viewport delta (centered range is 2, viewport range is 1)
     const viewportDelta = delta / 2;
 
-    // NOTE: We don't scale by cropRect here because the letterbox transform
-    // is already calculated based on the crop's aspect ratio when cropRect is active.
-    // The canvas size represents the crop size, so we just use letterbox + canvas directly.
+    // When a crop is active the canvas shows only a fraction of the full viewport,
+    // so deltas must be scaled up by the inverse of the crop fraction per axis.
+    const cropScaleX = cropRect ? 1 / cropRect.width : 1;
+    const cropScaleY = cropRect ? 1 / cropRect.height : 1;
 
     if (sizing === 'isotropic') {
         // Use minimum scale to preserve aspect ratio
         const minScale = Math.min(letterbox.scaleX, letterbox.scaleY);
         const avgCanvasSize = (canvasSize.width + canvasSize.height) / 2;
-        return viewportDelta * minScale * avgCanvasSize;
+        const cropScale = Math.min(cropScaleX, cropScaleY);
+        return viewportDelta * minScale * avgCanvasSize * cropScale;
     }
 
     if (sizing === 'per-axis-average') {
         // Project per-axis then average (matches old blob rendering behavior)
-        const projectedX = viewportDelta * letterbox.scaleX * canvasSize.width;
-        const projectedY = viewportDelta * letterbox.scaleY * canvasSize.height;
+        const projectedX = viewportDelta * cropScaleX * letterbox.scaleX * canvasSize.width;
+        const projectedY = viewportDelta * cropScaleY * letterbox.scaleY * canvasSize.height;
         return (projectedX + projectedY) / 2;
     }
 
     // Per-axis scaling
     if (axis === 'x') {
-        return viewportDelta * letterbox.scaleX * canvasSize.width;
+        return viewportDelta * cropScaleX * letterbox.scaleX * canvasSize.width;
     } else if (axis === 'y') {
-        return viewportDelta * letterbox.scaleY * canvasSize.height;
+        return viewportDelta * cropScaleY * letterbox.scaleY * canvasSize.height;
     }
 
     // Default to average (shouldn't happen with proper usage)
-    const avgScale = (letterbox.scaleX + letterbox.scaleY) / 2;
-    const avgSize = (canvasSize.width + canvasSize.height) / 2;
-    return viewportDelta * avgScale * avgSize;
+    const projectedX = viewportDelta * cropScaleX * letterbox.scaleX * canvasSize.width;
+    const projectedY = viewportDelta * cropScaleY * letterbox.scaleY * canvasSize.height;
+    return (projectedX + projectedY) / 2;
 };
 
 // =============================================================================

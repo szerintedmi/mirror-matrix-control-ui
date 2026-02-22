@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
     CameraPipelineOverlayHandlers,
@@ -9,6 +9,7 @@ import type {
 import { transformRoi } from '@/overlays';
 import type { OpenCvWorkerStatus } from '@/services/opencvWorkerClient';
 import type { NormalizedRoi } from '@/types';
+import { buildLetterboxTransform } from '@/utils/letterbox';
 
 interface CalibrationPreviewProps {
     previewMode: PreviewMode;
@@ -33,6 +34,7 @@ interface CalibrationPreviewProps {
     tileBoundsOverlayEnabled: boolean;
     tileBoundsOverlayAvailable: boolean;
     onToggleTileBoundsOverlay: () => void;
+    children?: React.ReactNode;
 }
 
 const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
@@ -58,6 +60,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
     tileBoundsOverlayEnabled,
     tileBoundsOverlayAvailable,
     onToggleTileBoundsOverlay,
+    children,
 }) => {
     const { width: videoWidth, height: videoHeight } = videoDimensions;
     const rotationRad = (rotationDegrees * Math.PI) / 180;
@@ -100,6 +103,29 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
 
     const showFullFrame = !roiViewEnabled || !roi.enabled;
 
+    // Track the outer container's actual dimensions via ResizeObserver so we
+    // can compute the letterbox between the CSS aspect-ratio and the real size
+    // (which can differ due to minHeight / maxHeight constraints).
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(
+        null,
+    );
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (entry) {
+                setContainerSize({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height,
+                });
+            }
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+
     const previewAspectRatio = useMemo(() => {
         if (showFullFrame) {
             // When showing full frame, we want to fit the ROTATED video
@@ -111,16 +137,18 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
         return roiAspectRatio ?? videoAspectRatio ?? 16 / 9;
     }, [roiAspectRatio, rotatedHeight, rotatedWidth, showFullFrame, videoAspectRatio]);
 
-    // For the ROI overlay (Screen Space), we need a transform that maps 0-1 (Screen) to Viewport.
-    // Since the container has `previewAspectRatio` (Rotated), and we want to draw on it.
-    // If `showFullFrame` is true, `previewAspectRatio` matches `rotatedWidth/rotatedHeight`.
-    // So Screen Space 0-1 maps directly to Container 0-1.
-    // So we don't need `letterboxTransform` for the ROI overlay if it's screen aligned!
-    // Wait, `letterboxTransform` handles "fitting" the content.
-    // If `previewAspectRatio` matches the content aspect ratio, then transform is Identity.
-    // Here `previewAspectRatio` is calculated from `rotatedWidth/rotatedHeight`.
-    // So the content (Rotated Video) fits perfectly.
-    // So Screen Space 0-1 is exactly the video area.
+    // Compute the letterbox between the content (previewAspectRatio) and the
+    // container's actual AR.  When minHeight/maxHeight constraints override the
+    // CSS aspect-ratio, the container's real AR differs and the video is
+    // letterboxed by object-contain.  We need to offset the ROI rectangle to
+    // match the video content area.
+    const containerLetterbox = useMemo(() => {
+        if (!containerSize || containerSize.width <= 0 || containerSize.height <= 0) {
+            return { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 };
+        }
+        const containerAR = containerSize.width / containerSize.height;
+        return buildLetterboxTransform(previewAspectRatio, containerAR);
+    }, [containerSize, previewAspectRatio]);
 
     const processedVisible =
         showFullFrame && previewMode === 'processed' && opencvStatus === 'ready';
@@ -289,6 +317,7 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                 </div>
             </div>
             <div
+                ref={containerRef}
                 className="relative w-full overflow-hidden rounded-lg border border-gray-700 bg-black shadow-inner"
                 style={{ aspectRatio: previewAspectRatio, minHeight: '260px', maxHeight: '80vh' }}
             >
@@ -346,19 +375,22 @@ const CalibrationPreview: React.FC<CalibrationPreviewProps> = ({
                             showFullFrame ? 'opacity-0' : 'opacity-100'
                         }`}
                     />
+                    {children}
                     {showFullFrame &&
                         roi.enabled &&
                         (() => {
                             // Transform Source ROI to Screen ROI
                             const screenRoi = transformRoi(roi, rotationDegrees, 'toScreen');
 
-                            // Since we are outside the rotated wrapper, and the container fits the rotated video,
-                            // Screen Space (0-1) maps directly to the container.
+                            // Map Screen Space (0-1) through the container letterbox so the
+                            // green ROI rectangle aligns with the video content even when
+                            // minHeight/maxHeight constraints cause letterboxing.
+                            const lb = containerLetterbox;
                             const roiViewport = {
-                                x: screenRoi.x,
-                                y: screenRoi.y,
-                                width: screenRoi.width,
-                                height: screenRoi.height,
+                                x: lb.offsetX + screenRoi.x * lb.scaleX,
+                                y: lb.offsetY + screenRoi.y * lb.scaleY,
+                                width: screenRoi.width * lb.scaleX,
+                                height: screenRoi.height * lb.scaleY,
                             };
                             return (
                                 <div
