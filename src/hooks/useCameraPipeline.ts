@@ -15,6 +15,7 @@ import {
 import {
     buildAllOverlays,
     createPointRotator,
+    getRotatedDimensions,
     renderOverlays,
     type OverlayProjection,
 } from '@/overlays';
@@ -343,6 +344,23 @@ export const useCameraPipeline = ({
         roiRef.current = roi;
     }, [roi]);
 
+    // Compute the content aspect ratio for letterbox-aware pointer mapping.
+    // When showing full frame this is the rotated video AR; when ROI view is
+    // active it is the ROI's own AR (source-space ROI dimensions * video dims).
+    const contentAspectRatio = useMemo(() => {
+        const { width: vw, height: vh } = videoDimensions;
+        if (vw <= 0 || vh <= 0) return 16 / 9; // fallback before video loads
+
+        if (roiViewEnabled && roi.enabled) {
+            const roiW = Math.max(1, roi.width * vw);
+            const roiH = Math.max(1, roi.height * vh);
+            return roiW / roiH;
+        }
+
+        const rotated = getRotatedDimensions(vw, vh, rotationDegrees);
+        return rotated.width / rotated.height;
+    }, [videoDimensions, roiViewEnabled, roi.enabled, roi.width, roi.height, rotationDegrees]);
+
     const { roiEditingMode, overlayHandlers, overlayRef } = useRoiOverlayInteractions({
         roi,
         setRoi,
@@ -350,6 +368,7 @@ export const useCameraPipeline = ({
         setRoiViewEnabled: toggleRoiView,
         roiRef,
         rotationDegrees,
+        contentAspectRatio,
     });
     const stopCurrentStream = useCallback(() => {
         if (streamRef.current) {

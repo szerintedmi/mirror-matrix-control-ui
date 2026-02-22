@@ -100,12 +100,11 @@ Reuses `CalibrationPreview` with the same camera pipeline (`useCameraPipeline`).
   - **"Move to Staging"** button — computes and sends MOVE commands to place all eligible tiles at deterministic, non-overlapping staging targets.
   - **"Start Convergence"** button — begins staged convergence. If staging has not run yet in this session, it auto-runs "Move to Staging" first.
   - **"Stop"** button — requests halt; the controller stops after the current in-flight motor command completes. UI label remains "Stop".
-  - **Step size** — initial nudge size in motor steps (default: 2 steps).
-  - **Max iterations per axis** — iteration limit per tile per axis (default: 20).
-  - **Area threshold** — minimum area-delta percentage (against the pre-insert baseline) to consider a nudge as having an effect (default: 1%).
-  - **Improvement strategy** (advanced, experiment-friendly):
-    - `any` (default): area OR eccentricity improvement qualifies
-    - `weighted`: weighted score with tunable area/eccentricity weights
+  - **Max step size** — upper bound for nudge size in motor steps (default: 100 steps). The actual step size is computed proportionally from area (see Area-Proportional Step Sizing).
+  - **Min step size** — lower bound for nudge size (default: 10 steps).
+  - **Max iterations per axis** — iteration limit per tile per axis (default: 50).
+  - **Area convergence threshold** — when area is within this percentage of the pre-insert baseline, the tile is considered converged (default: 5%).
+  - **Area improvement threshold** — minimum area-delta percentage to consider a nudge as having an effect (default: 1%).
 - **Run control safety:**
   - Detection and ROI settings are locked while convergence is running.
   - On paused/error states, user can choose retry/skip/abort where applicable.
@@ -361,18 +360,26 @@ for each candidateTile in remainingTiles(rowMajor):
 
 #### `convergeAxis(tile, axis, preInsertBaseline)` algorithm
 
+Uses area-proportional step sizing: the step size is continuously derived from the area gap between the current cluster and the pre-insert baseline. When the tile is far from aligned (large area increase), steps are large. As the tile converges (area approaches baseline), steps shrink automatically. This replaces the previous failure-driven step reduction approach.
+
 ```
-stepSize = initialStepSize  (e.g. 2 steps)
 direction = +1
 iteration = 0
-bestMetrics = measureShape() // after candidate inserted
-bestDelta = delta(bestMetrics, preInsertBaseline)
+insertionMetrics = measureShape()  // right after candidate inserted
+bestMetrics = insertionMetrics
+
+// Area-proportional step sizing: compute initial step from area gap
+insertionArea = insertionMetrics.area
+baselineArea = preInsertBaseline.area
+areaGap = computeAreaGap(insertionArea, baselineArea, insertionArea)  // = 1.0
+
+currentStep = computeProportionalStep(areaGap, maxStepSize, minStepSize)
 
 while iteration < maxIterations:
     iteration++
 
     currentPosition = tile.currentSteps[axis]
-    trialPosition = currentPosition + (direction * stepSize)
+    trialPosition = currentPosition + (direction * currentStep)
 
     if trialPosition is outside calibrated axis range:
         mark axis as error('steps_out_of_range')
@@ -383,15 +390,17 @@ while iteration < maxIterations:
     settlingDelay(200ms)
 
     trialMetrics = measureShape()
-    trialDelta = delta(trialMetrics, preInsertBaseline)
 
-    if improved(trialDelta, bestDelta):
+    if improved(trialMetrics, bestMetrics, preInsertBaseline, insertionArea):
         bestMetrics = trialMetrics
-        bestDelta = trialDelta
         tile.currentSteps[axis] = trialPosition
-        tile.correction[axis] += direction * stepSize
+        tile.correction[axis] += direction * currentStep
 
-        if converged(trialDelta):
+        // Recompute step size from updated area gap
+        areaGap = computeAreaGap(trialMetrics.area, baselineArea, insertionArea)
+        currentStep = computeProportionalStep(areaGap, maxStepSize, minStepSize)
+
+        if converged(trialMetrics, preInsertBaseline):
             break
     else:
         moveMotor(tile.motor[axis], currentPosition) // undo trial
@@ -399,41 +408,64 @@ while iteration < maxIterations:
         settlingDelay(200ms)
 
         if iteration == 1:
-            direction = -direction
+            direction = -direction  // try the other direction first time
         else:
-            break
+            break  // exhausted: neither direction improves
 ```
 
-#### `delta(current, baseline)` definition
+#### `computeAreaGap(currentArea, baselineArea, insertionArea)` definition
 
-- `areaDeltaPct = abs(current.area - baseline.area) / max(1, baseline.area)`
-- `eccDelta = abs(current.eccentricity - baseline.eccentricity)`
+```
+// Returns 0.0 when current matches baseline (perfect), 1.0 at insertion (worst)
+// Clamped to [0, 1] to handle measurement noise
+range = max(1, insertionArea - baselineArea)
+gap = (currentArea - baselineArea) / range
+return clamp(gap, 0, 1)
+```
 
-Lower deltas are better; perfect overlap of candidate into existing cluster trends toward minimal deltas.
+#### `computeProportionalStep(areaGap, maxStepSize, minStepSize)` definition
 
-#### `improved(trialDelta, bestDelta)` criteria (strategy-driven)
+```
+// Linear proportional scaling: big gap → big steps, small gap → small steps
+return max(minStepSize, round(maxStepSize * areaGap))
+```
 
-Default strategy (`any`):
+#### `improved(trialMetrics, bestMetrics, preInsertBaseline, insertionArea)` criteria
 
-- `trial.areaDeltaPct < best.areaDeltaPct * (1 - areaThreshold)` OR
-- `trial.eccDelta < best.eccDelta * 0.98`
+Area is the primary improvement signal. The strictness adapts based on how close we are to convergence:
 
-Alternative strategy (`weighted`, advanced):
+```
+trialAreaGap = computeAreaGap(trial.area, baseline.area, insertionArea)
+bestAreaGap = computeAreaGap(best.area, baseline.area, insertionArea)
 
-- `score = areaWeight * areaDeltaPct + eccentricityWeight * eccDelta`
-- Improvement if `trialScore < bestScore * (1 - scoreThreshold)`
+areaImproved = trial.area < best.area * (1 - areaImprovementThreshold)
 
-#### `converged(delta)` criteria
+if trialAreaGap < 0.1:
+    // Near convergence: area must improve AND eccentricity must not regress significantly
+    eccNotRegressed = trial.eccentricity <= best.eccentricity * 1.02
+    return areaImproved AND eccNotRegressed
+else:
+    // Far from convergence: area improvement is sufficient
+    return areaImproved
+```
 
-Convergence is reached when **all** of the following hold:
+Key change from V1: eccentricity alone can never qualify a move as improved. Area is always required. Near convergence, moves that improve area but significantly worsen eccentricity are also rejected.
 
-- `areaDeltaPct <= areaThreshold`
-- `eccDelta <= eccentricityThreshold` (default target equivalent to near-circular behavior, e.g. `~0.05`)
-- Area is stable (last 3 readings within 2% of each other)
+#### `converged(trialMetrics, preInsertBaseline)` criteria
+
+Convergence is reached when the tile's contribution to the cluster is negligible:
+
+```
+areaFromBaseline = abs(trial.area - baseline.area) / max(1, baseline.area)
+return areaFromBaseline <= areaConvergenceThreshold  // default: 5%
+```
+
+This replaces the previous eccentricity-only check. Area-from-baseline directly measures how much this tile disturbed the cluster — when the area barely changed after insertion, the tile's reflection is well-overlapped.
 
 Notes:
 
 - V1 still prioritizes deterministic axis-wise nudging and does **not** require centroid target locking.
+- Eccentricity remains useful as a secondary display metric but is no longer the convergence gate.
 
 #### `measureShape()` — stable measurement
 

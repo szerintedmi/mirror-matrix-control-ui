@@ -6,11 +6,13 @@ import type {
     TileAlignmentState,
     TileAlignmentStatus,
 } from '@/hooks/useAlignmentController';
+import type { ConvergenceStatus } from '@/services/alignment';
 
 interface AlignmentProgressPanelProps {
     state: AlignmentState;
     runSummary: AlignmentRunSummaryOutput | null;
     onExport: (summary: AlignmentRunSummaryOutput) => void;
+    convergenceStatus: ConvergenceStatus | null;
 }
 
 const STATUS_LABEL: Record<TileAlignmentStatus, string> = {
@@ -33,10 +35,18 @@ const STATUS_COLOR: Record<TileAlignmentStatus, string> = {
     error: 'text-red-400',
 };
 
+const STEP_OUTCOME_COLOR: Record<string, string> = {
+    accepted: 'text-emerald-400',
+    rejected: 'text-amber-400',
+    converged: 'text-emerald-300',
+    'bounds-exceeded': 'text-red-400',
+};
+
 const AlignmentProgressPanel: React.FC<AlignmentProgressPanelProps> = ({
     state,
     runSummary,
     onExport,
+    convergenceStatus,
 }) => {
     const tiles = Object.values(state.tileStates);
     const hasTiles = tiles.length > 0;
@@ -108,6 +118,153 @@ const AlignmentProgressPanel: React.FC<AlignmentProgressPanelProps> = ({
                     >
                         Export JSON
                     </button>
+                </section>
+            )}
+
+            {/* Active Tile Convergence */}
+            {convergenceStatus && (
+                <section className="rounded-lg border border-blue-500/30 bg-gray-800/50 p-3">
+                    <h3 className="mb-2 text-xs font-semibold tracking-wider text-blue-400 uppercase">
+                        Active Tile Convergence
+                    </h3>
+                    <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Tile</span>
+                            <span className="font-mono text-gray-300">
+                                {convergenceStatus.tile}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Axis</span>
+                            <span className="font-mono text-gray-300">
+                                {convergenceStatus.axis.toUpperCase()}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Iteration</span>
+                            <span className="font-mono text-gray-300">
+                                {convergenceStatus.iteration} / {convergenceStatus.maxIterations}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Reference Area</span>
+                            <span className="font-mono text-gray-300">
+                                {convergenceStatus.referenceArea.toFixed(0)}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Current Area</span>
+                            <span className="font-mono text-gray-300">
+                                {convergenceStatus.currentArea.toFixed(0)}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Area Difference</span>
+                            <span
+                                className={`font-mono ${
+                                    convergenceStatus.areaDifference > 0
+                                        ? 'text-amber-400'
+                                        : 'text-emerald-400'
+                                }`}
+                            >
+                                {convergenceStatus.areaDifference > 0 ? '+' : ''}
+                                {convergenceStatus.areaDifference.toFixed(0)}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Area Gap</span>
+                            <span
+                                className={`font-mono ${
+                                    convergenceStatus.areaGap > 0.1
+                                        ? 'text-amber-400'
+                                        : convergenceStatus.areaGap >
+                                            convergenceStatus.convergenceThreshold
+                                          ? 'text-yellow-400'
+                                          : 'text-emerald-400'
+                                }`}
+                            >
+                                {(convergenceStatus.areaGap * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Step Size</span>
+                            <span className="font-mono text-gray-300">
+                                {convergenceStatus.activeStepSize}
+                            </span>
+                        </div>
+                        {convergenceStatus.direction !== undefined && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Direction</span>
+                                <span className="font-mono text-gray-300">
+                                    {convergenceStatus.direction > 0 ? '+' : '\u2212'}
+                                </span>
+                            </div>
+                        )}
+                        {convergenceStatus.trialPosition !== undefined && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Trial Position</span>
+                                <span className="font-mono text-gray-300">
+                                    {convergenceStatus.trialPosition}
+                                </span>
+                            </div>
+                        )}
+                        {convergenceStatus.trialArea !== undefined && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Trial Area</span>
+                                <span
+                                    className={`font-mono ${
+                                        convergenceStatus.trialArea < convergenceStatus.currentArea
+                                            ? 'text-emerald-400'
+                                            : 'text-amber-400'
+                                    }`}
+                                >
+                                    {convergenceStatus.trialArea.toFixed(0)}
+                                </span>
+                            </div>
+                        )}
+                        {convergenceStatus.stepOutcome && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Step Outcome</span>
+                                <span
+                                    className={`font-mono font-medium ${STEP_OUTCOME_COLOR[convergenceStatus.stepOutcome]}`}
+                                >
+                                    {convergenceStatus.stepOutcome}
+                                </span>
+                            </div>
+                        )}
+                        {convergenceStatus.consecutiveRejections !== undefined &&
+                            convergenceStatus.consecutiveRejections > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Consecutive Rejections</span>
+                                    <span className="font-mono text-amber-400">
+                                        {convergenceStatus.consecutiveRejections}
+                                    </span>
+                                </div>
+                            )}
+                        {/* Convergence progress bar */}
+                        <div className="pt-1">
+                            <div className="h-1.5 w-full rounded-full bg-gray-700">
+                                <div
+                                    className={`h-1.5 rounded-full transition-all ${
+                                        convergenceStatus.areaGap <=
+                                        convergenceStatus.convergenceThreshold
+                                            ? 'bg-emerald-500'
+                                            : 'bg-blue-500'
+                                    }`}
+                                    style={{
+                                        width: `${Math.max(0, Math.min(100, (1 - convergenceStatus.areaGap) * 100))}%`,
+                                    }}
+                                />
+                            </div>
+                            <div className="mt-0.5 flex justify-between text-[10px] text-gray-500">
+                                <span>0%</span>
+                                <span>
+                                    {((1 - convergenceStatus.areaGap) * 100).toFixed(0)}% converged
+                                </span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                    </div>
                 </section>
             )}
 

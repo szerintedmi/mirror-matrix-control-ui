@@ -12,8 +12,32 @@ import {
 import { clamp01 } from '@/constants/calibration';
 import { transformRoi } from '@/overlays';
 import type { NormalizedRoi } from '@/types';
+import { buildLetterboxTransform } from '@/utils/letterbox';
 
 export type RoiEditingMode = 'idle' | 'drag' | 'resize' | 'draw';
+
+/**
+ * Map a pointer position (normalized 0-1 within a container) to content-space
+ * coordinates, accounting for letterbox bars when the container's actual AR
+ * differs from the content's AR.
+ *
+ * Exported for testing.
+ */
+export const mapPointerToContent = (
+    /** Pointer position normalized to the container (0-1) */
+    rawX: number,
+    rawY: number,
+    /** Aspect ratio of the content displayed inside the container */
+    contentAspectRatio: number,
+    /** Aspect ratio of the container element */
+    containerAspectRatio: number,
+): { x: number; y: number; inContent: boolean } => {
+    const lb = buildLetterboxTransform(contentAspectRatio, containerAspectRatio);
+    const contentX = (rawX - lb.offsetX) / lb.scaleX;
+    const contentY = (rawY - lb.offsetY) / lb.scaleY;
+    const inContent = contentX >= 0 && contentX <= 1 && contentY >= 0 && contentY <= 1;
+    return { x: clamp01(contentX), y: clamp01(contentY), inContent };
+};
 
 export interface CameraPipelineOverlayHandlers {
     onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -29,6 +53,9 @@ export interface UseRoiOverlayInteractionsParams {
     setRoiViewEnabled: Dispatch<SetStateAction<boolean>>;
     roiRef: MutableRefObject<NormalizedRoi>;
     rotationDegrees: number;
+    /** Aspect ratio of the content displayed inside the container (after rotation).
+     *  Used to compute letterbox offsets when the container's actual AR differs. */
+    contentAspectRatio: number;
 }
 
 export const useRoiOverlayInteractions = ({
@@ -38,6 +65,7 @@ export const useRoiOverlayInteractions = ({
     setRoiViewEnabled,
     roiRef,
     rotationDegrees,
+    contentAspectRatio,
 }: UseRoiOverlayInteractionsParams): {
     roiEditingMode: RoiEditingMode;
     overlayHandlers: CameraPipelineOverlayHandlers;
@@ -74,14 +102,17 @@ export const useRoiOverlayInteractions = ({
     }, [roi.enabled, roiViewEnabled, setRoiViewEnabled]);
 
     const mapPointerToScreen = useCallback(
-        (event: ReactPointerEvent<HTMLDivElement>, container: HTMLDivElement) => {
+        (
+            event: ReactPointerEvent<HTMLDivElement>,
+            container: HTMLDivElement,
+        ): { x: number; y: number; inContent: boolean } => {
             const rect = container.getBoundingClientRect();
-            const relativeX = clamp01((event.clientX - rect.left) / rect.width);
-            const relativeY = clamp01((event.clientY - rect.top) / rect.height);
-            // We assume the container is perfectly aligned with the visual video (Screen Space)
-            return { x: relativeX, y: relativeY };
+            const rawX = (event.clientX - rect.left) / rect.width;
+            const rawY = (event.clientY - rect.top) / rect.height;
+            const containerAR = rect.width / rect.height;
+            return mapPointerToContent(rawX, rawY, contentAspectRatio, containerAR);
         },
-        [],
+        [contentAspectRatio],
     );
 
     const handleOverlayPointerDown = useCallback(
@@ -96,7 +127,11 @@ export const useRoiOverlayInteractions = ({
             if (!container) {
                 return;
             }
-            const { x: screenX, y: screenY } = mapPointerToScreen(event, container);
+            const mapped = mapPointerToScreen(event, container);
+            if (!mapped.inContent) {
+                return; // pointer is in the letterbox bar — ignore to avoid accidental edge snaps
+            }
+            const { x: screenX, y: screenY } = mapped;
             const target = event.target as HTMLElement;
             const handle = target.dataset.roiHandle as
                 | 'n'
@@ -138,6 +173,9 @@ export const useRoiOverlayInteractions = ({
             if (!state || !container || state.pointerId !== event.pointerId) {
                 return;
             }
+            // During an active drag/draw/resize, use clamped coords rather than
+            // ignoring — the pointer may drift into the letterbox area and we
+            // want the interaction to continue smoothly (clamped to content edge).
             const { x: screenX, y: screenY } = mapPointerToScreen(event, container);
 
             let newScreenRoi = { ...state.initialScreenRoi };

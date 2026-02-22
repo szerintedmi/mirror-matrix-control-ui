@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-    computeAxisTarget,
-    isTileCalibrated,
-    resolveAxisRange,
-} from '@/services/alignmentAxisTarget';
+import { AlignmentExecutor, AlignmentExecutorAbortError } from '@/services/alignment';
+import type {
+    AlignmentMode,
+    AlignmentGranularity,
+    AlignmentStepState,
+    ConvergenceStatus,
+    AlignmentPendingDecision,
+    AlignmentDecisionOption,
+    AlignmentTileInfo,
+} from '@/services/alignment';
+import { computeAxisTarget, isTileCalibrated } from '@/services/alignmentAxisTarget';
 import { computePoseTargets } from '@/services/calibration/math/stagingCalculations';
 import type { ShapeAnalysisResult, ShapeMetrics } from '@/services/opencvWorkerClient';
 import { getOpenCvWorkerClient } from '@/services/openCvWorkerSingleton';
@@ -72,15 +78,12 @@ export interface TileAlignmentState {
     error: string | null;
 }
 
-export type ImprovementStrategy = 'any' | 'weighted';
-
 export interface AlignmentSettings {
     stepSize: number;
-    stepReductionPercent: number;
     minStepSize: number;
     maxIterations: number;
     areaThreshold: number;
-    improvementStrategy: ImprovementStrategy;
+    areaConvergenceThreshold: number;
     samplesPerMeasurement: number;
     settlingDelayMs: number;
     adaptiveThreshold: {
@@ -132,11 +135,10 @@ export interface AlignmentRunSummaryOutput {
 
 const DEFAULT_SETTINGS: AlignmentSettings = {
     stepSize: 100,
-    stepReductionPercent: 30,
     minStepSize: 10,
     maxIterations: 50,
     areaThreshold: 0.01,
-    improvementStrategy: 'any',
+    areaConvergenceThreshold: 0.005,
     samplesPerMeasurement: 3,
     settlingDelayMs: 200,
     adaptiveThreshold: {
@@ -164,8 +166,6 @@ const INITIAL_STATE: AlignmentState = {
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-const AXES: Axis[] = ['x', 'y'];
-
 interface UseAlignmentControllerParams {
     gridSize: { rows: number; cols: number };
     mirrorConfig: MirrorConfig;
@@ -187,6 +187,19 @@ export interface AlignmentControllerApi {
     startConvergence: () => Promise<void>;
     stop: () => void;
     runSummary: AlignmentRunSummaryOutput | null;
+    // Step-by-step debugging
+    mode: AlignmentMode;
+    setMode: (mode: AlignmentMode) => void;
+    granularity: AlignmentGranularity;
+    setGranularity: (granularity: AlignmentGranularity) => void;
+    stepState: AlignmentStepState | null;
+    convergenceStatus: ConvergenceStatus | null;
+    pendingDecision: AlignmentPendingDecision | null;
+    isAwaitingAdvance: boolean;
+    advance: () => void;
+    runToEnd: () => void;
+    retryTile: () => void;
+    submitDecision: (decision: AlignmentDecisionOption) => void;
 }
 
 export const useAlignmentController = ({
@@ -205,13 +218,25 @@ export const useAlignmentController = ({
     const [settings, setSettingsState] = useState<AlignmentSettings>(DEFAULT_SETTINGS);
     const [runSummary, setRunSummary] = useState<AlignmentRunSummaryOutput | null>(null);
 
+    // Step-by-step debugging state
+    const [mode, setMode] = useState<AlignmentMode>('auto');
+    const [granularity, setGranularity] = useState<AlignmentGranularity>('per-axis');
+    const [stepState, setStepState] = useState<AlignmentStepState | null>(null);
+    const [convergenceStatus, setConvergenceStatus] = useState<ConvergenceStatus | null>(null);
+    const [pendingDecision, setPendingDecision] = useState<AlignmentPendingDecision | null>(null);
+
     const stopRequestedRef = useRef(false);
     const runningRef = useRef(false);
     const startedAtRef = useRef<string>('');
+    const executorRef = useRef<AlignmentExecutor | null>(null);
 
     // Refs for values needed during async operations
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
+    const granularityRef = useRef(granularity);
+    granularityRef.current = granularity;
     const roiRef = useRef(roi);
     roiRef.current = roi;
     const brightnessRef = useRef(brightness);
@@ -239,7 +264,6 @@ export const useAlignmentController = ({
         if (typeof window === 'undefined' || typeof window.createImageBitmap !== 'function') {
             return null;
         }
-        // Find the video element from the camera pipeline
         const video = document.querySelector('video') as HTMLVideoElement | null;
         if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
             return null;
@@ -351,7 +375,6 @@ export const useAlignmentController = ({
                 const assignment = getMirrorAssignment(mirrorConfig, row, col);
                 if (!assignment.x || !assignment.y) continue;
 
-                // Compute target steps for (0,0)
                 const xResult = computeAxisTarget({
                     axis: 'x',
                     tile,
@@ -427,6 +450,7 @@ export const useAlignmentController = ({
         error: null,
     });
 
+    // Keep moveToCenter as-is (used independently)
     const moveToCenter = useCallback(async () => {
         if (!profile || runningRef.current) return;
         runningRef.current = true;
@@ -452,14 +476,12 @@ export const useAlignmentController = ({
                 return;
             }
 
-            // Initialize tile states
             const tileStates: Record<string, TileAlignmentState> = {};
             for (const t of tiles) {
                 tileStates[t.key] = makeTileAlignmentState(t);
             }
             setState((prev) => ({ ...prev, tileStates }));
 
-            // Stage all tiles to aside positions
             const stagingConfig = {
                 gridSize,
                 arrayRotation: profile.arrayRotation,
@@ -509,7 +531,6 @@ export const useAlignmentController = ({
                 return;
             }
 
-            // Move first tile to calibrated home (reference point)
             const firstTile = tiles[0];
             const refPromises: Promise<unknown>[] = [];
             if (firstTile.assignment.x) {
@@ -551,14 +572,18 @@ export const useAlignmentController = ({
         }
     }, [profile, buildTileList, motorApi, gridSize]);
 
+    // --- Executor-based convergence ---
+
     const startConvergence = useCallback(async () => {
         if (!profile || runningRef.current) return;
         runningRef.current = true;
         stopRequestedRef.current = false;
         startedAtRef.current = new Date().toISOString();
         setRunSummary(null);
+        setStepState(null);
+        setConvergenceStatus(null);
+        setPendingDecision(null);
 
-        // Build tile list upfront — used by both staging and convergence
         const tiles = buildTileList();
         if (tiles.length === 0) {
             setState((prev) => ({
@@ -576,595 +601,317 @@ export const useAlignmentController = ({
         for (const t of tiles) {
             tileStates[t.key] = makeTileAlignmentState(t);
         }
-        setState((prev) => ({ ...prev, tileStates, settingsLocked: true }));
-
-        // Auto-run staging if not done yet
         const needsPositioning = !state.positioningComplete;
-        if (needsPositioning) {
-            setState((prev) => ({
-                ...prev,
-                phase: 'staging',
-                error: null,
-            }));
+        // Set a running phase immediately so the UI shows step controls.
+        // Without this, when needsPositioning is false the script's first command
+        // is a CHECKPOINT which pauses before any updatePhase, leaving the phase
+        // stuck at 'idle' while runningRef is true — blocking all buttons.
+        const initialPhase: AlignmentPhase = needsPositioning ? 'staging' : 'converging';
+        setState((prev) => ({
+            ...prev,
+            tileStates,
+            settingsLocked: true,
+            error: null,
+            phase: initialPhase,
+        }));
+        const currentSettings = settingsRef.current;
 
-            // Move all tiles to staging (aside) positions
-            const stagingConfig = {
-                gridSize,
-                arrayRotation: profile.arrayRotation,
-                stagingPosition: 'nearest-corner' as const,
-            };
-            const stagingPromises: Promise<unknown>[] = [];
-            for (const t of tiles) {
-                if (stopRequestedRef.current) break;
-                const aside = computePoseTargets(
-                    { row: t.row, col: t.col },
-                    'aside',
-                    stagingConfig,
-                );
-                if (t.assignment.x) {
-                    stagingPromises.push(
-                        motorApi
-                            .moveMotor({
-                                mac: t.assignment.x.nodeMac,
-                                motorId: t.assignment.x.motorIndex,
-                                positionSteps: aside.x,
-                            })
-                            .catch((e) => console.warn(`Staging failed for ${t.key} X:`, e)),
-                    );
-                }
-                if (t.assignment.y) {
-                    stagingPromises.push(
-                        motorApi
-                            .moveMotor({
-                                mac: t.assignment.y.nodeMac,
-                                motorId: t.assignment.y.motorIndex,
-                                positionSteps: aside.y,
-                            })
-                            .catch((e) => console.warn(`Staging failed for ${t.key} Y:`, e)),
-                    );
-                }
-            }
-            await Promise.all(stagingPromises);
-            await delay(500);
+        // Build tile info with calibration data for the script
+        const tileInfos: AlignmentTileInfo[] = tiles.map((t) => ({
+            key: t.key,
+            row: t.row,
+            col: t.col,
+            assignment: t.assignment,
+            initialStepsX: t.initialStepsX,
+            initialStepsY: t.initialStepsY,
+            tileCalibration: profile.tiles[t.key],
+        }));
 
-            if (stopRequestedRef.current) {
+        // Build adapters
+        const stagingConfig = {
+            gridSize,
+            arrayRotation: profile.arrayRotation,
+            stagingPosition: 'nearest-corner' as const,
+        };
+
+        const adapters = {
+            motor: {
+                moveMotor: async (mac: string, motorId: number, positionSteps: number) => {
+                    await motorApi.moveMotor({ mac, motorId, positionSteps });
+                },
+                moveTilePose: async (
+                    _tileKey: string,
+                    row: number,
+                    col: number,
+                    pose: 'home' | 'aside',
+                ) => {
+                    const assignment = getMirrorAssignment(mirrorConfig, row, col);
+                    const targets = computePoseTargets({ row, col }, pose, stagingConfig);
+                    const moves: Promise<unknown>[] = [];
+                    if (assignment.x) {
+                        moves.push(
+                            motorApi
+                                .moveMotor({
+                                    mac: assignment.x.nodeMac,
+                                    motorId: assignment.x.motorIndex,
+                                    positionSteps: targets.x,
+                                })
+                                .catch((e) =>
+                                    console.warn(`Tile pose move failed for ${row}-${col}:`, e),
+                                ),
+                        );
+                    }
+                    if (assignment.y) {
+                        moves.push(
+                            motorApi
+                                .moveMotor({
+                                    mac: assignment.y.nodeMac,
+                                    motorId: assignment.y.motorIndex,
+                                    positionSteps: targets.y,
+                                })
+                                .catch((e) =>
+                                    console.warn(`Tile pose move failed for ${row}-${col}:`, e),
+                                ),
+                        );
+                    }
+                    await Promise.all(moves);
+                },
+            },
+            shape: {
+                measureShape: () => measureShape(),
+            },
+            clock: {
+                delay: (ms: number) => delay(ms),
+            },
+        };
+
+        // Build executor
+        const executor = new AlignmentExecutor(
+            adapters,
+            {
+                onPhaseChange: (phase) => {
+                    if (phase === 'complete') {
+                        // Build run summary when complete
+                        const completedAt = new Date().toISOString();
+                        setState((prev) => {
+                            const tileCorrections = Object.values(prev.tileStates).map((ts) => ({
+                                key: ts.key,
+                                row: ts.row,
+                                col: ts.col,
+                                status: ts.status,
+                                correctionX: ts.correction.x,
+                                correctionY: ts.correction.y,
+                                axisStatusX: ts.axes.x.status,
+                                axisStatusY: ts.axes.y.status,
+                                finalEccentricity: ts.finalEccentricity,
+                            }));
+
+                            const tilesConverged = tileCorrections.filter(
+                                (t) => t.status === 'converged',
+                            ).length;
+                            const tilesPartial = tileCorrections.filter(
+                                (t) => t.status === 'partial' || t.status === 'max-iterations',
+                            ).length;
+                            const tilesSkipped = tileCorrections.filter(
+                                (t) => t.status === 'skipped',
+                            ).length;
+                            const tilesErrored = tileCorrections.filter(
+                                (t) => t.status === 'error',
+                            ).length;
+
+                            // Compute area reduction from final metrics (last currentMetrics)
+                            const areaReductionPercent =
+                                prev.baselineMetrics && prev.currentMetrics
+                                    ? ((prev.baselineMetrics.area - prev.currentMetrics.area) /
+                                          prev.baselineMetrics.area) *
+                                      100
+                                    : null;
+
+                            const summary: AlignmentRunSummaryOutput = {
+                                startedAt: startedAtRef.current,
+                                completedAt,
+                                baselineMetrics: prev.baselineMetrics,
+                                finalMetrics: prev.currentMetrics,
+                                tileCorrections,
+                                settings: settingsRef.current,
+                                tilesConverged,
+                                tilesPartial,
+                                tilesSkipped,
+                                tilesErrored,
+                                areaReductionPercent,
+                            };
+
+                            setRunSummary(summary);
+
+                            return {
+                                ...prev,
+                                phase: 'complete',
+                                activeTile: null,
+                                activeAxis: null,
+                                settingsLocked: false,
+                            };
+                        });
+                        runningRef.current = false;
+                    } else if (phase === 'idle') {
+                        setState((prev) => ({
+                            ...prev,
+                            phase: 'idle',
+                            settingsLocked: false,
+                        }));
+                        runningRef.current = false;
+                    } else {
+                        setState((prev) => ({ ...prev, phase }));
+                    }
+                },
+                onTileUpdate: (tileKey, patch) => {
+                    setState((prev) => {
+                        const ts = prev.tileStates[tileKey];
+                        if (!ts) return prev;
+
+                        const updated = { ...ts };
+                        if (patch.status !== undefined) updated.status = patch.status;
+                        if (patch.error !== undefined) updated.error = patch.error;
+                        if (patch.finalEccentricity !== undefined)
+                            updated.finalEccentricity = patch.finalEccentricity;
+
+                        if (patch.currentSteps) {
+                            updated.currentSteps = {
+                                ...updated.currentSteps,
+                                ...patch.currentSteps,
+                            };
+                        }
+                        if (patch.correction) {
+                            updated.correction = {
+                                ...updated.correction,
+                                ...patch.correction,
+                            };
+                        }
+                        if (patch.iterations) {
+                            updated.iterations = {
+                                ...updated.iterations,
+                                ...patch.iterations,
+                            };
+                        }
+                        if (patch.axisStatus) {
+                            const { axis, status, error } = patch.axisStatus;
+                            updated.axes = {
+                                ...updated.axes,
+                                [axis]: {
+                                    ...updated.axes[axis],
+                                    status,
+                                    ...(error !== undefined ? { error } : {}),
+                                },
+                            };
+                        }
+                        if (patch.axisCorrection) {
+                            const { axis, correctionSteps, iterations } = patch.axisCorrection;
+                            updated.axes = {
+                                ...updated.axes,
+                                [axis]: {
+                                    ...updated.axes[axis],
+                                    correctionSteps,
+                                    iterations,
+                                },
+                            };
+                        }
+
+                        // Derive activeTile
+                        let activeTile = prev.activeTile;
+                        if (patch.status === 'in-progress') {
+                            activeTile = tileKey;
+                        }
+
+                        return {
+                            ...prev,
+                            activeTile,
+                            tileStates: {
+                                ...prev.tileStates,
+                                [tileKey]: updated,
+                            },
+                        };
+                    });
+                },
+                onStepStateChange: (s) => {
+                    setStepState(s);
+                },
+                onConvergenceStatusChange: (s) => {
+                    setConvergenceStatus(s);
+                },
+                onPendingDecisionChange: (d) => {
+                    setPendingDecision(d);
+                },
+                onBaselineMetrics: (metrics) => {
+                    setState((prev) => ({
+                        ...prev,
+                        baselineMetrics: metrics,
+                        currentMetrics: metrics,
+                    }));
+                },
+                onCurrentMetrics: (metrics) => {
+                    setState((prev) => ({ ...prev, currentMetrics: metrics }));
+                },
+                onPositioningComplete: () => {
+                    setState((prev) => ({ ...prev, positioningComplete: true }));
+                },
+            },
+            modeRef.current,
+            granularityRef.current,
+        );
+
+        executorRef.current = executor;
+
+        try {
+            await executor.run({
+                tiles: tileInfos,
+                settings: currentSettings,
+                granularity: granularityRef.current,
+                needsPositioning,
+            });
+        } catch (error) {
+            if (!(error instanceof AlignmentExecutorAbortError)) {
                 setState((prev) => ({
                     ...prev,
                     phase: 'idle',
-                    positioningComplete: true,
+                    error: error instanceof Error ? error.message : 'Convergence failed.',
                     settingsLocked: false,
                 }));
-                runningRef.current = false;
-                return;
             }
-
-            // Move first tile to calibrated home (reference point)
-            const firstTile = tiles[0];
-            const refPromises: Promise<unknown>[] = [];
-            if (firstTile.assignment.x) {
-                refPromises.push(
-                    motorApi.moveMotor({
-                        mac: firstTile.assignment.x.nodeMac,
-                        motorId: firstTile.assignment.x.motorIndex,
-                        positionSteps: firstTile.initialStepsX,
-                    }),
-                );
-            }
-            if (firstTile.assignment.y) {
-                refPromises.push(
-                    motorApi.moveMotor({
-                        mac: firstTile.assignment.y.nodeMac,
-                        motorId: firstTile.assignment.y.motorIndex,
-                        positionSteps: firstTile.initialStepsY,
-                    }),
-                );
-            }
-            await Promise.all(refPromises);
-            await delay(500);
-
-            setState((prev) => ({ ...prev, positioningComplete: true }));
-        }
-
-        // Phase 2: Baseline measurement (reference tile at home)
-        setState((prev) => ({ ...prev, phase: 'measuring-baseline' }));
-        const baselineMetrics = await measureShape();
-        if (stopRequestedRef.current || !baselineMetrics) {
-            setState((prev) => ({
-                ...prev,
-                phase: 'idle',
-                baselineMetrics,
-                error: baselineMetrics
-                    ? null
-                    : 'Failed to measure baseline shape. Check camera and ROI.',
-                settingsLocked: false,
-            }));
             runningRef.current = false;
-            return;
+        } finally {
+            executorRef.current = null;
+            setStepState(null);
         }
-
-        setState((prev) => ({
-            ...prev,
-            phase: 'converging',
-            baselineMetrics,
-            currentMetrics: baselineMetrics,
-        }));
-
-        // Mark first tile as converged (it's the reference point)
-        setState((prev) => ({
-            ...prev,
-            tileStates: {
-                ...prev.tileStates,
-                [tiles[0].key]: {
-                    ...prev.tileStates[tiles[0].key],
-                    status: 'converged',
-                    axes: {
-                        x: {
-                            ...prev.tileStates[tiles[0].key].axes.x,
-                            status: 'converged',
-                        },
-                        y: {
-                            ...prev.tileStates[tiles[0].key].axes.y,
-                            status: 'converged',
-                        },
-                    },
-                },
-            },
-        }));
-
-        // Phase 3: Per-tile convergence — bring each remaining tile from staging to home, then converge
-        const s = settingsRef.current;
-        const corrections: Record<string, { x: number; y: number }> = {};
-
-        for (let tileIdx = 1; tileIdx < tiles.length; tileIdx++) {
-            const t = tiles[tileIdx];
-            if (stopRequestedRef.current) break;
-
-            setState((prev) => ({
-                ...prev,
-                activeTile: t.key,
-                tileStates: {
-                    ...prev.tileStates,
-                    [t.key]: {
-                        ...prev.tileStates[t.key],
-                        status: 'in-progress',
-                    },
-                },
-            }));
-
-            // Move this tile from staging to its calibrated home position
-            const moveToHomePromises: Promise<unknown>[] = [];
-            if (t.assignment.x) {
-                moveToHomePromises.push(
-                    motorApi.moveMotor({
-                        mac: t.assignment.x.nodeMac,
-                        motorId: t.assignment.x.motorIndex,
-                        positionSteps: t.initialStepsX,
-                    }),
-                );
-            }
-            if (t.assignment.y) {
-                moveToHomePromises.push(
-                    motorApi.moveMotor({
-                        mac: t.assignment.y.nodeMac,
-                        motorId: t.assignment.y.motorIndex,
-                        positionSteps: t.initialStepsY,
-                    }),
-                );
-            }
-            try {
-                await Promise.all(moveToHomePromises);
-            } catch (e) {
-                console.warn(`Move to home failed for ${t.key}:`, e);
-                setState((prev) => ({
-                    ...prev,
-                    tileStates: {
-                        ...prev.tileStates,
-                        [t.key]: {
-                            ...prev.tileStates[t.key],
-                            status: 'error',
-                            error: 'Failed to move tile to home position',
-                        },
-                    },
-                }));
-                continue;
-            }
-            await delay(s.settlingDelayMs);
-
-            // Converge this tile's X and Y axes
-            let tileHasConvergedAxis = false;
-            let tileHasError = false;
-            const tileCorrection = { x: 0, y: 0 };
-
-            for (const axis of AXES) {
-                if (stopRequestedRef.current) break;
-
-                const motor = axis === 'x' ? t.assignment.x : t.assignment.y;
-                if (!motor) continue;
-
-                setState((prev) => ({
-                    ...prev,
-                    activeAxis: axis,
-                    tileStates: {
-                        ...prev.tileStates,
-                        [t.key]: {
-                            ...prev.tileStates[t.key],
-                            axes: {
-                                ...prev.tileStates[t.key].axes,
-                                [axis]: {
-                                    ...prev.tileStates[t.key].axes[axis],
-                                    status: 'in-progress',
-                                },
-                            },
-                        },
-                    },
-                }));
-
-                // Get tile calibration data for axis range check
-                const tileCalibration = profile.tiles[t.key];
-
-                let direction = 1;
-                let iteration = 0;
-                let consecutiveFailures = 0;
-                let currentStep = s.stepSize;
-                let bestMetrics = await measureShape();
-                if (!bestMetrics || stopRequestedRef.current) {
-                    tileHasError = true;
-                    setState((prev) => ({
-                        ...prev,
-                        tileStates: {
-                            ...prev.tileStates,
-                            [t.key]: {
-                                ...prev.tileStates[t.key],
-                                axes: {
-                                    ...prev.tileStates[t.key].axes,
-                                    [axis]: {
-                                        ...prev.tileStates[t.key].axes[axis],
-                                        status: 'error',
-                                        error: 'No shape detected',
-                                    },
-                                },
-                            },
-                        },
-                    }));
-                    continue;
-                }
-
-                let totalCorrection = 0;
-                let axisStatus: AxisAlignmentStatus = 'max-iterations';
-                let axisError: string | null = null;
-
-                while (iteration < s.maxIterations) {
-                    if (stopRequestedRef.current) break;
-                    iteration++;
-
-                    // Get current position from state
-                    const currentStepsForAxis =
-                        (axis === 'x' ? t.initialStepsX : t.initialStepsY) + totalCorrection;
-                    const trialPosition = currentStepsForAxis + direction * currentStep;
-
-                    // Check bounds
-                    if (tileCalibration) {
-                        const axisRange = resolveAxisRange(tileCalibration, axis);
-                        if (trialPosition < axisRange.min || trialPosition > axisRange.max) {
-                            axisStatus = 'error';
-                            axisError = 'steps_out_of_range';
-                            break;
-                        }
-                    }
-
-                    // Trial move
-                    try {
-                        await motorApi.moveMotor({
-                            mac: motor.nodeMac,
-                            motorId: motor.motorIndex,
-                            positionSteps: trialPosition,
-                        });
-                    } catch {
-                        axisStatus = 'error';
-                        axisError = 'Motor command failed';
-                        break;
-                    }
-                    await delay(s.settlingDelayMs);
-
-                    const trialMetrics = await measureShape();
-                    if (!trialMetrics) {
-                        // No contour detected — undo and stop
-                        try {
-                            await motorApi.moveMotor({
-                                mac: motor.nodeMac,
-                                motorId: motor.motorIndex,
-                                positionSteps: currentStepsForAxis,
-                            });
-                        } catch {
-                            /* ignore */
-                        }
-                        await delay(s.settlingDelayMs);
-                        axisStatus = 'error';
-                        axisError = 'No shape detected during convergence';
-                        break;
-                    }
-
-                    if (improved(trialMetrics, bestMetrics, s)) {
-                        // Accept the move
-                        bestMetrics = trialMetrics;
-                        totalCorrection += direction * currentStep;
-                        consecutiveFailures = 0;
-
-                        setState((prev) => ({
-                            ...prev,
-                            currentMetrics: trialMetrics,
-                            tileStates: {
-                                ...prev.tileStates,
-                                [t.key]: {
-                                    ...prev.tileStates[t.key],
-                                    currentSteps: {
-                                        ...prev.tileStates[t.key].currentSteps,
-                                        [axis]:
-                                            (axis === 'x' ? t.initialStepsX : t.initialStepsY) +
-                                            totalCorrection,
-                                    },
-                                    correction: {
-                                        ...prev.tileStates[t.key].correction,
-                                        [axis]: totalCorrection,
-                                    },
-                                    iterations: {
-                                        ...prev.tileStates[t.key].iterations,
-                                        [axis]: iteration,
-                                    },
-                                    axes: {
-                                        ...prev.tileStates[t.key].axes,
-                                        [axis]: {
-                                            ...prev.tileStates[t.key].axes[axis],
-                                            correctionSteps: totalCorrection,
-                                            iterations: iteration,
-                                        },
-                                    },
-                                },
-                            },
-                        }));
-
-                        // Check convergence
-                        if (trialMetrics.eccentricity < 1.05) {
-                            axisStatus = 'converged';
-                            tileHasConvergedAxis = true;
-                            break;
-                        }
-                    } else {
-                        // Undo the move
-                        try {
-                            await motorApi.moveMotor({
-                                mac: motor.nodeMac,
-                                motorId: motor.motorIndex,
-                                positionSteps: currentStepsForAxis,
-                            });
-                        } catch {
-                            /* ignore */
-                        }
-                        await delay(s.settlingDelayMs);
-
-                        // Flip direction and track consecutive failures
-                        direction = -direction;
-                        consecutiveFailures++;
-
-                        if (consecutiveFailures >= 2) {
-                            const decayed = Math.floor(
-                                currentStep * (1 - s.stepReductionPercent / 100),
-                            );
-                            const newStep = Math.max(s.minStepSize, decayed);
-                            if (newStep >= currentStep) {
-                                break; // no effective reduction — exhausted
-                            }
-                            currentStep = newStep;
-                            consecutiveFailures = 0;
-                        }
-                    }
-                }
-
-                // Final axis status update
-                setState((prev) => ({
-                    ...prev,
-                    tileStates: {
-                        ...prev.tileStates,
-                        [t.key]: {
-                            ...prev.tileStates[t.key],
-                            axes: {
-                                ...prev.tileStates[t.key].axes,
-                                [axis]: {
-                                    ...prev.tileStates[t.key].axes[axis],
-                                    status: stopRequestedRef.current ? 'pending' : axisStatus,
-                                    correctionSteps: totalCorrection,
-                                    iterations: iteration,
-                                    error: axisError,
-                                },
-                            },
-                            correction: {
-                                ...prev.tileStates[t.key].correction,
-                                [axis]: totalCorrection,
-                            },
-                            iterations: {
-                                ...prev.tileStates[t.key].iterations,
-                                [axis]: iteration,
-                            },
-                        },
-                    },
-                }));
-
-                tileCorrection[axis] = totalCorrection;
-            }
-
-            corrections[t.key] = tileCorrection;
-
-            if (stopRequestedRef.current) break;
-
-            // Compute final eccentricity for this tile
-            const finalMeasure = await measureShape();
-            const finalEcc = finalMeasure?.eccentricity ?? null;
-
-            // Determine tile aggregate status
-            let tileStatus: TileAlignmentStatus;
-            if (tileHasError) {
-                tileStatus = 'error';
-            } else if (tileHasConvergedAxis) {
-                tileStatus = 'converged';
-            } else {
-                tileStatus = 'partial';
-            }
-
-            setState((prev) => ({
-                ...prev,
-                tileStates: {
-                    ...prev.tileStates,
-                    [t.key]: {
-                        ...prev.tileStates[t.key],
-                        status: tileStatus,
-                        finalEccentricity: finalEcc,
-                    },
-                },
-            }));
-
-            // When isolating tiles, move this tile back to staging so the next converges 1-on-1
-            if (s.isolateTiles) {
-                const stagingConfig = {
-                    gridSize,
-                    arrayRotation: profile.arrayRotation,
-                    stagingPosition: 'nearest-corner' as const,
-                };
-                const aside = computePoseTargets(
-                    { row: t.row, col: t.col },
-                    'aside',
-                    stagingConfig,
-                );
-                const returnPromises: Promise<unknown>[] = [];
-                if (t.assignment.x) {
-                    returnPromises.push(
-                        motorApi
-                            .moveMotor({
-                                mac: t.assignment.x.nodeMac,
-                                motorId: t.assignment.x.motorIndex,
-                                positionSteps: aside.x,
-                            })
-                            .catch((e) =>
-                                console.warn(`Return to staging failed for ${t.key} X:`, e),
-                            ),
-                    );
-                }
-                if (t.assignment.y) {
-                    returnPromises.push(
-                        motorApi
-                            .moveMotor({
-                                mac: t.assignment.y.nodeMac,
-                                motorId: t.assignment.y.motorIndex,
-                                positionSteps: aside.y,
-                            })
-                            .catch((e) =>
-                                console.warn(`Return to staging failed for ${t.key} Y:`, e),
-                            ),
-                    );
-                }
-                await Promise.all(returnPromises);
-                await delay(s.settlingDelayMs);
-            }
-        }
-
-        // Phase 4: Deploy all tiles to their final corrected positions (only needed when isolated)
-        if (s.isolateTiles && !stopRequestedRef.current) {
-            const deployPromises: Promise<unknown>[] = [];
-            for (const t of tiles) {
-                const corr = corrections[t.key] ?? { x: 0, y: 0 };
-                const corrX = corr.x;
-                const corrY = corr.y;
-
-                if (t.assignment.x) {
-                    deployPromises.push(
-                        motorApi
-                            .moveMotor({
-                                mac: t.assignment.x.nodeMac,
-                                motorId: t.assignment.x.motorIndex,
-                                positionSteps: t.initialStepsX + corrX,
-                            })
-                            .catch((e) => console.warn(`Deploy failed for ${t.key} X:`, e)),
-                    );
-                }
-                if (t.assignment.y) {
-                    deployPromises.push(
-                        motorApi
-                            .moveMotor({
-                                mac: t.assignment.y.nodeMac,
-                                motorId: t.assignment.y.motorIndex,
-                                positionSteps: t.initialStepsY + corrY,
-                            })
-                            .catch((e) => console.warn(`Deploy failed for ${t.key} Y:`, e)),
-                    );
-                }
-            }
-            await Promise.all(deployPromises);
-            await delay(500);
-        }
-
-        // Phase 5: Final measurement
-        const finalMetrics = await measureShape();
-
-        const completedAt = new Date().toISOString();
-
-        // Build run summary
-        setState((prev) => {
-            const tileCorrections = Object.values(prev.tileStates).map((ts) => ({
-                key: ts.key,
-                row: ts.row,
-                col: ts.col,
-                status: ts.status,
-                correctionX: ts.correction.x,
-                correctionY: ts.correction.y,
-                axisStatusX: ts.axes.x.status,
-                axisStatusY: ts.axes.y.status,
-                finalEccentricity: ts.finalEccentricity,
-            }));
-
-            const tilesConverged = tileCorrections.filter((t) => t.status === 'converged').length;
-            const tilesPartial = tileCorrections.filter(
-                (t) => t.status === 'partial' || t.status === 'max-iterations',
-            ).length;
-            const tilesSkipped = tileCorrections.filter((t) => t.status === 'skipped').length;
-            const tilesErrored = tileCorrections.filter((t) => t.status === 'error').length;
-
-            const areaReductionPercent =
-                prev.baselineMetrics && finalMetrics
-                    ? ((prev.baselineMetrics.area - finalMetrics.area) /
-                          prev.baselineMetrics.area) *
-                      100
-                    : null;
-
-            const summary: AlignmentRunSummaryOutput = {
-                startedAt: startedAtRef.current,
-                completedAt,
-                baselineMetrics: prev.baselineMetrics,
-                finalMetrics,
-                tileCorrections,
-                settings: settingsRef.current,
-                tilesConverged,
-                tilesPartial,
-                tilesSkipped,
-                tilesErrored,
-                areaReductionPercent,
-            };
-
-            setRunSummary(summary);
-
-            return {
-                ...prev,
-                phase: 'complete',
-                currentMetrics: finalMetrics,
-                activeTile: null,
-                activeAxis: null,
-                settingsLocked: false,
-            };
-        });
-
-        runningRef.current = false;
-    }, [profile, state.positioningComplete, buildTileList, motorApi, measureShape, gridSize]);
+    }, [
+        profile,
+        state.positioningComplete,
+        buildTileList,
+        motorApi,
+        measureShape,
+        gridSize,
+        mirrorConfig,
+    ]);
 
     const stop = useCallback(() => {
         stopRequestedRef.current = true;
+        if (executorRef.current) {
+            executorRef.current.abort();
+        }
+    }, []);
+
+    const advance = useCallback(() => {
+        executorRef.current?.advance();
+    }, []);
+
+    const runToEnd = useCallback(() => {
+        executorRef.current?.runToEnd();
+    }, []);
+
+    const retryTile = useCallback(() => {
+        executorRef.current?.retryTile();
+    }, []);
+
+    const submitDecision = useCallback((decision: AlignmentDecisionOption) => {
+        executorRef.current?.submitDecision(decision);
     }, []);
 
     // Continuous shape preview: poll analyzeShapeOnce when not actively running
@@ -1188,6 +935,8 @@ export const useAlignmentController = ({
         };
     }, [analyzeShapeOnce, state.phase]);
 
+    const isAwaitingAdvance = stepState?.status === 'waiting';
+
     return {
         state,
         settings,
@@ -1196,6 +945,19 @@ export const useAlignmentController = ({
         startConvergence,
         stop,
         runSummary,
+        // Step-by-step debugging
+        mode,
+        setMode,
+        granularity,
+        setGranularity,
+        stepState,
+        convergenceStatus,
+        pendingDecision,
+        isAwaitingAdvance: isAwaitingAdvance ?? false,
+        advance,
+        runToEnd,
+        retryTile,
+        submitDecision,
     };
 };
 
@@ -1206,17 +968,4 @@ function sortedMedian(values: number[]): number {
     const mid = Math.floor(sorted.length / 2);
     if (sorted.length === 0) return 0;
     return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function improved(trial: ShapeMetrics, best: ShapeMetrics, settings: AlignmentSettings): boolean {
-    if (settings.improvementStrategy === 'weighted') {
-        const trialScore = 0.6 * trial.area + 0.4 * trial.eccentricity;
-        const bestScore = 0.6 * best.area + 0.4 * best.eccentricity;
-        return trialScore < bestScore * (1 - settings.areaThreshold);
-    }
-
-    // 'any' strategy: area OR eccentricity improvement
-    const areaImproved = trial.area < best.area * (1 - settings.areaThreshold);
-    const eccImproved = trial.eccentricity < best.eccentricity * 0.98;
-    return areaImproved || eccImproved;
 }

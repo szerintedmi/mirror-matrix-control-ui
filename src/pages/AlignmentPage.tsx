@@ -68,8 +68,6 @@ const AlignmentPage: React.FC<AlignmentPageProps> = ({ gridSize, mirrorConfig })
         const roiH = Math.min(1, roiPixels / vh);
 
         // Center ROI at the grid center (blueprint center) in viewport space.
-        // The profile's centered space is recentered around the grid center,
-        // so (0,0) recentered = cameraOriginOffset in raw camera centered space.
         const offset = selectedProfile.gridBlueprint?.cameraOriginOffset;
         const centerX = offset ? (offset.x + 1) / 2 : 0.5;
         const centerY = offset ? (offset.y + 1) / 2 : 0.5;
@@ -157,11 +155,23 @@ const AlignmentPage: React.FC<AlignmentPageProps> = ({ gridSize, mirrorConfig })
                     onMoveToCenter={alignment.moveToCenter}
                     onStartConvergence={alignment.startConvergence}
                     onStop={alignment.stop}
+                    mode={alignment.mode}
+                    onModeChange={alignment.setMode}
+                    granularity={alignment.granularity}
+                    onGranularityChange={alignment.setGranularity}
+                    stepState={alignment.stepState}
+                    isAwaitingAdvance={alignment.isAwaitingAdvance}
+                    pendingDecision={alignment.pendingDecision}
+                    onAdvance={alignment.advance}
+                    onRunToEnd={alignment.runToEnd}
+                    onRetryTile={alignment.retryTile}
+                    onSubmitDecision={alignment.submitDecision}
                 />
                 <AlignmentProgressPanel
                     state={alignment.state}
                     runSummary={alignment.runSummary}
                     onExport={handleExport}
+                    convergenceStatus={alignment.convergenceStatus}
                 />
             </div>
         </div>
