@@ -4,6 +4,7 @@ import {
     computeAxisTarget as computeSharedAxisTarget,
     isTileCalibrated,
 } from './alignmentAxisTarget';
+import { maxBipartiteMatching } from './bipartiteMatching';
 import { getSpaceParams, patternToCentered } from './spaceConversion';
 
 import type {
@@ -32,6 +33,7 @@ export type ProfilePlaybackErrorCode =
     | 'pattern_exceeds_mirrors'
     | 'insufficient_calibrated_tiles'
     | 'no_valid_tile_for_point'
+    | 'no_remaining_tile_for_point'
     | 'tile_not_calibrated'
     | 'missing_motor'
     | 'missing_axis_calibration'
@@ -274,43 +276,65 @@ export const planProfilePlayback = ({
         return a.point.id.localeCompare(b.point.id);
     });
 
-    // 4. Assign tiles
-    const assignedTileKeys = new Set<string>();
-    const pointAssignments = new Map<string, string>(); // pointId -> tileKey
-
+    // 4. Assign tiles using maximum bipartite matching (augmenting-path)
+    // This guarantees maximum cardinality — greedy can miss valid assignments.
+    const adjacency = new Map<string, string[]>();
     for (const { point, validTiles } of pointOptions) {
-        // Filter out already assigned tiles
-        const candidates = validTiles.filter((t) => !assignedTileKeys.has(t.key));
+        adjacency.set(
+            point.id,
+            validTiles.map((t) => t.key),
+        );
+    }
+    const pointAssignments = maxBipartiteMatching(adjacency);
 
-        if (candidates.length === 0) {
-            // Cannot assign this point
-            // We will handle the error generation when constructing the final plan
-            continue;
-        }
+    // Distance-based refinement: try pairwise swaps to reduce total distance
+    // while preserving matching cardinality.
+    const tileByKey = new Map(availableTiles.map((t) => [t.key, t]));
+    const rotatedById = new Map(rotatedPoints.map((p) => [p.id, p]));
 
-        // Find the "closest" candidate
-        // Stable tie-break on tile key for deterministic results when distances are equal.
-        let bestCandidate = candidates[0];
-        let minDistanceSq = Number.POSITIVE_INFINITY;
+    const distSq = (pointId: string, tileKey: string): number => {
+        const pt = rotatedById.get(pointId)!;
+        const tile = tileByKey.get(tileKey)!;
+        const dx = pt.x - tile.idealX;
+        const dy = pt.y - tile.idealY;
+        return dx * dx + dy * dy;
+    };
 
-        for (const candidate of candidates) {
-            const dx = point.x - candidate.idealX;
-            const dy = point.y - candidate.idealY;
-            const distSq = dx * dx + dy * dy;
-            if (
-                distSq < minDistanceSq ||
-                (distSq === minDistanceSq && candidate.key < bestCandidate.key)
-            ) {
-                minDistanceSq = distSq;
-                bestCandidate = candidate;
+    // Keep swapping until stable
+    let improved = true;
+    while (improved) {
+        improved = false;
+        const entries = [...pointAssignments.entries()];
+        for (let i = 0; i < entries.length; i += 1) {
+            for (let j = i + 1; j < entries.length; j += 1) {
+                const [pA, tA] = entries[i];
+                const [pB, tB] = entries[j];
+                // Check if swap is valid (both points must accept the other's tile)
+                const adjA = adjacency.get(pA)!;
+                const adjB = adjacency.get(pB)!;
+                if (!adjA.includes(tB) || !adjB.includes(tA)) continue;
+                // Check if swap reduces total distance
+                const currentCost = distSq(pA, tA) + distSq(pB, tB);
+                const swappedCost = distSq(pA, tB) + distSq(pB, tA);
+                if (swappedCost < currentCost) {
+                    pointAssignments.set(pA, tB);
+                    pointAssignments.set(pB, tA);
+                    entries[i] = [pA, tB];
+                    entries[j] = [pB, tA];
+                    improved = true;
+                }
             }
         }
-
-        assignedTileKeys.add(bestCandidate.key);
-        pointAssignments.set(point.id, bestCandidate.key);
     }
 
     // 5. Construct the result
+    // Pre-build reverse maps for O(1) lookups
+    const tileToPointId = new Map<string, string>();
+    for (const [pid, tKey] of pointAssignments.entries()) {
+        tileToPointId.set(tKey, pid);
+    }
+    const pointOptionsById = new Map(pointOptions.map((opt) => [opt.point.id, opt]));
+
     const tiles: ProfilePlaybackTilePlan[] = [];
 
     // We need to iterate over ALL grid positions to produce the full plan
@@ -320,21 +344,9 @@ export const planProfilePlayback = ({
             const assignment = getMirrorAssignment(mirrorConfig, row, col);
             const tileCalibration = profile.tiles[key];
 
-            // Find if this tile was assigned to a point
-            // We need to reverse lookup from pointAssignments, or just find which point maps to this key
-            // Since pointAssignments is pointId -> tileKey, we can search it.
-            // Optimization: build a reverse map? Or just iterate. N is small.
-            let assignedPointId: string | null = null;
-            for (const [pid, tKey] of pointAssignments.entries()) {
-                if (tKey === key) {
-                    assignedPointId = pid;
-                    break;
-                }
-            }
-
-            // Use rotatedPoints to get the transformed coordinates
+            const assignedPointId = tileToPointId.get(key) ?? null;
             const patternPoint = assignedPointId
-                ? (rotatedPoints.find((p) => p.id === assignedPointId) ?? null)
+                ? (rotatedById.get(assignedPointId) ?? null)
                 : null;
 
             const tileErrors: ProfilePlaybackValidationError[] = [];
@@ -390,15 +402,14 @@ export const planProfilePlayback = ({
     // Distinguish between "no valid tiles" (outside bounds) vs "no remaining tiles" (capacity)
     const unassignedPoints = rotatedPoints.filter((p) => !pointAssignments.has(p.id));
     for (const p of unassignedPoints) {
-        // Find the original pointOptions entry to check if it had any valid tiles
-        const options = pointOptions.find((opt) => opt.point.id === p.id);
+        const options = pointOptionsById.get(p.id);
         const hadValidTiles = options && options.validTiles.length > 0;
 
         if (hadValidTiles) {
             // Point had valid tiles but they were all taken by other points
             globalErrors.push(
                 createError(
-                    'insufficient_calibrated_tiles',
+                    'no_remaining_tile_for_point',
                     `No remaining tile for point "${p.id}" - all compatible tiles already assigned.`,
                     { patternPointId: p.id },
                 ),

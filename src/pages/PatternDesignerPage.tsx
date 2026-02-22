@@ -14,6 +14,7 @@ import { useCalibrationContext } from '@/context/CalibrationContext';
 import { usePatternContext } from '@/context/PatternContext';
 import { usePlaybackDispatch } from '@/hooks/usePlaybackDispatch';
 import { loadGridState } from '@/services/gridStorage';
+import { buildPointErrorMap, categorizePatternErrors } from '@/services/patternValidationStatus';
 import { planProfilePlayback } from '@/services/profilePlaybackPlanner';
 import { centeredBoundsToPattern, getSpaceParams } from '@/services/spaceConversion';
 import type { MirrorConfig, Pattern, PatternPoint } from '@/types';
@@ -61,6 +62,7 @@ interface PatternDesignerCanvasProps {
     }>;
     highlightedTileIds: Set<string>;
     invalidPointIds: Set<string>;
+    pointErrors: Map<string, string>;
     maxOverlapCount: number;
     viewBox: string;
 }
@@ -104,6 +106,7 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
     tileBounds,
     highlightedTileIds,
     invalidPointIds,
+    pointErrors,
     maxOverlapCount,
     viewBox,
 }) => {
@@ -403,7 +406,11 @@ const PatternDesignerCanvas: React.FC<PatternDesignerCanvasProps> = ({
                                     handleMouseDownPoint(point.id);
                                 }}
                                 onClick={(event) => handlePointClick(event, point.id)}
-                            />
+                            >
+                                {isInvalid && pointErrors.get(point.id) && (
+                                    <title>{pointErrors.get(point.id)}</title>
+                                )}
+                            </rect>
                         );
                     })}
                     {editMode === 'placement' &&
@@ -732,6 +739,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 invalidPointIds: new Set<string>(),
                 errors: [],
                 assignedTileIds: new Set<string>(),
+                pointErrors: new Map<string, string>(),
             };
         }
 
@@ -758,51 +766,79 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
             }
         }
 
-        return { invalidPointIds: invalidIds, errors: plan.errors, assignedTileIds };
+        const pointErrors = buildPointErrorMap(plan.errors);
+
+        return { invalidPointIds: invalidIds, errors: plan.errors, assignedTileIds, pointErrors };
     }, [selectedPattern, selectedCalibrationProfile, gridSize, mirrorConfig]);
 
     const invalidPointIds = selectedPatternValidation.invalidPointIds;
     const assignedTileIds = selectedPatternValidation.assignedTileIds;
+    const pointErrors = selectedPatternValidation.pointErrors;
 
     // Compute whether the current hover position would result in a valid placement
+    // by running a trial plan with the hover point appended to the current pattern.
     const hoverValidation = useMemo((): HoverValidationStatus => {
-        // Only validate when in placement mode with active hover and calibration profile
         if (editMode !== 'placement' || !hoverPoint || !selectedCalibrationProfile) {
             return { valid: true };
         }
 
-        // Find all tiles whose bounds contain the hover point
-        const tilesContainingHover = calibrationTileBounds.filter(
+        // Quick bounds check first to avoid planner overhead for obvious rejections
+        const inAnyBounds = calibrationTileBounds.some(
             (bounds) =>
                 hoverPoint.x >= bounds.xMin &&
                 hoverPoint.x <= bounds.xMax &&
                 hoverPoint.y >= bounds.yMin &&
                 hoverPoint.y <= bounds.yMax,
         );
-
-        // Check: Is hover point within any tile bounds?
-        if (tilesContainingHover.length === 0) {
+        if (!inAnyBounds) {
             return { valid: false, reason: 'outside_bounds' };
         }
 
-        // Check: Would adding this point exceed available tile capacity?
-        const currentPointCount = selectedPattern?.points.length ?? 0;
-        if (currentPointCount + 1 > availableSpotCount) {
+        // Run a trial plan with the hover point appended
+        const trialPointId = '__hover_trial__';
+        const trialPattern: Pattern = {
+            id: 'trial',
+            name: 'trial',
+            createdAt: '',
+            updatedAt: '',
+            points: [
+                ...(selectedPattern?.points ?? []),
+                { id: trialPointId, x: hoverPoint.x, y: hoverPoint.y },
+            ],
+        };
+
+        const trialPlan = planProfilePlayback({
+            gridSize,
+            mirrorConfig,
+            profile: selectedCalibrationProfile,
+            pattern: trialPattern,
+        });
+
+        // Check if the trial point was assigned successfully
+        const trialPointHasError = trialPlan.errors.some((e) => e.patternPointId === trialPointId);
+
+        if (trialPointHasError) {
+            // Determine reason: find tiles whose bounds contain the hover point
+            // and check if they're all occupied in the current plan
+            const tilesContainingHover = calibrationTileBounds.filter(
+                (bounds) =>
+                    hoverPoint.x >= bounds.xMin &&
+                    hoverPoint.x <= bounds.xMax &&
+                    hoverPoint.y >= bounds.yMin &&
+                    hoverPoint.y <= bounds.yMax,
+            );
+            const occupiedTilesInArea = tilesContainingHover.filter((tile) =>
+                assignedTileIds.has(tile.id),
+            );
+
+            if (occupiedTilesInArea.length === tilesContainingHover.length) {
+                return {
+                    valid: false,
+                    reason: 'area_occupied',
+                    occupiedTileIds: occupiedTilesInArea.map((tile) => tile.id),
+                };
+            }
             return { valid: false, reason: 'over_capacity' };
-        }
-
-        // Check: Are all tiles that could serve this area already occupied?
-        const occupiedTilesInArea = tilesContainingHover.filter((tile) =>
-            assignedTileIds.has(tile.id),
-        );
-        const hasAvailableTile = tilesContainingHover.length > occupiedTilesInArea.length;
-
-        if (!hasAvailableTile) {
-            return {
-                valid: false,
-                reason: 'area_occupied',
-                occupiedTileIds: occupiedTilesInArea.map((tile) => tile.id),
-            };
         }
 
         return { valid: true };
@@ -811,8 +847,9 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
         hoverPoint,
         selectedCalibrationProfile,
         calibrationTileBounds,
-        selectedPattern?.points.length,
-        availableSpotCount,
+        selectedPattern,
+        gridSize,
+        mirrorConfig,
         assignedTileIds,
     ]);
 
@@ -949,42 +986,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                 pattern,
             });
 
-            const relevantErrors = plan.errors.filter(
-                (error) => error.code !== 'missing_profile' && error.code !== 'missing_pattern',
-            );
-
-            if (relevantErrors.length === 0) {
-                map.set(pattern.id, { isValid: true });
-                return;
-            }
-
-            // Categorize errors for user-friendly messages
-            const outOfBoundsErrors = relevantErrors.filter(
-                (e) => e.code === 'no_valid_tile_for_point' || e.code === 'target_out_of_bounds',
-            );
-            const capacityErrors = relevantErrors.filter(
-                (e) =>
-                    e.code === 'insufficient_calibrated_tiles' ||
-                    e.code === 'pattern_exceeds_mirrors',
-            );
-
-            let message: string;
-            if (outOfBoundsErrors.length > 0) {
-                message = `Point(s) outside bounds (${outOfBoundsErrors.length})`;
-            } else if (capacityErrors.length > 0) {
-                message = 'More points than tiles';
-            } else {
-                message = relevantErrors[0].message;
-            }
-
-            map.set(pattern.id, {
-                isValid: false,
-                message,
-                details: relevantErrors
-                    .slice(0, 3)
-                    .map((e) => e.message)
-                    .join(' • '),
-            });
+            map.set(pattern.id, categorizePatternErrors(plan.errors));
         });
 
         return map;
@@ -1161,6 +1163,7 @@ const PatternDesignerPage: React.FC<PatternDesignerPageProps> = ({
                                 tileBounds={calibrationTileBounds}
                                 highlightedTileIds={highlightedTileIds}
                                 invalidPointIds={invalidPointIds}
+                                pointErrors={pointErrors}
                                 maxOverlapCount={maxOverlapCount}
                                 viewBox={autoZoomViewBox}
                             />
