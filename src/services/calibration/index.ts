@@ -61,6 +61,7 @@ export {
     type StepTestResults,
     // Functions
     getAxisStepDelta,
+    getAdaptiveStepDelta,
     computeAxisStepTestResult,
     computeAverageSizeDelta,
     computeAlignmentTargetSteps,

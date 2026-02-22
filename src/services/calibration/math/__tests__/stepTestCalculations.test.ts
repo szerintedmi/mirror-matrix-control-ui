@@ -6,6 +6,7 @@ import type { BlobMeasurement } from '@/types';
 
 import {
     getAxisStepDelta,
+    getAdaptiveStepDelta,
     computeAxisStepTestResult,
     computeAverageSizeDelta,
     computeAlignmentTargetSteps,
@@ -57,6 +58,104 @@ describe('stepTestCalculations', () => {
             // At 0° X is negative, so large positive input becomes negative clamped value
             const result = getAxisStepDelta('x', MOTOR_MAX_POSITION_STEPS + 1000, 0);
             expect(result).toBe(MOTOR_MIN_POSITION_STEPS);
+        });
+    });
+
+    describe('getAdaptiveStepDelta', () => {
+        const grid4x4 = { rows: 4, cols: 4 };
+
+        it('should flip X for bottom-right tile at 0° (jog goes towards staging corner)', () => {
+            // At 0°, X jogs to -1200 (rightward). Bottom-right tile parks at x=-1200.
+            // Should flip to +1200 (leftward) to avoid overlap.
+            const result = getAdaptiveStepDelta(
+                'x',
+                1200,
+                0,
+                { row: 3, col: 3 },
+                grid4x4,
+                'nearest-corner',
+            );
+            expect(result).toBe(1200); // flipped from default -1200
+        });
+
+        it('should not flip X for top-left tile at 0° (jog goes away from staging corner)', () => {
+            // At 0°, X jogs to -1200 (rightward). Top-left tile parks at x=+1200 (leftward).
+            // Default direction already goes away from the staging corner.
+            const result = getAdaptiveStepDelta(
+                'x',
+                1200,
+                0,
+                { row: 0, col: 0 },
+                grid4x4,
+                'nearest-corner',
+            );
+            expect(result).toBe(-1200); // unchanged
+        });
+
+        it('should flip Y for top-left tile at 0° (jog goes towards staging corner)', () => {
+            // At 0°, Y jogs to +1200 (topY=+1200 is where top-left parks on Y).
+            // Should flip to -1200 (downward).
+            const result = getAdaptiveStepDelta(
+                'y',
+                1200,
+                0,
+                { row: 0, col: 0 },
+                grid4x4,
+                'nearest-corner',
+            );
+            expect(result).toBe(-1200); // flipped from default +1200
+        });
+
+        it('should not flip Y for bottom-right tile at 0° (jog goes away from staging corner)', () => {
+            // At 0°, Y jogs to +1200 (upward). Bottom-right parks at y=-1200 (downward).
+            // Default direction already goes away.
+            const result = getAdaptiveStepDelta(
+                'y',
+                1200,
+                0,
+                { row: 3, col: 3 },
+                grid4x4,
+                'nearest-corner',
+            );
+            expect(result).toBe(1200); // unchanged
+        });
+
+        it('should return base delta unchanged for non-nearest-corner staging', () => {
+            const result = getAdaptiveStepDelta(
+                'x',
+                1200,
+                0,
+                { row: 3, col: 3 },
+                grid4x4,
+                'corner',
+            );
+            expect(result).toBe(-1200); // same as getAxisStepDelta
+        });
+
+        it('should return null for zero delta steps', () => {
+            const result = getAdaptiveStepDelta(
+                'x',
+                0,
+                0,
+                { row: 0, col: 0 },
+                grid4x4,
+                'nearest-corner',
+            );
+            expect(result).toBeNull();
+        });
+
+        it('should handle 180° rotation correctly', () => {
+            // At 180°, X jogs to +1200 (flipX=false → direction=+1).
+            // Bottom-right tile at 180°: rightX = MOTOR_MAX (+1200). Same sign → flip.
+            const result = getAdaptiveStepDelta(
+                'x',
+                1200,
+                180,
+                { row: 3, col: 3 },
+                grid4x4,
+                'nearest-corner',
+            );
+            expect(result).toBe(-1200); // flipped
         });
     });
 
