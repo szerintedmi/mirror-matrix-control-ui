@@ -352,7 +352,7 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
                             <input
                                 type="range"
                                 min={100}
-                                max={5000}
+                                max={3000}
                                 step={100}
                                 value={blobParams.minArea}
                                 onChange={(event) =>
@@ -364,9 +364,9 @@ const DetectionSettingsPanel: React.FC<DetectionSettingsPanelProps> = ({
                             <span>Max area ({blobParams.maxArea} px)</span>
                             <input
                                 type="range"
-                                min={5000}
-                                max={40000}
-                                step={500}
+                                min={100}
+                                max={10000}
+                                step={100}
                                 value={blobParams.maxArea}
                                 onChange={(event) =>
                                     onUpdateBlobParam('maxArea', Number(event.target.value))
