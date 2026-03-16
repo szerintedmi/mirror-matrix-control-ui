@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Grid Configurator Mock</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+        .app-shell {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: 100vh;
+        }
+        .nav {
+            background: #111827;
+            border-right: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .nav h1 {
+            font-size: 18px;
+            color: #38bdf8;
+            margin: 0 0 12px;
+        }
+        .nav section ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .nav button {
+            all: unset;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: inherit;
+        }
+        .nav button.active {
+            background: rgba(56, 189, 248, 0.18);
+            border: 1px solid rgba(56, 189, 248, 0.6);
+        }
+        .main {
+            display: flex;
+            flex-direction: column;
+        }
+        .top-bar {
+            height: 64px;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .status span {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.16);
+        }
+        .status span.online::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+        .workspace {
+            flex: 1;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 3fr 2fr;
+            gap: 24px;
+        }
+        .panel {
+            background: rgba(30, 41, 59, 0.9);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 20px 40px rgba(2, 6, 23, 0.5);
+        }
+        .panel header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chip-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            background: rgba(148, 163, 184, 0.18);
+        }
+        .chip.warning { background: rgba(251, 191, 36, 0.24); }
+        .chip.alert { background: rgba(248, 113, 113, 0.24); }
+        .grid-preview {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px;
+        }
+        .tile {
+            padding-top: 100%;
+            position: relative;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        .tile.assigned {
+            border-color: rgba(56, 189, 248, 0.8);
+            background: rgba(56, 189, 248, 0.14);
+        }
+        .tile span {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+        }
+        .ledger {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ledger-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 12px;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.6);
+            padding: 12px;
+            border-radius: 10px;
+        }
+        .ledger-row.offline {
+            border: 1px solid rgba(248, 113, 113, 0.5);
+        }
+        .ledger-row button {
+            all: unset;
+            padding: 6px 10px;
+            background: rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+        }
+        details {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 12px 16px;
+            border-radius: 12px;
+        }
+        details summary {
+            cursor: pointer;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <nav class="nav">
+            <section>
+                <h1>Hardware</h1>
+                <ul>
+                    <li><button>Discovery</button></li>
+                    <li><button class="active">Grid</button></li>
+                    <li><button>Diagnostics</button></li>
+                </ul>
+            </section>
+            <section>
+                <h1>Content</h1>
+                <ul>
+                    <li><button>Patterns</button></li>
+                    <li><button>Simulation</button></li>
+                </ul>
+            </section>
+            <section>
+                <h1>Operations</h1>
+                <ul>
+                    <li><button>Playback</button></li>
+                    <li><button>Logs</button></li>
+                </ul>
+            </section>
+        </nav>
+        <div class="main">
+            <div class="top-bar">
+                <div class="status">
+                    <span class="online">Broker: ws://lab-broker.local</span>
+                    <span>Drivers online: 5</span>
+                    <span>New this session: 1</span>
+                </div>
+                <button style="all: unset; color: #38bdf8; cursor: pointer;">Reconnect</button>
+            </div>
+            <div class="workspace">
+                <section class="panel">
+                    <header>
+                        <div>
+                            <h2 style="margin: 0; font-size: 20px;">Array Layout</h2>
+                            <p style="margin: 4px 0 0; color: #94a3b8; font-size: 14px;">Drag motors into tiles or quick assign from ledger.</p>
+                        </div>
+                        <button style="all: unset; background: rgba(56,189,248,0.16); color: #38bdf8; padding: 10px 14px; border-radius: 10px; cursor: pointer;">Adjust layout</button>
+                    </header>
+                    <div class="chip-row">
+                        <div class="chip">Assigned axes • 46 / 48</div>
+                        <div class="chip warning">Unassigned motors • 1</div>
+                        <div class="chip">Tiles mapped • 23 / 24</div>
+                    </div>
+                    <div class="grid-preview">
+                        <div class="tile assigned"><span>A1</span></div>
+                        <div class="tile assigned"><span>A2</span></div>
+                        <div class="tile assigned"><span>A3</span></div>
+                        <div class="tile assigned"><span>A4</span></div>
+                        <div class="tile assigned"><span>A5</span></div>
+                        <div class="tile"><span>—</span></div>
+                        <!-- Repeat sample tiles -->
+                        <div class="tile assigned"><span>B1</span></div>
+                        <div class="tile assigned"><span>B2</span></div>
+                        <div class="tile assigned"><span>B3</span></div>
+                        <div class="tile assigned"><span>B4</span></div>
+                        <div class="tile assigned"><span>B5</span></div>
+                        <div class="tile assigned"><span>B6</span></div>
+                        <div class="tile assigned"><span>C1</span></div>
+                        <div class="tile assigned"><span>C2</span></div>
+                        <div class="tile assigned"><span>C3</span></div>
+                        <div class="tile assigned"><span>C4</span></div>
+                        <div class="tile assigned"><span>C5</span></div>
+                        <div class="tile assigned"><span>C6</span></div>
+                    </div>
+                </section>
+                <section class="panel">
+                    <header>
+                        <div>
+                            <h2 style="margin: 0; font-size: 20px;">Assignment Ledger</h2>
+                            <p style="margin: 4px 0 0; color: #94a3b8; font-size: 14px;">Filter by status to resolve gaps quickly.</p>
+                        </div>
+                        <select style="background: rgba(15,23,42,0.8); border: 1px solid rgba(148,163,184,0.4); color: inherit; padding: 8px 12px; border-radius: 10px;">
+                            <option>All</option>
+                            <option>Unassigned</option>
+                            <option>Offline</option>
+                        </select>
+                    </header>
+                    <div class="ledger">
+                        <div class="ledger-row">
+                            <div>
+                                <strong>A1</strong>
+                                <div style="font-size: 12px; color: #94a3b8;">Driver 2 • Motors 0X / 0Y</div>
+                            </div>
+                            <div style="font-size: 12px; color: #22c55e;">Healthy</div>
+                            <button>Quick reassign</button>
+                        </div>
+                        <div class="ledger-row offline">
+                            <div>
+                                <strong>C5</strong>
+                                <div style="font-size: 12px; color: #94a3b8;">Driver 5 • Motors 3X / —</div>
+                            </div>
+                            <div style="font-size: 12px; color: #f87171;">Offline 4m</div>
+                            <button>Open discovery</button>
+                        </div>
+                        <div class="ledger-row">
+                            <div>
+                                <strong>Unassigned</strong>
+                                <div style="font-size: 12px; color: #94a3b8;">Driver 1 • Motor 6Y</div>
+                            </div>
+                            <div style="font-size: 12px; color: #fbbf24;">Awaiting tile</div>
+                            <button>Assign to…</button>
+                        </div>
+                    </div>
+                    <details open>
+                        <summary>Discovery timeline</summary>
+                        <ul style="list-style: none; padding: 12px 0 0; margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                            <li>14:02 • Driver 5 offline detected</li>
+                            <li>13:57 • Driver 4 assigned to tiles B1-B4</li>
+                            <li>13:55 • Driver 6 discovered (new)</li>
+                        </ul>
+                    </details>
+                </section>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

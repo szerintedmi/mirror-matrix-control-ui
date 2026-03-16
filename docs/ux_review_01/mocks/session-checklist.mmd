@@ -1,0 +1,10 @@
+flowchart LR
+    Start((Open Session)) --> Connection{Broker Connected?}
+    Connection -- No --> FixConn[Prompt to update MQTT settings]
+    Connection -- Yes --> Grid{All motors assigned?}
+    Grid -- No --> GoGrid[Link to Grid Configurator]
+    Grid -- Yes --> Patterns{Active pattern set?}
+    Patterns -- No --> GoLibrary[Link to Pattern Library]
+    Patterns -- Yes --> Simulation{Simulation parameters confirmed?}
+    Simulation -- No --> GoSim[Link to Simulation view]
+    Simulation -- Yes --> Ready((Ready to Play))
