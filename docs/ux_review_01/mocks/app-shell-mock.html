@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Workspace Shell Mock</title>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family: 'Inter', system-ui, sans-serif;
+                --bg-900: #0f172a;
+                --bg-800: #111827;
+                --bg-700: #1f2937;
+                --cyan: #38bdf8;
+                --emerald: #34d399;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.15), transparent 55%), var(--bg-900);
+                color: #e2e8f0;
+                min-height: 100vh;
+            }
+            .app {
+                display: grid;
+                grid-template-columns: 280px minmax(0, 1fr);
+                min-height: 100vh;
+            }
+            nav {
+                background: linear-gradient(180deg, rgba(17, 24, 39, 0.95), rgba(17, 24, 39, 0.75));
+                border-right: 1px solid rgba(148, 163, 184, 0.2);
+                padding: 24px 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 24px;
+            }
+            .brand {
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--cyan);
+                letter-spacing: 0.04em;
+            }
+            nav section h2 {
+                margin: 0 0 8px;
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+                color: rgba(148, 163, 184, 0.7);
+            }
+            nav ul {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            nav button {
+                all: unset;
+                padding: 10px 12px;
+                border-radius: 10px;
+                font-size: 14px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                color: inherit;
+                transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+            }
+            nav button:hover {
+                background: rgba(56, 189, 248, 0.12);
+                color: var(--cyan);
+            }
+            nav button.active {
+                background: rgba(56, 189, 248, 0.18);
+                border: 1px solid rgba(56, 189, 248, 0.6);
+                color: var(--cyan);
+                box-shadow: 0 6px 18px rgba(56, 189, 248, 0.25);
+            }
+            .main {
+                display: flex;
+                flex-direction: column;
+                min-height: 100vh;
+            }
+            .top-bar {
+                height: 68px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 32px;
+                backdrop-filter: blur(12px);
+                background: rgba(17, 24, 39, 0.6);
+                border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+            .status-group {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 14px;
+            }
+            .status-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 14px;
+                border-radius: 999px;
+                background: rgba(148, 163, 184, 0.16);
+                color: rgba(226, 232, 240, 0.92);
+            }
+            .status-chip.online::before {
+                content: '';
+                width: 8px;
+                height: 8px;
+                border-radius: 999px;
+                background: var(--emerald);
+                box-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
+            }
+            .status-chip.warning::before {
+                content: '';
+                width: 8px;
+                height: 8px;
+                border-radius: 999px;
+                background: #fbbf24;
+                box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+            }
+            .actions {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .actions button {
+                all: unset;
+                padding: 10px 16px;
+                border-radius: 10px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                border: 1px solid rgba(56, 189, 248, 0.4);
+                color: var(--cyan);
+                background: rgba(56, 189, 248, 0.12);
+            }
+            .actions button.secondary {
+                border-color: rgba(148, 163, 184, 0.4);
+                color: rgba(226, 232, 240, 0.9);
+                background: rgba(17, 24, 39, 0.8);
+            }
+            .workspace {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 320px;
+                gap: 24px;
+                padding: 32px;
+            }
+            .panel {
+                background: linear-gradient(160deg, rgba(17, 24, 39, 0.88), rgba(15, 23, 42, 0.94));
+                border: 1px solid rgba(148, 163, 184, 0.18);
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 24px 48px rgba(15, 23, 42, 0.45);
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .panel h3 {
+                margin: 0;
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--cyan);
+            }
+            .metric-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+            .metric-chips span {
+                padding: 6px 12px;
+                border-radius: 999px;
+                font-size: 13px;
+                letter-spacing: 0.01em;
+                background: rgba(56, 189, 248, 0.16);
+            }
+            .sidebar {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .sidebar .card {
+                background: rgba(30, 41, 59, 0.8);
+                border: 1px solid rgba(56, 189, 248, 0.16);
+                border-radius: 12px;
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .timeline li {
+                list-style: none;
+                margin: 0;
+                padding: 8px 0;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+                display: flex;
+                justify-content: space-between;
+                font-size: 13px;
+            }
+            .timeline li:last-child {
+                border-bottom: none;
+            }
+            .grid-preview {
+                min-height: 280px;
+                background: repeating-linear-gradient(90deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.12) 1px, transparent 1px, transparent 24px),
+                    repeating-linear-gradient(0deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.12) 1px, transparent 1px, transparent 24px);
+                border-radius: 12px;
+                border: 1px solid rgba(56, 189, 248, 0.2);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="app">
+            <nav>
+                <div class="brand">Mirror Matrix</div>
+                <section>
+                    <h2>Hardware</h2>
+                    <ul>
+                        <li><button class="active">Discovery<span>3</span></button></li>
+                        <li><button>Grid Config<span>8×8</span></button></li>
+                        <li><button>Diagnostics</button></li>
+                    </ul>
+                </section>
+                <section>
+                    <h2>Content</h2>
+                    <ul>
+                        <li><button>Pattern Library</button></li>
+                        <li><button>Pattern Editor</button></li>
+                        <li><button>Simulation</button></li>
+                    </ul>
+                </section>
+                <section>
+                    <h2>Operations</h2>
+                    <ul>
+                        <li><button>Playback</button></li>
+                        <li><button>Logs</button></li>
+                    </ul>
+                </section>
+            </nav>
+            <div class="main">
+                <header class="top-bar">
+                    <div class="status-group">
+                        <div class="status-chip online">Broker Online</div>
+                        <div class="status-chip warning">2 Offline axes</div>
+                    </div>
+                    <div class="actions">
+                        <button class="secondary">Reconnect</button>
+                        <button>Session Checklist</button>
+                    </div>
+                </header>
+                <div class="workspace">
+                    <section class="panel">
+                        <div>
+                            <h3>Grid Configurator</h3>
+                            <p>Assign motors to grid tiles and resolve conflicts.</p>
+                        </div>
+                        <div class="metric-chips">
+                            <span>Assigned axes • 42 / 48</span>
+                            <span class="warning">Unassigned motors • 6</span>
+                            <span>Tiles with conflicts • 3</span>
+                        </div>
+                        <div class="grid-preview"></div>
+                    </section>
+                    <aside class="sidebar">
+                        <div class="card">
+                            <strong>Assignment Ledger</strong>
+                            <p>Tile 2,3 → Node A (X1/Y1)</p>
+                            <p>Tile 2,4 → Node B (X2/Y2)</p>
+                            <p>Tile 3,1 → Needs Y axis</p>
+                        </div>
+                        <div class="card">
+                            <strong>Discovery Timeline</strong>
+                            <ul class="timeline">
+                                <li><span>19:42</span><span>Node A online</span></li>
+                                <li><span>19:39</span><span>Node B acknowledged</span></li>
+                                <li><span>19:31</span><span>Node C offline</span></li>
+                            </ul>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
